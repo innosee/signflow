@@ -211,3 +211,19 @@ course_participants.course_id
 ## Offene Entscheidungen
 - [ ] PDF-Library: react-pdf vs Puppeteer (entscheiden wenn PDF-Phase beginnt)
 - [ ] Storage-Anbieter: Cloudflare R2 vs Vercel Blob (für Signaturbilder)
+
+---
+
+## Deferred / Phase 2 (bewusst NICHT im MVP)
+
+Geplant, aber erst nach Core-Flow (Kurs → Session → Signatur → PDF → FES).
+Kein Schema-Vorbau nötig — wird später eigenständig gebaut.
+
+### Monatsreport für Agency (`/agency/reports`)
+Pro-Coach-Statistik im Monat: aktive Kurse, bewilligte UE kumuliert, geleistete UE, Fortschritt in %. Rein Query-Arbeit auf bestehenden Tabellen (`courses` + `sessions` + `signatures`). Keine Schema-Änderung.
+
+### Rechnungswesen + Mahnwesen (`/agency/invoices`)
+Nach Kursabschluss Rechnung erzeugen, per E-Mail versenden, automatische Erinnerung nach 14 Tagen wenn unbezahlt.
+- **Abrechnungsmodell:** pro-UE × Stundensatz (variabel pro AVGS-Maßnahme / Bedarfsträger) — **keine** Pauschale pro Kurs
+- Eigenes Domain-Schema später: `invoices`, `invoice_items`, `invoice_reminders`, evtl. `billing_addresses`
+- Stripe/Mollie-Anbindung oder manuelle Reconciliation — zu entscheiden wenn Phase beginnt
