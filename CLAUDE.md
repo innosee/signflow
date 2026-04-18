@@ -24,9 +24,9 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 ## Rollen
 | Rolle | Beschreibung |
 |---|---|
-| **agency** | Super Admin – verwaltet Coaches, hat Gesamtübersicht |
-| **coach** | Legt sich selbst an, erstellt Kurse und Einheiten, unterschreibt als Erster |
-| **participant** | Kein eigener Account – erhält Magic Link per E-Mail, unterschreibt nur |
+| **agency** | Super Admin – verwaltet (lädt ein/deaktiviert) Coaches, hat Gesamtübersicht, kann Coaches impersonaten (Support) |
+| **coach** | Wird von Agency per Einladung angelegt, setzt Passwort über Invite-Token, erstellt Kurse und Einheiten, unterschreibt als Erster |
+| **participant** | Kein eigener Account – erhält Magic Link per E-Mail (24h gültig), unterschreibt nur |
 
 ---
 
@@ -59,8 +59,16 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 
 ### Teilnehmer-Flow
 - Kein Account für Teilnehmer – nur E-Mail-Adresse im System
-- Magic Link pro Session (session_tokens Tabelle)
+- Magic Link pro Session (session_tokens Tabelle), **24h gültig ab Versand**
+- `used_at` beim ersten Klick setzen (Replay-Schutz – Token ist one-shot)
 - Mobile-optimierte Webseite mit Canvas – keine React Native App (Phase 2)
+
+### Auth & Berechtigungen
+- **Coach-Signup: nur per Einladung**, kein offener `/signup`-Endpoint. Agency legt Coach an (Name + E-Mail) → System schickt Setup-Mail mit einmaligem Invite-Token → Coach setzt Passwort + erstellt Unterschrift.
+- **Impersonation (Agency → Coach)**: Agency kann in die Sicht eines Coaches wechseln. Session führt `impersonated_by`-Feld (DB-Spalte) / `impersonatedBy` (Drizzle/TS). Jede Aktion wird im Audit-Log mit beiden IDs geloggt.
+- **Schreibende Aktionen während Impersonation sind hart blockiert** – insbesondere das Leisten von Unterschriften. Sonst ist die Beweiskraft der digitalen Unterschrift kaputt (Coach könnte behaupten, Agency habe in seinem Namen signiert).
+- **Data-Isolation**: jede Coach-Query serverseitig mit `coach_id = session.user.id` filtern – nicht auf UI verlassen.
+- **Single-Tenant**: aktuell eine Agency pro Deployment (`users` hat keine `agency_id`). Multi-Tenancy wäre Schema-Change.
 
 ---
 

@@ -1,0 +1,40 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/reference/yaml-template
+language: de-DE
+early_access: false
+tone_instructions: "Direkt, technisch, knapp. Keine unnötigen Höflichkeiten."
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_instructions:
+    - path: "src/db/schema.ts"
+      instructions: >-
+        Prüfe Drizzle-Schema auf fehlende Indizes, korrekte FK-Constraints
+        (onDelete-Verhalten), konsistente snake_case Spaltennamen und passende
+        Typen. Achte auf Soft-Delete-Pattern (deleted_at) und updated_at-Trigger.
+    - path: "src/lib/auth.ts"
+      instructions: >-
+        Prüfe Better-Auth-Konfiguration auf korrekte Secret-/URL-Handhabung,
+        sichere Defaults (Password-Min-Length, Session-Expiry), und dass
+        user.modelName mit der Drizzle-Schema-Tabelle übereinstimmt.
+    - path: "app/api/**"
+      instructions: >-
+        Prüfe Route Handler auf Input-Validierung, Rate-Limiting-Bedarf,
+        und dass sensible Daten nicht ins Response-Body gelangen.
+    - path: "**/*.tsx"
+      instructions: >-
+        Unterscheide zwischen Server- und Client-Components. Achte auf
+        "use client"-Direktive nur wo nötig, und dass sensible Logik
+        serverseitig bleibt.
+
+chat:
+  auto_reply: true
