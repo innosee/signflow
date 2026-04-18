@@ -37,7 +37,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 4. Coach triggert manuell **"Teilnehmer benachrichtigen"** → System erzeugt einen **Kurs-scoped Magic Link pro Teilnehmer** (24 h gültig); vorheriger Token für dieselbe Paarung wird invalidiert
 5. Teilnehmer öffnet den Link auf dem Handy, sieht den Kurs als Ganzes und alle noch offenen Sessions; signiert alle offenen inline
 6. Nach neuen Sessions triggert der Coach einen neuen Magic Link (ersetzt den alten)
-7. Wenn alle Sessions signiert sind: Coach triggert "Preview an Teilnehmer senden"
+7. Wenn jeder Teilnehmer jede (nicht-gelöschte) Session des Kurses signiert hat: Coach triggert "Preview an Teilnehmer senden"
 8. Teilnehmer öffnet den Preview-Link, sieht das vollständige Dokument **pixel-identisch zum späteren PDF** und klickt "Freigeben" (Audit-Log + Timestamp, keine FES)
 9. Coach sieht "Teilnehmer hat freigegeben" → klickt "Mit FES versiegeln und an AfA übermitteln"
 10. System rendert HTML → PDF (Puppeteer), appliziert **1× FES via Firma.dev** (Coach-seitig), übermittelt an AfA

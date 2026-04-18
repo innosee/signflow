@@ -202,7 +202,15 @@ export const participants = pgTable("participants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  /** AfA-Kunden-Nummer des Teilnehmers (z.B. "160B29588") — Pflichtfeld. */
+  /**
+   * AfA-Kunden-Nummer des Teilnehmers (z.B. "160B29588") — Pflichtfeld,
+   * kommt aus dem Stundennachweis-Formular (Zeile "Kunden-Nr. TN*in").
+   *
+   * Pre-Prod-Annahme: Migrationen, die diese Spalte einführen, leeren die
+   * Tabelle (siehe scripts/apply-afa-form-migration.mjs). In Production
+   * muss stattdessen der Drei-Schritt-Backfill gewählt werden: Spalte
+   * nullable hinzufügen → vorhandene Zeilen füllen → auf NOT NULL setzen.
+   */
   kundenNr: text("kunden_nr").notNull(),
   signatureUrl: text("signature_url"),
   createdAt: timestamp("created_at", { withTimezone: true })

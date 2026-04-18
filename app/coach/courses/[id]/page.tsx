@@ -21,6 +21,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
   const { id } = await params;
   const { reused } = await searchParams;
 
+  // reused kommt als beliebiger String aus der URL — nur rendern, wenn
+  // es eine positive Ganzzahl ist. Verhindert, dass z.B. ?reused=abc
+  // einen unsinnigen Banner erzeugt.
+  const reusedCount = reused ? Number.parseInt(reused, 10) : NaN;
+  const showReusedBanner = Number.isFinite(reusedCount) && reusedCount > 0;
+
   // Data-Isolation serverseitig: coach_id muss zum angemeldeten User passen.
   const [course] = await db
     .select({
@@ -94,14 +100,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
-      {reused && (
+      {showReusedBanner && (
         <div
           role="status"
           className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
         >
-          Hinweis: {reused} Teilnehmer existierten bereits in Signflow — die
-          bestehenden Datensätze wurden wiederverwendet (Name und Kunden-Nr.
-          bleiben unverändert).
+          Hinweis: {reusedCount} Teilnehmer existierten bereits in Signflow —
+          die bestehenden Datensätze wurden wiederverwendet (Name und
+          Kunden-Nr. bleiben unverändert).
         </div>
       )}
 

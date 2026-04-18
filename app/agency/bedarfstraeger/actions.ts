@@ -42,8 +42,10 @@ export async function createBedarfstraeger(
       email,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { error: `Konnte nicht angelegt werden: ${message}` };
+    // Volle Fehlerdetails (Constraint-/Schema-Infos) nur in Server-Logs,
+    // nicht zurück an den Client — sonst leakt DB-Intern an UI.
+    console.error("[createBedarfstraeger] insert failed", err);
+    return { error: "Konnte nicht angelegt werden. Bitte erneut versuchen." };
   }
 
   redirect("/agency/bedarfstraeger");
