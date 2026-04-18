@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
+import { CoachSignForm } from "./coach-sign-form";
 import { NotifyParticipantsButton } from "./notify-button";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +61,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
   if (!course) notFound();
 
+  const [me] = await db
+    .select({ signatureUrl: schema.users.signatureUrl })
+    .from(schema.users)
+    .where(eq(schema.users.id, session.user.id))
+    .limit(1);
+  const coachHasSignature = !!me?.signatureUrl;
+
   const participants = await db
     .select({
       id: schema.participants.id,
@@ -75,6 +83,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .where(eq(schema.courseParticipants.courseId, id))
     .orderBy(asc(schema.participants.name));
 
+  // Sessions + aggregierte Signatur-Counts pro Session in einer Query.
+  // Spart N+1 und zeigt direkt "Coach ✓ · 2/3 TN", Status-Badge und ob
+  // der Coach-Sign-Button angezeigt werden muss.
   const sessions = await db
     .select({
       id: schema.sessions.id,
@@ -84,14 +95,21 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       isErstgespraech: schema.sessions.isErstgespraech,
       topic: schema.sessions.topic,
       status: schema.sessions.status,
+      coachSigned: sql<number>`count(*) filter (where ${schema.signatures.signerType} = 'coach')::int`,
+      participantsSigned: sql<number>`count(*) filter (where ${schema.signatures.signerType} = 'participant')::int`,
     })
     .from(schema.sessions)
+    .leftJoin(
+      schema.signatures,
+      eq(schema.signatures.sessionId, schema.sessions.id),
+    )
     .where(
       and(
         eq(schema.sessions.courseId, id),
         isNull(schema.sessions.deletedAt),
       ),
     )
+    .groupBy(schema.sessions.id)
     .orderBy(asc(schema.sessions.sessionDate));
 
   // "Geleistet" zählt nur Sessions, bei denen Coach UND alle Teilnehmer
@@ -170,19 +188,54 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </p>
         ) : (
           <ul className="divide-y divide-zinc-200 text-sm">
-            {sessions.map((s) => (
-              <li key={s.id} className="flex items-start gap-4 px-6 py-3">
-                <div className="w-24 shrink-0">
-                  <div className="font-medium">{s.sessionDate}</div>
-                  <div className="text-xs text-zinc-500">
-                    {s.modus === "online" ? "Online" : "Präsenz"}
-                    {" · "}
-                    {s.isErstgespraech ? "Erstgespräch" : `${s.anzahlUe} UE`}
+            {sessions.map((s) => {
+              const coachSigned = s.coachSigned > 0;
+              const tnTotal = participants.length;
+              const tnSigned = s.participantsSigned;
+              return (
+                <li key={s.id} className="px-6 py-4 space-y-2">
+                  <div className="flex items-start gap-4">
+                    <div className="w-24 shrink-0">
+                      <div className="font-medium">{s.sessionDate}</div>
+                      <div className="text-xs text-zinc-500">
+                        {s.modus === "online" ? "Online" : "Präsenz"}
+                        {" · "}
+                        {s.isErstgespraech ? "Erstgespräch" : `${s.anzahlUe} UE`}
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <p className="text-zinc-700">{s.topic}</p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                        <SessionStatusBadge status={s.status} />
+                        <span>
+                          Coach {coachSigned ? "✓" : "–"}
+                        </span>
+                        <span>
+                          TN {tnSigned}/{tnTotal}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <p className="flex-1 text-zinc-700">{s.topic}</p>
-              </li>
-            ))}
+                  {!coachSigned && !impersonating && coachHasSignature && (
+                    <div className="pl-28">
+                      <CoachSignForm courseId={course.id} sessionId={s.id} />
+                    </div>
+                  )}
+                  {!coachSigned && !impersonating && !coachHasSignature && (
+                    <p className="pl-28 text-xs text-amber-700">
+                      Zum Signieren bitte zuerst{" "}
+                      <Link
+                        href="/coach/signature"
+                        className="underline-offset-2 hover:underline"
+                      >
+                        Unterschrift anlegen
+                      </Link>
+                      .
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -223,5 +276,27 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-zinc-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
     </div>
+  );
+}
+
+const SESSION_STATUS_LABEL: Record<string, string> = {
+  pending: "offen",
+  coach_signed: "wartet auf TN",
+  completed: "abgeschlossen",
+};
+
+const SESSION_STATUS_BADGE: Record<string, string> = {
+  pending: "bg-zinc-100 text-zinc-700",
+  coach_signed: "bg-amber-100 text-amber-800",
+  completed: "bg-green-100 text-green-800",
+};
+
+function SessionStatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 ${SESSION_STATUS_BADGE[status] ?? ""}`}
+    >
+      {SESSION_STATUS_LABEL[status] ?? status}
+    </span>
   );
 }

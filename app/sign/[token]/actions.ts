@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { recomputeSessionStatus } from "@/lib/session-status";
 
 export type SignState = { error?: string } | undefined;
 
@@ -104,11 +105,17 @@ export async function submitParticipantSignature(
         sessionId: sess.id,
         courseParticipantId: cp.id,
         signerType: "participant",
-        // Placeholder bis die Canvas-Signatur-Phase signature_pad + Object
-        // Storage verdrahtet (siehe CLAUDE.md → Zeitplan).
+        // Placeholder bis die Teilnehmer-Canvas-Signatur-Phase signature_pad
+        // + Object Storage verdrahtet (siehe CLAUDE.md → Zeitplan). Für den
+        // Coach-Flow ist der Canvas-Upload bereits verdrahtet.
         signatureUrl: "placeholder://pending-canvas-integration",
         ipAddress,
       });
+
+      // Status sofort neu berechnen: wenn Coach + alle TN signiert haben,
+      // springt die Session auf `completed` und zählt damit in die
+      // "Geleistete UE" auf dem Kurs-Dashboard.
+      await recomputeSessionStatus(sess.id, tx);
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

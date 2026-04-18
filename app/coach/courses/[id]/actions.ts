@@ -2,11 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireCoach } from "@/lib/dal";
 import { sendParticipantInvite } from "@/lib/participant-tokens";
+import { recomputeSessionStatus } from "@/lib/session-status";
 
 export type SessionFormState = { error?: string } | undefined;
 
@@ -167,4 +169,103 @@ export async function notifyParticipants(
     success,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+export type SignSessionState = { error?: string } | undefined;
+
+/**
+ * Coach bestätigt eine Session: aktive Bestätigung per Checkbox + Zeitstempel,
+ * die gespeicherte Coach-Unterschrift (users.signature_url) wird als Snapshot
+ * in die Signatur-Zeile übernommen. Danach wird `sessions.status` neu
+ * berechnet (pending → coach_signed, ggf. direkt completed wenn alle TN
+ * bereits signiert haben).
+ */
+export async function signSessionAsCoach(
+  _prev: SignSessionState,
+  formData: FormData,
+): Promise<SignSessionState> {
+  const session = await requireCoach();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  const confirmed = formData.get("confirm") === "on";
+  if (!courseId || !sessionId) return { error: "Kurs oder Session fehlt." };
+  if (!confirmed) return { error: "Bitte aktiv bestätigen." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const [coach] = await db
+    .select({ signatureUrl: schema.users.signatureUrl })
+    .from(schema.users)
+    .where(eq(schema.users.id, coachId))
+    .limit(1);
+  const coachSignatureUrl = coach?.signatureUrl ?? null;
+  if (!coachSignatureUrl) {
+    return {
+      error:
+        'Du hast noch keine Unterschrift hinterlegt. Lege sie unter „Unterschrift" an.',
+    };
+  }
+
+  const ipAddress =
+    (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+
+  try {
+    await db.transaction(async (tx) => {
+      // Session muss zum Kurs gehören + noch nicht gelöscht sein.
+      const [sess] = await tx
+        .select({ id: schema.sessions.id })
+        .from(schema.sessions)
+        .where(
+          and(
+            eq(schema.sessions.id, sessionId),
+            eq(schema.sessions.courseId, ownedCourseId),
+            isNull(schema.sessions.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!sess) throw new Error("SESSION_NOT_FOUND");
+
+      // Doppel-Signatur verhindern. Der Check-Constraint
+      // `signatures_signer_type_cp_consistency` stellt sicher, dass
+      // coach-Signaturen course_participant_id=null haben.
+      const [existing] = await tx
+        .select({ id: schema.signatures.id })
+        .from(schema.signatures)
+        .where(
+          and(
+            eq(schema.signatures.sessionId, sess.id),
+            eq(schema.signatures.signerType, "coach"),
+          ),
+        )
+        .limit(1);
+      if (existing) throw new Error("ALREADY_SIGNED");
+
+      await tx.insert(schema.signatures).values({
+        sessionId: sess.id,
+        courseParticipantId: null,
+        signerType: "coach",
+        signatureUrl: coachSignatureUrl,
+        ipAddress,
+      });
+
+      await recomputeSessionStatus(sess.id, tx);
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "SESSION_NOT_FOUND") {
+      return { error: "Session nicht gefunden." };
+    }
+    if (message === "ALREADY_SIGNED") {
+      return { error: "Diese Session hast du bereits bestätigt." };
+    }
+    return { error: `Signatur fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return undefined;
 }

@@ -22,6 +22,13 @@ export default async function CoachDashboard() {
   const session = await requireCoach();
   const impersonating = isImpersonating(session);
 
+  const [me] = await db
+    .select({ signatureUrl: schema.users.signatureUrl })
+    .from(schema.users)
+    .where(eq(schema.users.id, session.user.id))
+    .limit(1);
+  const hasSignature = !!me?.signatureUrl;
+
   const courses = await db
     .select({
       id: schema.courses.id,
@@ -48,6 +55,22 @@ export default async function CoachDashboard() {
           Coach Dashboard
         </h1>
       </header>
+
+      {!hasSignature && !impersonating && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
+          <p className="font-medium">Unterschrift noch nicht hinterlegt.</p>
+          <p className="mt-1">
+            Du brauchst eine einmalig erfasste Unterschrift, bevor du Sessions
+            bestätigen kannst.
+          </p>
+          <Link
+            href="/coach/signature"
+            className="mt-3 inline-block rounded-lg bg-black px-4 py-2 text-xs font-medium text-white hover:bg-zinc-800"
+          >
+            Jetzt anlegen
+          </Link>
+        </div>
+      )}
 
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="flex items-center justify-between border-b border-zinc-300 px-6 py-4">
