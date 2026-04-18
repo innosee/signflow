@@ -49,7 +49,10 @@ export function AppHeader({
             <Link href={brandHref} className="text-base font-semibold tracking-tight">
               Signflow
             </Link>
-            <nav className="flex items-center gap-4 text-sm">
+            <nav
+              aria-label="Hauptnavigation"
+              className="flex items-center gap-4 text-sm"
+            >
               {navLinks.map((l) => (
                 <Link
                   key={l.href}

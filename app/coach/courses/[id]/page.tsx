@@ -147,7 +147,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             )
           </span>
           <span>
-            {course.startDate} bis {course.endDate}
+            {formatDate(course.startDate)} bis {formatDate(course.endDate)}
           </span>
         </div>
       </header>
@@ -290,6 +290,15 @@ const SESSION_STATUS_BADGE: Record<string, string> = {
   coach_signed: "bg-amber-100 text-amber-800",
   completed: "bg-green-100 text-green-800",
 };
+
+// ISO-Datum (YYYY-MM-DD) → DD.MM.YYYY. Keine Time-Zone-Konvertierung, weil
+// `sessions.sessionDate` / `courses.startDate` pure Kalendertage sind — bei
+// `new Date("2026-04-18")` würde der Browser UTC-Midnight interpretieren und
+// je nach Zone einen Tag zurückspringen.
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}.${m}.${y}` : iso;
+}
 
 function SessionStatusBadge({ status }: { status: string }) {
   return (

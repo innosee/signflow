@@ -187,6 +187,7 @@ export function CourseForm({
 
 function Field({
   label,
+  className,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
@@ -194,7 +195,9 @@ function Field({
       <span className="text-sm font-medium text-zinc-800">{label}</span>
       <input
         {...props}
-        className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+        // Eingehende `className` zusätzlich übernehmen statt überschreiben —
+        // so kann ein Aufrufer z.B. Fehlerzustände oder `w-auto` mitgeben.
+        className={`block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black ${className ?? ""}`}
       />
     </label>
   );

@@ -17,47 +17,41 @@ function hashToken(token: string): string {
 }
 
 /**
- * Invalidiert alle noch gültigen Tokens für eine bestimmte Paarung
- * (course × participant). Wird aufgerufen, bevor ein neuer Magic Link
- * ausgestellt wird — sorgt dafür, dass immer nur ein einziger Link pro
- * Teilnehmer-Kurs gleichzeitig aktiv ist.
- */
-async function revokeExistingTokens(params: {
-  courseId: string;
-  participantId: string;
-}): Promise<void> {
-  await db
-    .update(schema.participantAccessTokens)
-    .set({ usedAt: new Date() })
-    .where(
-      and(
-        eq(schema.participantAccessTokens.courseId, params.courseId),
-        eq(schema.participantAccessTokens.participantId, params.participantId),
-        isNull(schema.participantAccessTokens.usedAt),
-      ),
-    );
-}
-
-/**
  * Erzeugt einen neuen Magic-Link-Token für die Paarung (course × participant).
- * Alte Tokens für dieselbe Paarung werden vorher invalidiert (nur einer
- * gleichzeitig aktiv).
+ * Revoke + Insert laufen in einer Transaktion — sonst könnten zwei parallele
+ * Aufrufe beide die alten Zeilen invalidieren und danach zwei neue Zeilen
+ * einfügen, was die Invariante „genau ein aktiver Link pro Paarung" brechen
+ * würde.
  */
 export async function createParticipantMagicLink(params: {
   courseId: string;
   participantId: string;
 }): Promise<{ token: string; url: string }> {
-  await revokeExistingTokens(params);
-
   const token = newToken();
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
-  await db.insert(schema.participantAccessTokens).values({
-    courseId: params.courseId,
-    participantId: params.participantId,
-    tokenHash,
-    expiresAt,
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.participantAccessTokens)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(schema.participantAccessTokens.courseId, params.courseId),
+          eq(
+            schema.participantAccessTokens.participantId,
+            params.participantId,
+          ),
+          isNull(schema.participantAccessTokens.usedAt),
+        ),
+      );
+
+    await tx.insert(schema.participantAccessTokens).values({
+      courseId: params.courseId,
+      participantId: params.participantId,
+      tokenHash,
+      expiresAt,
+    });
   });
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -68,29 +62,42 @@ export async function createParticipantMagicLink(params: {
  * High-level helper: generiert einen frischen Link UND verschickt die
  * Magic-Link-Mail. Wird vom Coach-Dashboard per "Teilnehmer benachrichtigen"
  * aufgerufen (manuell ausgelöst, kein Cron im V1).
+ *
+ * Die (course, participant)-Paarung wird über `course_participants` hart
+ * geprüft — sonst ginge unter Umständen eine Mail raus, während
+ * `resolveParticipantToken()` den Link später verwerfen würde.
  */
 export async function sendParticipantInvite(params: {
   courseId: string;
   participantId: string;
 }): Promise<void> {
-  const { url } = await createParticipantMagicLink(params);
-
   const rows = await db
     .select({
       participantName: schema.participants.name,
       participantEmail: schema.participants.email,
       courseTitle: schema.courses.title,
     })
-    .from(schema.courses)
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.courses,
+      eq(schema.courses.id, schema.courseParticipants.courseId),
+    )
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, params.participantId),
+      eq(schema.participants.id, schema.courseParticipants.participantId),
     )
-    .where(eq(schema.courses.id, params.courseId))
+    .where(
+      and(
+        eq(schema.courseParticipants.courseId, params.courseId),
+        eq(schema.courseParticipants.participantId, params.participantId),
+      ),
+    )
     .limit(1);
 
   const row = rows[0];
-  if (!row) throw new Error("Kurs oder Teilnehmer nicht gefunden.");
+  if (!row) throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
+
+  const { url } = await createParticipantMagicLink(params);
 
   await sendParticipantMagicLink({
     to: row.participantEmail,

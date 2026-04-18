@@ -10,7 +10,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 
 ## Tech Stack
 - **Framework:** Next.js (App Router, TypeScript, Tailwind CSS)
-- **Auth:** Better Auth (Magic Links für Teilnehmer, Email/PW für Coaches)
+- **Auth:** Better Auth (Magic Links für Teilnehmer, E-Mail/PW für Coaches)
 - **Datenbank:** Neon (PostgreSQL, serverless)
 - **ORM:** Drizzle ORM
 - **E-Signatur (FES):** Firma.dev API (€0.029 pro Envelope, pay-as-you-go)
@@ -31,7 +31,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 ---
 
 ## Kern-Workflow
-1. Coach legt Kurs an (Header-Daten + Teilnehmer mit Name/Email/Kunden-Nr.)
+1. Coach legt Kurs an (Header-Daten + Teilnehmer mit Name/E-Mail/Kunden-Nr.)
 2. Coach erstellt Sessions laufend (auch nachträglich möglich) – Datum, UE, Modus, Themen
 3. Coach unterschreibt jede Session inline in der Kurs-Ansicht (Canvas, aktive Bestätigung + Zeitstempel)
 4. Coach triggert manuell **"Teilnehmer benachrichtigen"** → System erzeugt einen **Kurs-scoped Magic Link pro Teilnehmer** (24 h gültig); vorheriger Token für dieselbe Paarung wird invalidiert
