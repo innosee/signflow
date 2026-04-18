@@ -16,6 +16,12 @@ export const getCurrentSession = cache(async (): Promise<SessionData> => {
 export async function requireSession() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
+  // Soft-gelöschte Nutzer sollen ihre Session sofort verlieren — nicht erst
+  // bei Ablauf. Ohne diesen Check dürfte ein grad deaktivierter Coach noch
+  // weiter in seiner alten Session arbeiten.
+  if ((session.user as { deletedAt?: Date | null }).deletedAt) {
+    redirect("/login");
+  }
   return session;
 }
 

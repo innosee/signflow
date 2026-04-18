@@ -9,8 +9,21 @@ import { InviteCoachForm } from "./invite-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function AgencyDashboard() {
+const IMP_ERRORS: Record<string, string> = {
+  invalid: "Ungültiger Coach.",
+  unknown: "Dieser Coach existiert nicht (mehr).",
+  banned: "Coach ist gesperrt — Impersonation nicht möglich.",
+  api: "Impersonation von Better Auth abgelehnt.",
+};
+
+type Props = {
+  searchParams: Promise<{ imp_error?: string }>;
+};
+
+export default async function AgencyDashboard({ searchParams }: Props) {
   const session = await requireAgency();
+  const { imp_error } = await searchParams;
+  const impErrorMsg = imp_error ? IMP_ERRORS[imp_error] : undefined;
 
   const coaches = await db
     .select({
@@ -47,6 +60,15 @@ export default async function AgencyDashboard() {
           </button>
         </form>
       </header>
+
+      {impErrorMsg && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
+        >
+          {impErrorMsg}
+        </div>
+      )}
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6">
         <h2 className="text-lg font-semibold">Coach einladen</h2>

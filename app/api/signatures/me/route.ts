@@ -2,10 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
-import {
-  assertNotImpersonating,
-  getCurrentSession,
-} from "@/lib/dal";
+import { getCurrentSession, isImpersonating } from "@/lib/dal";
 import { deleteBlob, uploadSignature } from "@/lib/storage";
 
 const MAX_BYTES = 500_000;
@@ -16,7 +13,15 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  assertNotImpersonating(session);
+  if (isImpersonating(session)) {
+    return NextResponse.json(
+      {
+        error:
+          "Schreibende Aktionen sind während Impersonation nicht erlaubt.",
+      },
+      { status: 403 },
+    );
+  }
 
   const formData = await req.formData();
   const file = formData.get("signature");

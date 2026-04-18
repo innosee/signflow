@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { sendParticipantMagicLink } from "@/lib/email";
@@ -12,17 +12,22 @@ function newToken(): string {
   return crypto.randomBytes(32).toString("base64url");
 }
 
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("base64url");
+}
+
 export async function createParticipantMagicLink(params: {
   sessionId: string;
   participantId: string;
 }): Promise<{ token: string; url: string }> {
   const token = newToken();
+  const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
   await db.insert(schema.sessionTokens).values({
     sessionId: params.sessionId,
     participantId: params.participantId,
-    token,
+    tokenHash,
     expiresAt,
   });
 
@@ -83,6 +88,9 @@ export type ResolvedToken = {
 export async function resolveParticipantToken(
   token: string,
 ): Promise<ResolvedToken | null> {
+  const tokenHash = hashToken(token);
+  const now = new Date();
+
   const rows = await db
     .select({
       tokenId: schema.sessionTokens.id,
@@ -107,15 +115,15 @@ export async function resolveParticipantToken(
     )
     .where(
       and(
-        eq(schema.sessionTokens.token, token),
+        eq(schema.sessionTokens.tokenHash, tokenHash),
         isNull(schema.sessionTokens.usedAt),
+        gt(schema.sessionTokens.expiresAt, now),
       ),
     )
     .limit(1);
 
   const row = rows[0];
   if (!row) return null;
-  if (row.expiresAt.getTime() < Date.now()) return null;
 
   return {
     tokenId: row.tokenId,
@@ -131,8 +139,9 @@ export async function resolveParticipantToken(
 
 /**
  * Atomically consumes a participant token. Returns the resolved token if the
- * consumption succeeded (row updated, was unused and unexpired), null
- * otherwise — prevents replay/double-use.
+ * consumption succeeded (row updated, was unused AND unexpired), null
+ * otherwise — prevents replay/double-use AND prevents consuming an already-
+ * expired token in the gap between resolve and consume.
  */
 export async function consumeParticipantToken(
   token: string,
@@ -147,6 +156,7 @@ export async function consumeParticipantToken(
       and(
         eq(schema.sessionTokens.id, resolved.tokenId),
         isNull(schema.sessionTokens.usedAt),
+        gt(schema.sessionTokens.expiresAt, new Date()),
       ),
     )
     .returning({ id: schema.sessionTokens.id });

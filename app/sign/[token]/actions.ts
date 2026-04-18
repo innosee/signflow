@@ -1,13 +1,17 @@
 "use server";
 
+import crypto from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { consumeParticipantToken } from "@/lib/participant-tokens";
 
 export type SignState = { error?: string } | undefined;
+
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("base64url");
+}
 
 export async function submitParticipantSignature(
   _prev: SignState,
@@ -18,41 +22,74 @@ export async function submitParticipantSignature(
   if (!token) return { error: "Token fehlt." };
   if (!confirmed) return { error: "Bitte aktiv bestätigen." };
 
-  const resolved = await consumeParticipantToken(token);
-  if (!resolved) {
-    return {
-      error:
-        "Link ist abgelaufen oder wurde bereits verwendet. Bitte neuen Link anfordern.",
-    };
-  }
-
+  const tokenHash = hashToken(token);
   const ipAddress =
     (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ??
     "unknown";
 
-  const cp = await db
-    .select({ id: schema.courseParticipants.id })
-    .from(schema.courseParticipants)
-    .innerJoin(
-      schema.sessions,
-      eq(schema.sessions.courseId, schema.courseParticipants.courseId),
-    )
-    .where(
-      and(
-        eq(schema.sessions.id, resolved.sessionId),
-        eq(schema.courseParticipants.participantId, resolved.participantId),
-      ),
-    )
-    .limit(1);
+  // Token-Consume + Enrollment-Lookup + Signatur-Insert in EINER Transaktion.
+  // Sonst könnte bei Fehler im Insert der Link verbraucht, aber keine
+  // Signatur geschrieben sein → Teilnehmer kann nie wieder signieren.
+  try {
+    await db.transaction(async (tx) => {
+      const consumed = await tx
+        .update(schema.sessionTokens)
+        .set({ usedAt: new Date() })
+        .where(
+          and(
+            eq(schema.sessionTokens.tokenHash, tokenHash),
+            isNull(schema.sessionTokens.usedAt),
+            gt(schema.sessionTokens.expiresAt, new Date()),
+          ),
+        )
+        .returning({
+          sessionId: schema.sessionTokens.sessionId,
+          participantId: schema.sessionTokens.participantId,
+        });
 
-  await db.insert(schema.signatures).values({
-    sessionId: resolved.sessionId,
-    courseParticipantId: cp[0]?.id ?? null,
-    signerType: "participant",
-    // Placeholder until the Canvas-Signatur phase wires up signature_pad + storage.
-    signatureUrl: "placeholder://pending-canvas-integration",
-    ipAddress,
-  });
+      const row = consumed[0];
+      if (!row) throw new Error("TOKEN_INVALID");
+
+      const [cp] = await tx
+        .select({ id: schema.courseParticipants.id })
+        .from(schema.courseParticipants)
+        .innerJoin(
+          schema.sessions,
+          eq(schema.sessions.courseId, schema.courseParticipants.courseId),
+        )
+        .where(
+          and(
+            eq(schema.sessions.id, row.sessionId),
+            eq(schema.courseParticipants.participantId, row.participantId),
+          ),
+        )
+        .limit(1);
+
+      if (!cp) throw new Error("NOT_ENROLLED");
+
+      await tx.insert(schema.signatures).values({
+        sessionId: row.sessionId,
+        courseParticipantId: cp.id,
+        signerType: "participant",
+        // Placeholder bis die Canvas-Signatur-Phase signature_pad + Object
+        // Storage verdrahtet (siehe CLAUDE.md → Zeitplan).
+        signatureUrl: "placeholder://pending-canvas-integration",
+        ipAddress,
+      });
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "TOKEN_INVALID") {
+      return {
+        error:
+          "Link ist abgelaufen oder wurde bereits verwendet. Bitte neuen Link anfordern.",
+      };
+    }
+    if (message === "NOT_ENROLLED") {
+      return { error: "Teilnehmer ist dieser Einheit nicht zugeordnet." };
+    }
+    throw err;
+  }
 
   redirect(`/sign/${token}/done`);
 }

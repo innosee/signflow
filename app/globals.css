@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
+  color-scheme: light only;
   --background: #fafafa;
   --foreground: #18181b;
 }
@@ -13,10 +13,27 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: #fafafa;
+  color: #18181b;
+}
+
+body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+input,
+textarea,
+select {
+  color: #18181b;
+  background-color: #ffffff;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #71717a;
+  opacity: 1;
 }
 
 :focus-visible {

@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   pgEnum,
@@ -24,26 +26,36 @@ export const sessionStatus = pgEnum("session_status", [
 export const signerType = pgEnum("signer_type", ["coach", "participant"]);
 export const fesStatus = pgEnum("fes_status", ["pending", "sent", "completed"]);
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified").notNull().default(false),
-  name: text("name").notNull(),
-  image: text("image"),
-  role: userRole("role").notNull().default("coach"),
-  signatureUrl: text("signature_url"),
-  banned: boolean("banned").notNull().default(false),
-  banReason: text("ban_reason"),
-  banExpires: timestamp("ban_expires", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    name: text("name").notNull(),
+    image: text("image"),
+    role: userRole("role").notNull().default("coach"),
+    signatureUrl: text("signature_url"),
+    banned: boolean("banned").notNull().default(false),
+    banReason: text("ban_reason"),
+    banExpires: timestamp("ban_expires", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    // Partial unique — ein deaktivierter Coach kann neu eingeladen werden,
+    // weil der Soft-Delete die alte Zeile aus dem Unique raus-nimmt.
+    uniqueIndex("users_email_active_uq")
+      .on(t.email)
+      .where(sql`${t.deletedAt} IS NULL`),
+  ],
+);
 
 export const authSession = pgTable(
   "auth_session",
@@ -209,11 +221,14 @@ export const sessionTokens = pgTable(
     participantId: uuid("participant_id")
       .notNull()
       .references(() => participants.id, { onDelete: "restrict" }),
-    token: text("token").notNull(),
+    // SHA-256 Hash des Tokens (base64url). Der Klartext wird nur an den
+    // Teilnehmer per Magic Link versendet, nie gespeichert — verhindert,
+    // dass ein DB-Read-Leak direkt einlösbare Links liefert.
+    tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("session_tokens_token_uq").on(t.token)],
+  (t) => [uniqueIndex("session_tokens_token_hash_uq").on(t.tokenHash)],
 );
 
 export const signatures = pgTable(
@@ -234,7 +249,16 @@ export const signatures = pgTable(
       .defaultNow(),
     ipAddress: text("ip_address").notNull(),
   },
-  (t) => [index("signatures_session_id_idx").on(t.sessionId)],
+  (t) => [
+    index("signatures_session_id_idx").on(t.sessionId),
+    // Teilnehmer-Signaturen müssen genau eine course_participant-Zeile referenzieren,
+    // Coach-Signaturen dürfen das nicht (sie gehören dem Coach der Session, nicht einem Teilnehmer).
+    check(
+      "signatures_signer_type_cp_consistency",
+      sql`(${t.signerType} = 'participant' AND ${t.courseParticipantId} IS NOT NULL)
+         OR (${t.signerType} = 'coach' AND ${t.courseParticipantId} IS NULL)`,
+    ),
+  ],
 );
 
 export const finalDocuments = pgTable("final_documents", {

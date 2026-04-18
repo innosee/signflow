@@ -14,10 +14,17 @@ if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET is not set");
 }
 
-const appUrl =
-  process.env.BETTER_AUTH_URL ??
-  process.env.NEXT_PUBLIC_APP_URL ??
-  "http://localhost:3000";
+const configuredUrl =
+  process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+
+if (!configuredUrl && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "BETTER_AUTH_URL (or NEXT_PUBLIC_APP_URL) must be set in production — " +
+      "otherwise Better Auth falls back to localhost and breaks Reset/Invite links.",
+  );
+}
+
+const appUrl = configuredUrl ?? "http://localhost:3000";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -44,6 +51,31 @@ export const auth = betterAuth({
         name: user.name,
         url,
       });
+    },
+  },
+
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 Tage
+    updateAge: 60 * 60 * 24, // Session-Refresh alle 24h
+    modelName: "authSession",
+    additionalFields: {
+      impersonatedBy: {
+        type: "string",
+        required: false,
+        fieldName: "impersonated_by",
+        input: false,
+      },
+    },
+  },
+
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 100,
+    customRules: {
+      "/sign-in/email": { window: 300, max: 5 }, // 5 Versuche / 5min pro IP
+      "/forget-password": { window: 900, max: 3 },
+      "/reset-password": { window: 900, max: 5 },
     },
   },
 
@@ -84,18 +116,6 @@ export const auth = betterAuth({
         type: "date",
         required: false,
         fieldName: "ban_expires",
-        input: false,
-      },
-    },
-  },
-
-  session: {
-    modelName: "authSession",
-    additionalFields: {
-      impersonatedBy: {
-        type: "string",
-        required: false,
-        fieldName: "impersonated_by",
         input: false,
       },
     },

@@ -3,8 +3,10 @@
 import crypto from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { and, eq, isNull } from "drizzle-orm";
 import { APIError } from "better-auth/api";
 
+import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
 import { requireAgency, isImpersonating, getCurrentSession } from "@/lib/dal";
 
@@ -33,11 +35,13 @@ export async function inviteCoach(
 
   const h = await headers();
 
+  let createdUserId: string | null = null;
   try {
-    await auth.api.createUser({
+    const result = await auth.api.createUser({
       body: { email, name, password: placeholderPassword, role: "coach" },
       headers: h,
     });
+    createdUserId = result.user?.id ?? null;
   } catch (err) {
     if (err instanceof APIError) {
       return { error: `Einladung fehlgeschlagen: ${err.message}` };
@@ -51,9 +55,21 @@ export async function inviteCoach(
       headers: h,
     });
   } catch (err) {
+    // Mail-Versand fehlgeschlagen → neu angelegten User wieder aufräumen,
+    // sonst bleibt ein Coach mit zufälligem Passwort ohne Setz-Möglichkeit
+    // zurück und die E-Mail-Adresse ist für eine Wiedereinladung blockiert.
+    if (createdUserId) {
+      await db
+        .delete(schema.users)
+        .where(eq(schema.users.id, createdUserId))
+        .catch(() => {
+          // Cleanup best-effort — in der Fehlermeldung steht, dass die
+          // Agency sich ggf. manuell kümmern muss.
+        });
+    }
     if (err instanceof APIError) {
       return {
-        error: `Benutzer angelegt, aber Einladungs-E-Mail fehlgeschlagen: ${err.message}`,
+        error: `Einladungs-E-Mail fehlgeschlagen (${err.message}). Der User wurde rückgängig gemacht, bitte erneut einladen.`,
       };
     }
     throw err;
@@ -62,15 +78,44 @@ export async function inviteCoach(
   return { success: `Einladung an ${email} versendet.` };
 }
 
+function backToAgencyWithError(code: string): never {
+  redirect(`/agency?imp_error=${encodeURIComponent(code)}`);
+}
+
 export async function impersonateCoach(formData: FormData): Promise<void> {
   await requireAgency();
   const userId = String(formData.get("userId") ?? "");
-  if (!userId) return;
+  if (!userId) backToAgencyWithError("invalid");
 
-  await auth.api.impersonateUser({
-    body: { userId },
-    headers: await headers(),
-  });
+  const [target] = await db
+    .select({
+      id: schema.users.id,
+      banned: schema.users.banned,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, userId),
+        eq(schema.users.role, "coach"),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!target) backToAgencyWithError("unknown");
+  if (target.banned) backToAgencyWithError("banned");
+
+  try {
+    await auth.api.impersonateUser({
+      body: { userId: target.id },
+      headers: await headers(),
+    });
+  } catch (err) {
+    // redirect() wirft intern NEXT_REDIRECT — nicht abfangen
+    if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) throw err;
+    if (err instanceof APIError) backToAgencyWithError("api");
+    throw err;
+  }
   redirect("/coach");
 }
 

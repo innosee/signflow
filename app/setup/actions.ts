@@ -27,35 +27,58 @@ export async function bootstrapAgency(
     return { error: "Passwort muss mindestens 8 Zeichen haben." };
   }
 
-  const existing = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.role, "agency"))
-    .limit(1);
-  if (existing.length > 0) {
-    return { error: "Es existiert bereits ein Agency-Account." };
-  }
-
-  const [user] = await db
-    .insert(schema.users)
-    .values({ email, name, role: "agency", emailVerified: true })
-    .returning();
-
-  if (!user) return { error: "Benutzer konnte nicht erstellt werden." };
-
   const passwordHash = await hashPassword(password);
 
-  await db.insert(schema.authAccount).values({
-    userId: user.id,
-    providerId: "credential",
-    accountId: user.id,
-    password: passwordHash,
-  });
+  // Existence-Check UND beide Inserts in einer Transaktion —
+  // verhindert TOCTOU-Race (zwei parallele Requests erstellen je eine Agency)
+  // und orphan-User (users eingefügt, authAccount-Insert scheitert).
+  let userId: string | null = null;
+  try {
+    userId = await db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.role, "agency"))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new Error("AGENCY_EXISTS");
+      }
 
-  await auth.api.signInEmail({
-    body: { email, password },
-    headers: await headers(),
-  });
+      const [user] = await tx
+        .insert(schema.users)
+        .values({ email, name, role: "agency", emailVerified: true })
+        .returning();
+      if (!user) throw new Error("USER_INSERT_FAILED");
+
+      await tx.insert(schema.authAccount).values({
+        userId: user.id,
+        providerId: "credential",
+        accountId: user.id,
+        password: passwordHash,
+      });
+
+      return user.id;
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "AGENCY_EXISTS") {
+      return { error: "Es existiert bereits ein Agency-Account." };
+    }
+    return { error: "Benutzer konnte nicht erstellt werden." };
+  }
+
+  if (!userId) return { error: "Benutzer konnte nicht erstellt werden." };
+
+  try {
+    await auth.api.signInEmail({
+      body: { email, password },
+      headers: await headers(),
+    });
+  } catch {
+    // User wurde angelegt, aber Auto-Login ist fehlgeschlagen. Nutzer
+    // kann sich manuell anmelden — freundlich weiterleiten statt 500.
+    redirect("/login");
+  }
 
   redirect("/agency");
 }

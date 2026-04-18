@@ -40,5 +40,9 @@ export default function proxy(req: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  // Nur bekannte Asset-Extensions vom Matcher ausschließen — sonst würden
+  // künftig Routen wie /documents/file.pdf fälschlich nicht geguardet.
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|css|js|ico|json|map|woff2?|ttf|otf)$).*)",
+  ],
 };

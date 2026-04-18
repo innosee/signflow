@@ -65,7 +65,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 
 ### Auth & Berechtigungen
 - **Coach-Signup: nur per Einladung**, kein offener `/signup`-Endpoint. Agency legt Coach an (Name + E-Mail) → System schickt Setup-Mail mit einmaligem Invite-Token → Coach setzt Passwort + erstellt Unterschrift.
-- **Impersonation (Agency → Coach)**: Agency kann in die Sicht eines Coaches wechseln. Session führt `impersonating_user_id`-Feld. Jede Aktion wird im Audit-Log mit beiden IDs geloggt.
+- **Impersonation (Agency → Coach)**: Agency kann in die Sicht eines Coaches wechseln. Session führt `impersonated_by`-Feld (DB-Spalte) / `impersonatedBy` (Drizzle/TS). Jede Aktion wird im Audit-Log mit beiden IDs geloggt.
 - **Schreibende Aktionen während Impersonation sind hart blockiert** – insbesondere das Leisten von Unterschriften. Sonst ist die Beweiskraft der digitalen Unterschrift kaputt (Coach könnte behaupten, Agency habe in seinem Namen signiert).
 - **Data-Isolation**: jede Coach-Query serverseitig mit `coach_id = session.user.id` filtern – nicht auf UI verlassen.
 - **Single-Tenant**: aktuell eine Agency pro Deployment (`users` hat keine `agency_id`). Multi-Tenancy wäre Schema-Change.
