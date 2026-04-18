@@ -14,57 +14,104 @@ export default async function ParticipantSignPage({ params }: Props) {
     return (
       <div className="mx-auto max-w-md px-4 py-16">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-          <h1 className="text-lg font-semibold text-red-800">
-            Link ungültig
-          </h1>
+          <h1 className="text-lg font-semibold text-red-800">Link ungültig</h1>
           <p className="mt-2 text-sm text-red-700">
-            Dieser Link ist abgelaufen oder wurde bereits verwendet. Bitte
-            wende dich an deinen Coach für einen neuen Link.
+            Dieser Link ist abgelaufen oder wurde durch einen neueren ersetzt.
+            Bitte wende dich an deinen Coach für einen neuen Link.
           </p>
         </div>
       </div>
     );
   }
 
+  const open = resolved.sessions.filter((s) => !s.hasParticipantSignature);
+  const done = resolved.sessions.filter((s) => s.hasParticipantSignature);
+
   return (
-    <div className="mx-auto max-w-md px-4 py-10 space-y-6">
-      <div>
+    <div className="mx-auto max-w-xl px-4 py-8 space-y-6">
+      <header>
         <h1 className="text-2xl font-semibold tracking-tight">
-          Anwesenheit bestätigen
+          {resolved.courseTitle}
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Hallo {resolved.participantName}, bitte bestätige deine Teilnahme.
+          Hallo {resolved.participantName}, bitte bestätige die unten
+          aufgeführten Termine. Du kannst alle offenen Einheiten in einem Rutsch
+          erledigen.
         </p>
-      </div>
+      </header>
 
-      <div className="rounded-xl border border-zinc-300 bg-white p-5 text-sm">
-        <Row label="Kurs">{resolved.courseTitle}</Row>
-        <Row label="Datum">{resolved.sessionDate}</Row>
-        <Row label="Thema">{resolved.sessionTopic}</Row>
-      </div>
+      {open.length === 0 ? (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
+          Alle Einheiten sind bestätigt – danke! Sobald dein Coach den Kurs
+          abschließt, bekommst du eine Vorschau zur finalen Freigabe.
+        </div>
+      ) : (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-zinc-700">
+            Offen ({open.length})
+          </h2>
+          {open.map((s) => (
+            <SessionRow key={s.id} session={s} token={token} open />
+          ))}
+        </section>
+      )}
 
-      <SignForm token={token} name={resolved.participantName} />
+      {done.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-zinc-700">
+            Bereits bestätigt ({done.length})
+          </h2>
+          {done.map((s) => (
+            <SessionRow key={s.id} session={s} token={token} open={false} />
+          ))}
+        </section>
+      )}
 
       <p className="text-xs text-zinc-500">
-        Hinweis: Die Unterschriftenerfassung (Canvas) folgt in der nächsten
-        Ausbaustufe. Heute bestätigst du per Klick; die IP-Adresse und der
-        Zeitstempel werden gespeichert.
+        Hinweis: Die Unterschriftserfassung via Canvas folgt in der nächsten
+        Ausbaustufe. Heute bestätigst du per Klick — IP und Zeitstempel werden
+        gespeichert.
       </p>
     </div>
   );
 }
 
-function Row({
-  label,
-  children,
+function SessionRow({
+  session,
+  token,
+  open,
 }: {
-  label: string;
-  children: React.ReactNode;
+  session: {
+    id: string;
+    sessionDate: string;
+    topic: string;
+    anzahlUe: string;
+    modus: "praesenz" | "online";
+    isErstgespraech: boolean;
+  };
+  token: string;
+  open: boolean;
 }) {
   return (
-    <div className="flex justify-between border-b border-black/5 py-2 last:border-0">
-      <span className="text-zinc-500">{label}</span>
-      <span className="font-medium">{children}</span>
+    <div className="rounded-xl border border-zinc-300 bg-white p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <div>
+          <div className="font-medium">{session.sessionDate}</div>
+          <div className="text-xs text-zinc-500">
+            {session.modus === "online" ? "Online" : "Präsenz"}
+            {" · "}
+            {session.isErstgespraech
+              ? "Erstgespräch"
+              : `${session.anzahlUe} UE`}
+          </div>
+        </div>
+      </div>
+      <p className="text-sm leading-relaxed text-zinc-700">{session.topic}</p>
+      {open ? (
+        <SignForm token={token} sessionId={session.id} />
+      ) : (
+        <p className="text-xs text-green-700">✓ bestätigt</p>
+      )}
     </div>
   );
 }

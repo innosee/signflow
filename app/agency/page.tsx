@@ -3,7 +3,6 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireAgency } from "@/lib/dal";
 
-import { logoutAction } from "../login/actions";
 import { impersonateCoach } from "./actions";
 import { InviteCoachForm } from "./invite-form";
 
@@ -21,7 +20,7 @@ type Props = {
 };
 
 export default async function AgencyDashboard({ searchParams }: Props) {
-  const session = await requireAgency();
+  await requireAgency();
   const { imp_error } = await searchParams;
   const impErrorMsg = imp_error ? IMP_ERRORS[imp_error] : undefined;
 
@@ -42,23 +41,10 @@ export default async function AgencyDashboard({ searchParams }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-10">
-      <header className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Agency Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Angemeldet als {session.user.name} ({session.user.email})
-          </p>
-        </div>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-          >
-            Abmelden
-          </button>
-        </form>
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Agency Dashboard
+        </h1>
       </header>
 
       {impErrorMsg && (

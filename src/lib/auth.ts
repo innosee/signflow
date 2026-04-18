@@ -6,6 +6,7 @@ import {
   adminAc,
   userAc,
 } from "better-auth/plugins/admin/access";
+import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { sendResetPasswordEmail } from "@/lib/email";
@@ -52,20 +53,26 @@ export const auth = betterAuth({
         url,
       });
     },
+    // Der Invite-Flow für Coaches läuft über `requestPasswordReset` — nach
+    // Klick auf den Link hat der Coach seine Mailbox-Zugehörigkeit bewiesen
+    // und ein Passwort gesetzt. Das ist unser Signal „Einladung angenommen",
+    // auf das die Agency-UI über `emailVerified` prüft.
+    onPasswordReset: async ({ user }) => {
+      await db
+        .update(schema.users)
+        .set({ emailVerified: true })
+        .where(eq(schema.users.id, user.id));
+    },
   },
 
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 Tage
     updateAge: 60 * 60 * 24, // Session-Refresh alle 24h
     modelName: "authSession",
-    additionalFields: {
-      impersonatedBy: {
-        type: "string",
-        required: false,
-        fieldName: "impersonated_by",
-        input: false,
-      },
-    },
+    // impersonatedBy wird vom admin-Plugin selbst registriert (siehe
+    // better-auth/plugins/admin/schema). Kein manuelles additionalFields
+    // nötig — und vor allem kein `fieldName`-Override, weil Drizzle
+    // Spalten unter dem TS-Key exposed, nicht unter dem SQL-Namen.
   },
 
   rateLimit: {
@@ -91,13 +98,11 @@ export const auth = betterAuth({
       signatureUrl: {
         type: "string",
         required: false,
-        fieldName: "signature_url",
         input: false,
       },
       deletedAt: {
         type: "date",
         required: false,
-        fieldName: "deleted_at",
         input: false,
       },
       banned: {
@@ -109,13 +114,11 @@ export const auth = betterAuth({
       banReason: {
         type: "string",
         required: false,
-        fieldName: "ban_reason",
         input: false,
       },
       banExpires: {
         type: "date",
         required: false,
-        fieldName: "ban_expires",
         input: false,
       },
     },

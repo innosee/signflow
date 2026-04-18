@@ -46,7 +46,17 @@ export async function POST(req: Request) {
   }
 
   const userId = session.user.id;
-  const url = await uploadSignature(`user-${userId}`, file);
+  let url: string;
+  try {
+    url = await uploadSignature(`user-${userId}`, file);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Signature upload failed:", err);
+    // Fehlt der Token, ist es ein Config-Problem der Umgebung — keine 500er
+    // Black Box, sondern 503 mit klarem Hinweis.
+    const status = message.includes("BLOB_READ_WRITE_TOKEN") ? 503 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
 
   const [previous] = await db
     .select({ signatureUrl: schema.users.signatureUrl })

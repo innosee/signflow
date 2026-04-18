@@ -4,6 +4,8 @@ import {
   check,
   date,
   index,
+  integer,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -25,6 +27,10 @@ export const sessionStatus = pgEnum("session_status", [
 ]);
 export const signerType = pgEnum("signer_type", ["coach", "participant"]);
 export const fesStatus = pgEnum("fes_status", ["pending", "sent", "completed"]);
+/** AfA-Bedarfsträger-Typ: Jobcenter (JC) oder Arbeitsagentur (AA). */
+export const bedarfstraegerType = pgEnum("bedarfstraeger_type", ["JC", "AA"]);
+/** Durchführungsmodus einer Kurseinheit. */
+export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
 
 export const users = pgTable(
   "users",
@@ -133,15 +139,55 @@ export const authVerification = pgTable("auth_verification", {
     .$onUpdate(() => new Date()),
 });
 
+/**
+ * Bedarfsträger = finanzierende Stelle pro Kurs (Jobcenter X, Arbeitsagentur Y).
+ * Pflicht: Name + Typ. Adresse/Ansprechperson/E-Mail optional — relevant sobald
+ * das Rechnungsmodul gebaut wird (siehe CLAUDE.md → Deferred Features).
+ */
+export const bedarfstraeger = pgTable("bedarfstraeger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  type: bedarfstraegerType("type").notNull(),
+  adresse: text("adresse"),
+  kontaktPerson: text("kontakt_person"),
+  email: text("email"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 export const courses = pgTable("courses", {
   id: uuid("id").primaryKey().defaultRandom(),
   coachId: uuid("coach_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
   title: text("title").notNull(),
+  /** AVGS-Maßnahmen-Nummer (von der AfA vergeben). */
+  avgsNummer: text("avgs_nummer").notNull(),
+  /** Durchführungs-Ort (z.B. "Online" oder "Singen, Erzbergerstr. 10"). */
+  durchfuehrungsort: text("durchfuehrungsort").notNull(),
+  /** Bewilligte Unterrichtseinheiten gesamt (ganzzahlig, z.B. 80). */
+  anzahlBewilligteUe: integer("anzahl_bewilligte_ue").notNull(),
+  bedarfstraegerId: uuid("bedarfstraeger_id")
+    .notNull()
+    .references(() => bedarfstraeger.id, { onDelete: "restrict" }),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   status: courseStatus("status").notNull().default("active"),
+  /**
+   * Ergänzende Angaben / Begründungen für den AfA-Footer. Werden auf jedem
+   * Blatt des finalen PDFs ausgegeben. Checkboxen + Freitext.
+   */
+  flagUnter2Termine: boolean("flag_unter_2_termine").notNull().default(false),
+  flagVorzeitigesEnde: boolean("flag_vorzeitiges_ende")
+    .notNull()
+    .default(false),
+  begruendungText: text("begruendung_text"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -156,6 +202,16 @@ export const participants = pgTable("participants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
+  /**
+   * AfA-Kunden-Nummer des Teilnehmers (z.B. "160B29588") — Pflichtfeld,
+   * kommt aus dem Stundennachweis-Formular (Zeile "Kunden-Nr. TN*in").
+   *
+   * Pre-Prod-Annahme: Migrationen, die diese Spalte einführen, leeren die
+   * Tabelle (siehe scripts/apply-afa-form-migration.mjs). In Production
+   * muss stattdessen der Drei-Schritt-Backfill gewählt werden: Spalte
+   * nullable hinzufügen → vorhandene Zeilen füllen → auf NOT NULL setzen.
+   */
+  kundenNr: text("kunden_nr").notNull(),
   signatureUrl: text("signature_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -197,7 +253,19 @@ export const sessions = pgTable(
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
     sessionDate: date("session_date").notNull(),
+    /** Coaching-Themen / Maßnahme-Inhalte — kann länger sein, deshalb `text`. */
     topic: text("topic").notNull(),
+    /** Unterrichtseinheiten dieser Session. `0` beim Erstgespräch, sonst 0.5er-Schritte. */
+    anzahlUe: numeric("anzahl_ue", { precision: 3, scale: 1 }).notNull(),
+    modus: sessionModus("modus").notNull(),
+    /**
+     * Das Erstgespräch ist eine Sonderzeile im AfA-Formular: zählt UE-mäßig
+     * nicht (anzahl_ue = 0), braucht aber beidseitige Unterschrift und die
+     * Zusatzangabe "geeignet JA/NEIN".
+     */
+    isErstgespraech: boolean("is_erstgespraech").notNull().default(false),
+    /** Nur beim Erstgespräch relevant: TN*in für diese Maßnahme geeignet? */
+    geeignet: boolean("geeignet"),
     status: sessionStatus("status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -208,27 +276,49 @@ export const sessions = pgTable(
       .$onUpdate(() => new Date()),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("sessions_course_id_idx").on(t.courseId)],
+  (t) => [
+    index("sessions_course_id_idx").on(t.courseId),
+    // Erstgespräch: UE=0 und geeignet gesetzt. Reguläre Session: UE>0 und geeignet=null.
+    check(
+      "sessions_erstgespraech_consistency",
+      sql`(${t.isErstgespraech} = true AND ${t.anzahlUe} = 0 AND ${t.geeignet} IS NOT NULL)
+         OR (${t.isErstgespraech} = false AND ${t.anzahlUe} > 0 AND ${t.geeignet} IS NULL)`,
+    ),
+  ],
 );
 
-export const sessionTokens = pgTable(
-  "session_tokens",
+/**
+ * Magic-Link-Tokens, scope: **ein Kurs × ein Teilnehmer**, 24 h gültig.
+ * Nicht one-shot: innerhalb der 24 h kann der Teilnehmer beliebige noch
+ * offene Sessions des Kurses signieren. Wenn der Coach einen neuen Link
+ * auslöst, wird der alte per `used_at=now()` invalidiert und ein neuer
+ * angelegt.
+ */
+export const participantAccessTokens = pgTable(
+  "participant_access_tokens",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    sessionId: uuid("session_id")
+    courseId: uuid("course_id")
       .notNull()
-      .references(() => sessions.id, { onDelete: "cascade" }),
+      .references(() => courses.id, { onDelete: "cascade" }),
     participantId: uuid("participant_id")
       .notNull()
       .references(() => participants.id, { onDelete: "restrict" }),
-    // SHA-256 Hash des Tokens (base64url). Der Klartext wird nur an den
-    // Teilnehmer per Magic Link versendet, nie gespeichert — verhindert,
-    // dass ein DB-Read-Leak direkt einlösbare Links liefert.
+    // SHA-256-Hash des Tokens (base64url). Klartext wird nur in der
+    // Magic-Link-Mail versendet, nie in der DB gespeichert.
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Wird gesetzt wenn ein neuer Token für dieselbe (course, participant)
+    // ausgestellt wird — invalidiert den alten Link.
     usedAt: timestamp("used_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("session_tokens_token_hash_uq").on(t.tokenHash)],
+  (t) => [
+    uniqueIndex("participant_access_tokens_hash_uq").on(t.tokenHash),
+    index("participant_access_tokens_course_participant_idx").on(
+      t.courseId,
+      t.participantId,
+    ),
+  ],
 );
 
 export const signatures = pgTable(
@@ -280,14 +370,18 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Course = typeof courses.$inferSelect;
 export type NewCourse = typeof courses.$inferInsert;
+export type Bedarfstraeger = typeof bedarfstraeger.$inferSelect;
+export type NewBedarfstraeger = typeof bedarfstraeger.$inferInsert;
 export type Participant = typeof participants.$inferSelect;
 export type NewParticipant = typeof participants.$inferInsert;
 export type CourseParticipant = typeof courseParticipants.$inferSelect;
 export type NewCourseParticipant = typeof courseParticipants.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
-export type SessionToken = typeof sessionTokens.$inferSelect;
-export type NewSessionToken = typeof sessionTokens.$inferInsert;
+export type ParticipantAccessToken =
+  typeof participantAccessTokens.$inferSelect;
+export type NewParticipantAccessToken =
+  typeof participantAccessTokens.$inferInsert;
 export type Signature = typeof signatures.$inferSelect;
 export type NewSignature = typeof signatures.$inferInsert;
 export type FinalDocument = typeof finalDocuments.$inferSelect;
