@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireCoach } from "@/lib/dal";
+import { isImpersonating, requireCoach } from "@/lib/dal";
+
+import { NotifyParticipantsButton } from "./notify-button";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +21,7 @@ const BEDARFSTRAEGER_LABEL = {
 
 export default async function CourseDetailPage({ params, searchParams }: Props) {
   const session = await requireCoach();
+  const impersonating = isImpersonating(session);
   const { id } = await params;
   const { reused } = await searchParams;
 
@@ -144,19 +148,25 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           <h2 className="text-lg font-semibold">
             Sessions ({sessions.length})
           </h2>
-          <button
-            type="button"
-            disabled
-            title="Folgt im nächsten Schritt"
-            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white opacity-40"
-          >
-            + Session anlegen
-          </button>
+          {impersonating ? (
+            <span
+              title="Während Impersonation nicht möglich"
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white opacity-40"
+            >
+              + Session anlegen
+            </span>
+          ) : (
+            <Link
+              href={`/coach/courses/${course.id}/sessions/new`}
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+            >
+              + Session anlegen
+            </Link>
+          )}
         </div>
         {sessions.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-zinc-500">
-            Noch keine Sessions. Der Session-Anlage-Flow folgt im nächsten
-            Schritt.
+            Noch keine Sessions. Lege die erste Kurseinheit an.
           </p>
         ) : (
           <ul className="divide-y divide-zinc-200 text-sm">
@@ -178,10 +188,16 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       </section>
 
       <section className="rounded-xl border border-zinc-300 bg-white">
-        <div className="border-b border-zinc-300 px-6 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">
             Teilnehmer ({participants.length})
           </h2>
+          {!impersonating && (
+            <NotifyParticipantsButton
+              courseId={course.id}
+              participantCount={participants.length}
+            />
+          )}
         </div>
         <ul className="divide-y divide-zinc-200 text-sm">
           {participants.map((p) => (
