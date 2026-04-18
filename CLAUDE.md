@@ -31,15 +31,19 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 ---
 
 ## Kern-Workflow
-1. Coach legt Kurs an (Titel, Start-/Enddatum, Teilnehmer per Name + E-Mail)
-2. Coach erstellt eine Kurseinheit (Session) – Datum, Thema
-3. Coach unterschreibt die Session (gespeicherte Unterschrift wird verwendet, aktive Bestätigung + Zeitstempel)
-4. System generiert Magic Link für Teilnehmer und verschickt E-Mail via Resend
-5. Teilnehmer öffnet Magic Link auf dem Handy, sieht mobile Canvas-Signatur
-6. Teilnehmer unterschreibt einmalig (wird gespeichert), bestätigt aktiv pro Session
-7. Nach allen Sessions: PDF-Generierung mit allen Unterschriften + Zeitstempeln
-8. PDF erhält **1x FES via Firma.dev** – einmalig für das gesamte Dokument
-9. Finales PDF wird an die AfA übermittelt
+1. Coach legt Kurs an (Header-Daten + Teilnehmer mit Name/Email/Kunden-Nr.)
+2. Coach erstellt Sessions laufend (auch nachträglich möglich) – Datum, UE, Modus, Themen
+3. Coach unterschreibt jede Session inline in der Kurs-Ansicht (Canvas, aktive Bestätigung + Zeitstempel)
+4. Coach triggert manuell **"Teilnehmer benachrichtigen"** → System erzeugt einen **Kurs-scoped Magic Link pro Teilnehmer** (24 h gültig); vorheriger Token für dieselbe Paarung wird invalidiert
+5. Teilnehmer öffnet den Link auf dem Handy, sieht den Kurs als Ganzes und alle noch offenen Sessions; signiert alle offenen inline
+6. Nach neuen Sessions triggert der Coach einen neuen Magic Link (ersetzt den alten)
+7. Wenn alle Sessions signiert sind: Coach triggert "Preview an Teilnehmer senden"
+8. Teilnehmer öffnet den Preview-Link, sieht das vollständige Dokument **pixel-identisch zum späteren PDF** und klickt "Freigeben" (Audit-Log + Timestamp, keine FES)
+9. Coach sieht "Teilnehmer hat freigegeben" → klickt "Mit FES versiegeln und an AfA übermitteln"
+10. System rendert HTML → PDF (Puppeteer), appliziert **1× FES via Firma.dev** (Coach-seitig), übermittelt an AfA
+
+### HTML-as-Source-of-Truth
+Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seite, die als PDF gedruckt wird – derselbe React-Baum in zwei Modi (`@media screen` interaktiv, `@media print` → Puppeteer-Render nach A4). Kein separates PDF-Layout, keine Design-Drift.
 
 ---
 
@@ -59,8 +63,8 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 
 ### Teilnehmer-Flow
 - Kein Account für Teilnehmer – nur E-Mail-Adresse im System
-- Magic Link pro Session (session_tokens Tabelle), **24h gültig ab Versand**
-- `used_at` beim ersten Klick setzen (Replay-Schutz – Token ist one-shot)
+- Magic Link **pro Kurs × Teilnehmer** (`participant_access_tokens`-Tabelle, siehe Schema), 24 h gültig ab Versand
+- Nicht one-shot: Innerhalb der 24 h kann der Teilnehmer so viele Sessions signieren wie gerade offen sind. Vom Coach bei neuen Sessions neu ausgelöst → alter Token wird invalidiert (`used_at` gesetzt), neuer Token ersetzt ihn.
 - Mobile-optimierte Webseite mit Canvas – keine React Native App (Phase 2)
 
 ### Auth & Berechtigungen

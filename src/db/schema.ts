@@ -255,24 +255,38 @@ export const sessions = pgTable(
   ],
 );
 
-export const sessionTokens = pgTable(
-  "session_tokens",
+/**
+ * Magic-Link-Tokens, scope: **ein Kurs × ein Teilnehmer**, 24 h gültig.
+ * Nicht one-shot: innerhalb der 24 h kann der Teilnehmer beliebige noch
+ * offene Sessions des Kurses signieren. Wenn der Coach einen neuen Link
+ * auslöst, wird der alte per `used_at=now()` invalidiert und ein neuer
+ * angelegt.
+ */
+export const participantAccessTokens = pgTable(
+  "participant_access_tokens",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    sessionId: uuid("session_id")
+    courseId: uuid("course_id")
       .notNull()
-      .references(() => sessions.id, { onDelete: "cascade" }),
+      .references(() => courses.id, { onDelete: "cascade" }),
     participantId: uuid("participant_id")
       .notNull()
       .references(() => participants.id, { onDelete: "restrict" }),
-    // SHA-256 Hash des Tokens (base64url). Der Klartext wird nur an den
-    // Teilnehmer per Magic Link versendet, nie gespeichert — verhindert,
-    // dass ein DB-Read-Leak direkt einlösbare Links liefert.
+    // SHA-256-Hash des Tokens (base64url). Klartext wird nur in der
+    // Magic-Link-Mail versendet, nie in der DB gespeichert.
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Wird gesetzt wenn ein neuer Token für dieselbe (course, participant)
+    // ausgestellt wird — invalidiert den alten Link.
     usedAt: timestamp("used_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("session_tokens_token_hash_uq").on(t.tokenHash)],
+  (t) => [
+    uniqueIndex("participant_access_tokens_hash_uq").on(t.tokenHash),
+    index("participant_access_tokens_course_participant_idx").on(
+      t.courseId,
+      t.participantId,
+    ),
+  ],
 );
 
 export const signatures = pgTable(
@@ -330,8 +344,10 @@ export type CourseParticipant = typeof courseParticipants.$inferSelect;
 export type NewCourseParticipant = typeof courseParticipants.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
-export type SessionToken = typeof sessionTokens.$inferSelect;
-export type NewSessionToken = typeof sessionTokens.$inferInsert;
+export type ParticipantAccessToken =
+  typeof participantAccessTokens.$inferSelect;
+export type NewParticipantAccessToken =
+  typeof participantAccessTokens.$inferInsert;
 export type Signature = typeof signatures.$inferSelect;
 export type NewSignature = typeof signatures.$inferInsert;
 export type FinalDocument = typeof finalDocuments.$inferSelect;

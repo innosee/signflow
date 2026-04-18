@@ -1,8 +1,8 @@
 "use server";
 
 import crypto from "node:crypto";
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
@@ -13,13 +13,23 @@ function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("base64url");
 }
 
+/**
+ * Signiert eine einzelne Session innerhalb eines aktiven Magic-Link-Tokens.
+ * Token wird NICHT verbraucht — der Teilnehmer kann innerhalb der 24 h
+ * weitere Sessions signieren. Replay-Schutz liegt pro Session darin, dass
+ * `(session_id, course_participant_id, signer_type='participant')` nur
+ * einmal eingefügt werden kann (sonst würde beim Insert ein Fehler kommen
+ * weil wir die eindeutige Paarung vorher prüfen).
+ */
 export async function submitParticipantSignature(
   _prev: SignState,
   formData: FormData,
 ): Promise<SignState> {
   const token = String(formData.get("token") ?? "");
+  const sessionId = String(formData.get("sessionId") ?? "");
   const confirmed = formData.get("confirm") === "on";
-  if (!token) return { error: "Token fehlt." };
+
+  if (!token || !sessionId) return { error: "Token oder Session fehlt." };
   if (!confirmed) return { error: "Bitte aktiv bestätigen." };
 
   const tokenHash = hashToken(token);
@@ -27,48 +37,71 @@ export async function submitParticipantSignature(
     (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ??
     "unknown";
 
-  // Token-Consume + Enrollment-Lookup + Signatur-Insert in EINER Transaktion.
-  // Sonst könnte bei Fehler im Insert der Link verbraucht, aber keine
-  // Signatur geschrieben sein → Teilnehmer kann nie wieder signieren.
   try {
     await db.transaction(async (tx) => {
-      const consumed = await tx
-        .update(schema.sessionTokens)
-        .set({ usedAt: new Date() })
+      // Token als aktuell gültig bestätigen (NICHT konsumieren)
+      const [tok] = await tx
+        .select({
+          courseId: schema.participantAccessTokens.courseId,
+          participantId: schema.participantAccessTokens.participantId,
+        })
+        .from(schema.participantAccessTokens)
         .where(
           and(
-            eq(schema.sessionTokens.tokenHash, tokenHash),
-            isNull(schema.sessionTokens.usedAt),
-            gt(schema.sessionTokens.expiresAt, new Date()),
-          ),
-        )
-        .returning({
-          sessionId: schema.sessionTokens.sessionId,
-          participantId: schema.sessionTokens.participantId,
-        });
-
-      const row = consumed[0];
-      if (!row) throw new Error("TOKEN_INVALID");
-
-      const [cp] = await tx
-        .select({ id: schema.courseParticipants.id })
-        .from(schema.courseParticipants)
-        .innerJoin(
-          schema.sessions,
-          eq(schema.sessions.courseId, schema.courseParticipants.courseId),
-        )
-        .where(
-          and(
-            eq(schema.sessions.id, row.sessionId),
-            eq(schema.courseParticipants.participantId, row.participantId),
+            eq(schema.participantAccessTokens.tokenHash, tokenHash),
+            isNull(schema.participantAccessTokens.usedAt),
+            gt(schema.participantAccessTokens.expiresAt, new Date()),
           ),
         )
         .limit(1);
+      if (!tok) throw new Error("TOKEN_INVALID");
 
+      // Session muss zum Kurs des Tokens gehören
+      const [sess] = await tx
+        .select({ id: schema.sessions.id })
+        .from(schema.sessions)
+        .where(
+          and(
+            eq(schema.sessions.id, sessionId),
+            eq(schema.sessions.courseId, tok.courseId),
+            isNull(schema.sessions.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!sess) throw new Error("SESSION_INVALID");
+
+      // Teilnehmer muss im Kurs eingeschrieben sein (→ course_participants-Row)
+      const [cp] = await tx
+        .select({ id: schema.courseParticipants.id })
+        .from(schema.courseParticipants)
+        .where(
+          and(
+            eq(schema.courseParticipants.courseId, tok.courseId),
+            eq(
+              schema.courseParticipants.participantId,
+              tok.participantId,
+            ),
+          ),
+        )
+        .limit(1);
       if (!cp) throw new Error("NOT_ENROLLED");
 
+      // Doppel-Signatur verhindern
+      const existing = await tx
+        .select({ id: schema.signatures.id })
+        .from(schema.signatures)
+        .where(
+          and(
+            eq(schema.signatures.sessionId, sess.id),
+            eq(schema.signatures.courseParticipantId, cp.id),
+            eq(schema.signatures.signerType, "participant"),
+          ),
+        )
+        .limit(1);
+      if (existing.length > 0) throw new Error("ALREADY_SIGNED");
+
       await tx.insert(schema.signatures).values({
-        sessionId: row.sessionId,
+        sessionId: sess.id,
         courseParticipantId: cp.id,
         signerType: "participant",
         // Placeholder bis die Canvas-Signatur-Phase signature_pad + Object
@@ -82,14 +115,21 @@ export async function submitParticipantSignature(
     if (message === "TOKEN_INVALID") {
       return {
         error:
-          "Link ist abgelaufen oder wurde bereits verwendet. Bitte neuen Link anfordern.",
+          "Link ist abgelaufen oder wurde durch einen neueren ersetzt. Bitte neuen Link beim Coach anfordern.",
       };
     }
+    if (message === "SESSION_INVALID") {
+      return { error: "Diese Einheit gehört nicht zu deinem Kurs." };
+    }
     if (message === "NOT_ENROLLED") {
-      return { error: "Teilnehmer ist dieser Einheit nicht zugeordnet." };
+      return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
+    }
+    if (message === "ALREADY_SIGNED") {
+      return { error: "Diese Einheit wurde bereits bestätigt." };
     }
     throw err;
   }
 
-  redirect(`/sign/${token}/done`);
+  revalidatePath(`/sign/${token}`);
+  return undefined;
 }
