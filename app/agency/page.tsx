@@ -41,14 +41,14 @@ export default async function AgencyDashboard() {
         <form action={logoutAction}>
           <button
             type="submit"
-            className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-zinc-50"
+            className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
           >
             Abmelden
           </button>
         </form>
       </header>
 
-      <section className="rounded-xl border border-black/10 bg-white p-6">
+      <section className="rounded-xl border border-zinc-300 bg-white p-6">
         <h2 className="text-lg font-semibold">Coach einladen</h2>
         <p className="mt-1 text-sm text-zinc-600">
           Der Coach erhält eine E-Mail mit Link zum Passwort-Setzen.
@@ -58,8 +58,8 @@ export default async function AgencyDashboard() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-black/10 bg-white">
-        <div className="border-b border-black/10 px-6 py-4">
+      <section className="rounded-xl border border-zinc-300 bg-white">
+        <div className="border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">Coaches ({coaches.length})</h2>
         </div>
         {coaches.length === 0 ? (
@@ -97,7 +97,7 @@ export default async function AgencyDashboard() {
                   <input type="hidden" name="userId" value={c.id} />
                   <button
                     type="submit"
-                    className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                    className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
                   >
                     Als Coach anmelden
                   </button>

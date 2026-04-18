@@ -18,7 +18,7 @@ export default async function SetupPage() {
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-16">
-      <div className="w-full max-w-md space-y-6 rounded-xl border border-black/10 bg-white p-8 shadow-sm">
+      <div className="w-full max-w-md space-y-6 rounded-xl border border-zinc-300 bg-white p-8 shadow-sm">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
             Signflow einrichten

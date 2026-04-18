@@ -41,7 +41,7 @@ export default async function CoachDashboard() {
           <form action={logoutAction}>
             <button
               type="submit"
-              className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-zinc-50"
+              className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
             >
               Abmelden
             </button>
@@ -49,7 +49,7 @@ export default async function CoachDashboard() {
         )}
       </header>
 
-      <section className="rounded-xl border border-black/10 bg-white p-6">
+      <section className="rounded-xl border border-zinc-300 bg-white p-6">
         <h2 className="text-lg font-semibold">Kurse</h2>
         <p className="mt-1 text-sm text-zinc-600">
           Noch keine Kurse. Die Kursverwaltung folgt in der nächsten Phase.

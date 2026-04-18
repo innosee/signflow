@@ -13,7 +13,7 @@ export function SignForm({ token, name }: { token: string; name: string }) {
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="token" value={token} />
-      <label className="flex items-start gap-3 rounded-lg border border-black/15 bg-white p-4">
+      <label className="flex items-start gap-3 rounded-lg border border-zinc-500 bg-white p-4">
         <input
           name="confirm"
           type="checkbox"

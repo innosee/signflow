@@ -23,14 +23,14 @@ export function InviteCoachForm() {
           type="text"
           placeholder="Name"
           required
-          className="rounded-lg border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+          className="rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
         <input
           name="email"
           type="email"
           placeholder="coach@example.de"
           required
-          className="rounded-lg border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+          className="rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
       </div>
       <button

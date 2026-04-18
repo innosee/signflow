@@ -51,7 +51,7 @@ function Field({
       <span className="text-sm font-medium text-zinc-800">{label}</span>
       <input
         {...props}
-        className="block w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+        className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
       />
       {hint && <span className="text-xs text-zinc-500">{hint}</span>}
     </label>

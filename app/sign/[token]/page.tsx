@@ -37,7 +37,7 @@ export default async function ParticipantSignPage({ params }: Props) {
         </p>
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-5 text-sm">
+      <div className="rounded-xl border border-zinc-300 bg-white p-5 text-sm">
         <Row label="Kurs">{resolved.courseTitle}</Row>
         <Row label="Datum">{resolved.sessionDate}</Row>
         <Row label="Thema">{resolved.sessionTopic}</Row>

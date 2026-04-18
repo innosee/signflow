@@ -23,7 +23,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           autoComplete="new-password"
           required
           minLength={8}
-          className="block w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+          className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
       </label>
       <label className="block space-y-1.5">
@@ -34,7 +34,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           autoComplete="new-password"
           required
           minLength={8}
-          className="block w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+          className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
       </label>
       {state?.error && (
