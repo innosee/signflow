@@ -1,5 +1,6 @@
 import { config } from "dotenv";
-import { neon } from "@neondatabase/serverless";
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
 
 config({ path: ".env.local" });
 
@@ -8,16 +9,15 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const sql = neon(process.env.DATABASE_URL);
+if (typeof globalThis.WebSocket === "undefined") {
+  neonConfig.webSocketConstructor = ws;
+}
 
 // session_tokens (per-Session) → participant_access_tokens (per-Kurs × Teilnehmer).
 // Kein Daten-Preserve: in Pre-Prod keine echten Tokens unterwegs, Refactor nur
 // strukturell.
 const statements = [
-  // 1. Alte Tokens invalidieren / entfernen (nicht migrierbar, da sie kein course_id haben)
-  `DELETE FROM "session_tokens"`,
-
-  // 2. Tabelle umbenennen falls sie noch heißt wie vorher
+  // 1. Tabelle umbenennen, falls noch alter Name
   `DO $$ BEGIN
      IF EXISTS (
        SELECT 1 FROM information_schema.tables
@@ -30,7 +30,12 @@ const statements = [
      END IF;
    END $$`,
 
-  // 3. Alten session_id-FK auf sessions droppen (verhindert sauberen Rename)
+  // 2. Inhalte leeren — Plaintext-Session-Tokens sind nicht kurs-scoped migrierbar.
+  //    Jetzt nach dem Rename ausführen, damit wir immer die finale Tabelle treffen
+  //    und das Script idempotent re-runbar ist.
+  `DELETE FROM "participant_access_tokens"`,
+
+  // 3. Alten session_id-FK auf sessions droppen (verhindert sauberen Rename der Spalte)
   `ALTER TABLE "participant_access_tokens"
      DROP CONSTRAINT IF EXISTS "session_tokens_session_id_sessions_id_fk"`,
 
@@ -80,8 +85,25 @@ const statements = [
    END $$`,
 ];
 
-for (const stmt of statements) {
-  console.log("→", stmt.split("\n")[0].trim().slice(0, 80));
-  await sql.query(stmt);
+// Alle Statements in EINER Postgres-Transaktion — halbmigrierte Zustände bei
+// Abbruch werden so vermieden. Braucht eine echte WS-Connection via Pool,
+// weil HTTP-Neon-Client keine Session-State kennt.
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const client = await pool.connect();
+try {
+  await client.query("BEGIN");
+  for (const stmt of statements) {
+    console.log("→", stmt.split("\n")[0].trim().slice(0, 80));
+    await client.query(stmt);
+  }
+  await client.query("COMMIT");
+  console.log("\n✓ Course-scoped participant access tokens applied");
+} catch (err) {
+  await client.query("ROLLBACK").catch(() => {});
+  console.error("\n✗ Migration abgebrochen, ROLLBACK durchgeführt:");
+  console.error(err);
+  process.exit(1);
+} finally {
+  client.release();
+  await pool.end();
 }
-console.log("\n✓ Course-scoped participant access tokens applied");

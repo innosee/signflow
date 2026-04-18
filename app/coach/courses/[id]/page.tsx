@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
@@ -71,22 +70,16 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     )
     .orderBy(asc(schema.sessions.sessionDate));
 
-  const geleisteteUe = sessions.reduce(
-    (sum, s) => sum + Number.parseFloat(s.anzahlUe),
-    0,
-  );
+  // "Geleistet" zählt nur Sessions, bei denen Coach UND alle Teilnehmer
+  // signiert haben (status='completed'). Reine Coach-Signatur oder noch
+  // offene Sessions zählen nicht — sonst würde der Fortschritt gegenüber
+  // der AfA-Bewilligung optimistisch verfälscht.
+  const geleisteteUe = sessions
+    .filter((s) => s.status === "completed")
+    .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
-      <div>
-        <Link
-          href="/coach"
-          className="text-sm text-zinc-600 underline-offset-2 hover:underline"
-        >
-          ← Zurück zum Dashboard
-        </Link>
-      </div>
-
       {reused && (
         <div
           role="status"

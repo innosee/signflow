@@ -4,9 +4,6 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
-import { logoutAction } from "../login/actions";
-import { stopImpersonating } from "../agency/actions";
-
 export const dynamic = "force-dynamic";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -46,42 +43,10 @@ export default async function CoachDashboard() {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
-      {impersonating && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
-          <div>
-            <strong>Impersonation aktiv.</strong> Du siehst die Oberfläche als{" "}
-            {session.user.name}. Schreibende Aktionen sind blockiert.
-          </div>
-          <form action={stopImpersonating}>
-            <button
-              type="submit"
-              className="rounded-lg border border-amber-400 px-3 py-1 text-sm hover:bg-amber-100"
-            >
-              Impersonation beenden
-            </button>
-          </form>
-        </div>
-      )}
-
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Coach Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            {session.user.name} ({session.user.email})
-          </p>
-        </div>
-        {!impersonating && (
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-            >
-              Abmelden
-            </button>
-          </form>
-        )}
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Coach Dashboard
+        </h1>
       </header>
 
       <section className="rounded-xl border border-zinc-300 bg-white">

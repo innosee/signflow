@@ -15,7 +15,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 - **ORM:** Drizzle ORM
 - **E-Signatur (FES):** Firma.dev API (€0.029 pro Envelope, pay-as-you-go)
 - **Canvas-Signatur:** signature_pad
-- **PDF-Generierung:** react-pdf oder Puppeteer (noch zu entscheiden)
+- **PDF-Generierung:** Puppeteer (Headless Chromium rendert die React-Komponente via `@media print` → A4-PDF; HTML-as-Source-of-Truth, siehe unten)
 - **Storage:** Cloudflare R2 oder ähnlich (für Signaturbilder als URL, nicht base64 in DB)
 - **E-Mail:** Resend.com
 
@@ -135,15 +135,17 @@ updated_at: timestamp
 deleted_at: timestamp | null  // soft delete
 ```
 
-#### `session_tokens`
+#### `participant_access_tokens`
 ```ts
 id: uuid PK
-session_id: uuid FK -> sessions.id
-participant_id: uuid FK -> participants.id
-token: string (unique) // INDEX!
-expires_at: timestamp
-used_at: timestamp | null  // null = noch nicht verwendet
+course_id: uuid FK -> courses.id (cascade delete)
+participant_id: uuid FK -> participants.id (restrict delete)
+token_hash: string (unique, SHA-256 base64url des Klartexts)
+expires_at: timestamp     // +24h ab Ausstellung
+used_at: timestamp | null // null = aktiv; beim Re-Issue invalidiert
 ```
+
+**Semantik:** Ein Link pro Kurs × Teilnehmer gleichzeitig aktiv. Wenn der Coach einen neuen Link auslöst, bekommt der alte `used_at = now()` gesetzt (Invalidierung) und ein neuer Datensatz wird angelegt. Innerhalb der 24 h kann der Teilnehmer beliebige offene Session-Zeilen signieren — der Token wird NICHT pro Session verbraucht.
 
 #### `signatures`
 ```ts
@@ -171,7 +173,8 @@ completed_at: timestamp | null
 ```ts
 sessions.course_id
 signatures.session_id
-session_tokens.token (UNIQUE)
+participant_access_tokens.token_hash (UNIQUE)
+participant_access_tokens (course_id, participant_id)
 course_participants.course_id
 ```
 
@@ -213,8 +216,7 @@ course_participants.course_id
 ---
 
 ## Offene Entscheidungen
-- [ ] PDF-Library: react-pdf vs Puppeteer (entscheiden wenn PDF-Phase beginnt)
-- [ ] Storage-Anbieter: Cloudflare R2 vs Vercel Blob (für Signaturbilder)
+- [ ] Storage-Anbieter: Cloudflare R2 vs Vercel Blob (für Signaturbilder) — aktuell Vercel Blob (public + random suffix); TODO vor Prod auf privat-geschützt migrieren, siehe [storage.ts](src/lib/storage.ts)
 
 ---
 
