@@ -16,24 +16,43 @@
 html,
 body {
   background: #fafafa;
-  color: #18181b;
+  color: #09090b;
 }
 
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #09090b;
+}
+
 input,
 textarea,
 select {
-  color: #18181b;
+  color: #09090b;
   background-color: #ffffff;
+  font-weight: 500;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #71717a;
+  color: #52525b;
   opacity: 1;
+  font-weight: 400;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #09090b;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  caret-color: #09090b;
 }
 
 :focus-visible {

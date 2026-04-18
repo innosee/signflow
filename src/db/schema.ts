@@ -4,6 +4,8 @@ import {
   check,
   date,
   index,
+  integer,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -25,6 +27,10 @@ export const sessionStatus = pgEnum("session_status", [
 ]);
 export const signerType = pgEnum("signer_type", ["coach", "participant"]);
 export const fesStatus = pgEnum("fes_status", ["pending", "sent", "completed"]);
+/** AfA-Bedarfsträger: Jobcenter (JC) oder Arbeitsagentur (AA). */
+export const bedarfstraeger = pgEnum("bedarfstraeger", ["JC", "AA"]);
+/** Durchführungsmodus einer Kurseinheit. */
+export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
 
 export const users = pgTable(
   "users",
@@ -139,9 +145,25 @@ export const courses = pgTable("courses", {
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
   title: text("title").notNull(),
+  /** AVGS-Maßnahmen-Nummer (von der AfA vergeben). */
+  avgsNummer: text("avgs_nummer").notNull(),
+  /** Durchführungs-Ort (z.B. "Online" oder "Singen, Erzbergerstr. 10"). */
+  durchfuehrungsort: text("durchfuehrungsort").notNull(),
+  /** Bewilligte Unterrichtseinheiten gesamt (ganzzahlig, z.B. 80). */
+  anzahlBewilligteUe: integer("anzahl_bewilligte_ue").notNull(),
+  bedarfstraeger: bedarfstraeger("bedarfstraeger").notNull(),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   status: courseStatus("status").notNull().default("active"),
+  /**
+   * Ergänzende Angaben / Begründungen für den AfA-Footer. Werden auf jedem
+   * Blatt des finalen PDFs ausgegeben. Checkboxen + Freitext.
+   */
+  flagUnter2Termine: boolean("flag_unter_2_termine").notNull().default(false),
+  flagVorzeitigesEnde: boolean("flag_vorzeitiges_ende")
+    .notNull()
+    .default(false),
+  begruendungText: text("begruendung_text"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -156,6 +178,8 @@ export const participants = pgTable("participants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
+  /** AfA-Kunden-Nummer des Teilnehmers (z.B. "160B29588") — Pflichtfeld. */
+  kundenNr: text("kunden_nr").notNull(),
   signatureUrl: text("signature_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -197,7 +221,19 @@ export const sessions = pgTable(
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
     sessionDate: date("session_date").notNull(),
+    /** Coaching-Themen / Maßnahme-Inhalte — kann länger sein, deshalb `text`. */
     topic: text("topic").notNull(),
+    /** Unterrichtseinheiten dieser Session. `0` beim Erstgespräch, sonst 0.5er-Schritte. */
+    anzahlUe: numeric("anzahl_ue", { precision: 3, scale: 1 }).notNull(),
+    modus: sessionModus("modus").notNull(),
+    /**
+     * Das Erstgespräch ist eine Sonderzeile im AfA-Formular: zählt UE-mäßig
+     * nicht (anzahl_ue = 0), braucht aber beidseitige Unterschrift und die
+     * Zusatzangabe "geeignet JA/NEIN".
+     */
+    isErstgespraech: boolean("is_erstgespraech").notNull().default(false),
+    /** Nur beim Erstgespräch relevant: TN*in für diese Maßnahme geeignet? */
+    geeignet: boolean("geeignet"),
     status: sessionStatus("status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -208,7 +244,15 @@ export const sessions = pgTable(
       .$onUpdate(() => new Date()),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("sessions_course_id_idx").on(t.courseId)],
+  (t) => [
+    index("sessions_course_id_idx").on(t.courseId),
+    // Erstgespräch: UE=0 und geeignet gesetzt. Reguläre Session: UE>0 und geeignet=null.
+    check(
+      "sessions_erstgespraech_consistency",
+      sql`(${t.isErstgespraech} = true AND ${t.anzahlUe} = 0 AND ${t.geeignet} IS NOT NULL)
+         OR (${t.isErstgespraech} = false AND ${t.anzahlUe} > 0 AND ${t.geeignet} IS NULL)`,
+    ),
+  ],
 );
 
 export const sessionTokens = pgTable(
