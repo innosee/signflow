@@ -6,6 +6,7 @@ import {
   adminAc,
   userAc,
 } from "better-auth/plugins/admin/access";
+import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { sendResetPasswordEmail } from "@/lib/email";
@@ -51,6 +52,16 @@ export const auth = betterAuth({
         name: user.name,
         url,
       });
+    },
+    // Der Invite-Flow für Coaches läuft über `requestPasswordReset` — nach
+    // Klick auf den Link hat der Coach seine Mailbox-Zugehörigkeit bewiesen
+    // und ein Passwort gesetzt. Das ist unser Signal „Einladung angenommen",
+    // auf das die Agency-UI über `emailVerified` prüft.
+    onPasswordReset: async ({ user }) => {
+      await db
+        .update(schema.users)
+        .set({ emailVerified: true })
+        .where(eq(schema.users.id, user.id));
     },
   },
 

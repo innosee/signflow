@@ -23,8 +23,22 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
   // Data-Isolation serverseitig: coach_id muss zum angemeldeten User passen.
   const [course] = await db
-    .select()
+    .select({
+      id: schema.courses.id,
+      title: schema.courses.title,
+      avgsNummer: schema.courses.avgsNummer,
+      durchfuehrungsort: schema.courses.durchfuehrungsort,
+      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      startDate: schema.courses.startDate,
+      endDate: schema.courses.endDate,
+      bedarfstraegerName: schema.bedarfstraeger.name,
+      bedarfstraegerType: schema.bedarfstraeger.type,
+    })
     .from(schema.courses)
+    .innerJoin(
+      schema.bedarfstraeger,
+      eq(schema.bedarfstraeger.id, schema.courses.bedarfstraegerId),
+    )
     .where(
       and(
         eq(schema.courses.id, id),
@@ -99,7 +113,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           <span>AVGS {course.avgsNummer}</span>
           <span>{course.durchfuehrungsort}</span>
           <span>
-            {BEDARFSTRAEGER_LABEL[course.bedarfstraeger] ?? course.bedarfstraeger}
+            {course.bedarfstraegerName} (
+            {BEDARFSTRAEGER_LABEL[course.bedarfstraegerType] ??
+              course.bedarfstraegerType}
+            )
           </span>
           <span>
             {course.startDate} bis {course.endDate}

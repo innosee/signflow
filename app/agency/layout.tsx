@@ -17,7 +17,10 @@ export default async function AgencyLayout({
     <>
       <AppHeader
         brandHref="/agency"
-        navLinks={[{ href: "/agency", label: "Dashboard" }]}
+        navLinks={[
+          { href: "/agency", label: "Dashboard" },
+          { href: "/agency/bedarfstraeger", label: "Bedarfsträger" },
+        ]}
         userName={session.user.name}
         userEmail={session.user.email}
         impersonating={isImpersonating(session)}

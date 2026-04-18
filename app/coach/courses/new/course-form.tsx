@@ -11,6 +11,12 @@ type ParticipantRow = {
   kundenNr: string;
 };
 
+type BedarfstraegerOption = {
+  id: string;
+  name: string;
+  type: "JC" | "AA";
+};
+
 function blankRow(): ParticipantRow {
   return {
     key: crypto.randomUUID(),
@@ -20,7 +26,11 @@ function blankRow(): ParticipantRow {
   };
 }
 
-export function CourseForm() {
+export function CourseForm({
+  bedarfstraeger,
+}: {
+  bedarfstraeger: BedarfstraegerOption[];
+}) {
   const [state, action, pending] = useActionState<CourseFormState, FormData>(
     createCourse,
     undefined,
@@ -62,26 +72,26 @@ export function CourseForm() {
           />
         </div>
 
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium text-zinc-800">
-            Bedarfsträger
-          </legend>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="bedarfstraeger"
-                value="JC"
-                required
-              />
-              Jobcenter (JC)
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="bedarfstraeger" value="AA" />
-              Arbeitsagentur (AA)
-            </label>
-          </div>
-        </fieldset>
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-zinc-800">
+            Bedarfsträger <span className="text-red-600">*</span>
+          </span>
+          <select
+            name="bedarfstraegerId"
+            required
+            defaultValue=""
+            className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+          >
+            <option value="" disabled>
+              Bitte wählen…
+            </option>
+            {bedarfstraeger.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} ({b.type})
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field name="startDate" label="Startdatum" type="date" required />

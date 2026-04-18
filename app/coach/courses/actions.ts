@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireCoach } from "@/lib/dal";
@@ -57,7 +57,9 @@ export async function createCourse(
   const anzahlBewilligteUeRaw = String(
     formData.get("anzahlBewilligteUe") ?? "",
   ).trim();
-  const bedarfstraeger = String(formData.get("bedarfstraeger") ?? "").trim();
+  const bedarfstraegerId = String(
+    formData.get("bedarfstraegerId") ?? "",
+  ).trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
 
@@ -66,7 +68,7 @@ export async function createCourse(
     !avgsNummer ||
     !durchfuehrungsort ||
     !anzahlBewilligteUeRaw ||
-    !bedarfstraeger ||
+    !bedarfstraegerId ||
     !startDate ||
     !endDate
   ) {
@@ -78,12 +80,25 @@ export async function createCourse(
     return { error: "Bewilligte UE muss eine positive ganze Zahl sein." };
   }
 
-  if (bedarfstraeger !== "JC" && bedarfstraeger !== "AA") {
-    return { error: "Bedarfsträger muss JC oder AA sein." };
-  }
-
   if (endDate < startDate) {
     return { error: "Enddatum darf nicht vor dem Startdatum liegen." };
+  }
+
+  // Bedarfsträger-Existenz serverseitig validieren — Client könnte die Option
+  // mit dem DevTools manipulieren oder der Agency-User hat den Datensatz
+  // inzwischen soft-gelöscht.
+  const [bt] = await db
+    .select({ id: schema.bedarfstraeger.id })
+    .from(schema.bedarfstraeger)
+    .where(
+      and(
+        eq(schema.bedarfstraeger.id, bedarfstraegerId),
+        isNull(schema.bedarfstraeger.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!bt) {
+    return { error: "Der gewählte Bedarfsträger existiert nicht (mehr)." };
   }
 
   const participants = parseParticipants(formData);
@@ -124,7 +139,7 @@ export async function createCourse(
           avgsNummer,
           durchfuehrungsort,
           anzahlBewilligteUe,
-          bedarfstraeger,
+          bedarfstraegerId,
           startDate,
           endDate,
         })

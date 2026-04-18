@@ -27,8 +27,8 @@ export const sessionStatus = pgEnum("session_status", [
 ]);
 export const signerType = pgEnum("signer_type", ["coach", "participant"]);
 export const fesStatus = pgEnum("fes_status", ["pending", "sent", "completed"]);
-/** AfA-Bedarfsträger: Jobcenter (JC) oder Arbeitsagentur (AA). */
-export const bedarfstraeger = pgEnum("bedarfstraeger", ["JC", "AA"]);
+/** AfA-Bedarfsträger-Typ: Jobcenter (JC) oder Arbeitsagentur (AA). */
+export const bedarfstraegerType = pgEnum("bedarfstraeger_type", ["JC", "AA"]);
 /** Durchführungsmodus einer Kurseinheit. */
 export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
 
@@ -139,6 +139,28 @@ export const authVerification = pgTable("auth_verification", {
     .$onUpdate(() => new Date()),
 });
 
+/**
+ * Bedarfsträger = finanzierende Stelle pro Kurs (Jobcenter X, Arbeitsagentur Y).
+ * Pflicht: Name + Typ. Adresse/Ansprechperson/E-Mail optional — relevant sobald
+ * das Rechnungsmodul gebaut wird (siehe CLAUDE.md → Deferred Features).
+ */
+export const bedarfstraeger = pgTable("bedarfstraeger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  type: bedarfstraegerType("type").notNull(),
+  adresse: text("adresse"),
+  kontaktPerson: text("kontakt_person"),
+  email: text("email"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 export const courses = pgTable("courses", {
   id: uuid("id").primaryKey().defaultRandom(),
   coachId: uuid("coach_id")
@@ -151,7 +173,9 @@ export const courses = pgTable("courses", {
   durchfuehrungsort: text("durchfuehrungsort").notNull(),
   /** Bewilligte Unterrichtseinheiten gesamt (ganzzahlig, z.B. 80). */
   anzahlBewilligteUe: integer("anzahl_bewilligte_ue").notNull(),
-  bedarfstraeger: bedarfstraeger("bedarfstraeger").notNull(),
+  bedarfstraegerId: uuid("bedarfstraeger_id")
+    .notNull()
+    .references(() => bedarfstraeger.id, { onDelete: "restrict" }),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   status: courseStatus("status").notNull().default("active"),
@@ -338,6 +362,8 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Course = typeof courses.$inferSelect;
 export type NewCourse = typeof courses.$inferInsert;
+export type Bedarfstraeger = typeof bedarfstraeger.$inferSelect;
+export type NewBedarfstraeger = typeof bedarfstraeger.$inferInsert;
 export type Participant = typeof participants.$inferSelect;
 export type NewParticipant = typeof participants.$inferInsert;
 export type CourseParticipant = typeof courseParticipants.$inferSelect;
