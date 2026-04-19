@@ -179,7 +179,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
               <tfoot>
                 <tr>
                   <td colSpan={2} className="num">
-                    Gesamt: {geleisteteUe.toString().replace(".", ",")} UE
+                    Gesamt: {formatUe(geleisteteUe.toString())} UE
                   </td>
                   <td colSpan={4} className="num">
                     von {course.anzahlBewilligteUe} bewilligten UE
@@ -362,8 +362,8 @@ const printCss = `
     font-size: 8.5pt;
     color: #555;
   }
-  .sheet table tr { page-break-inside: avoid; }
-  .sheet-parties, .sheet-notes { page-break-inside: avoid; }
+  .sheet table tr { page-break-inside: avoid; break-inside: avoid; }
+  .sheet-parties, .sheet-notes { page-break-inside: avoid; break-inside: avoid; }
   @media print {
     @page { size: A4; margin: 10mm; }
     .sheet {
