@@ -171,10 +171,18 @@ export default async function PrintSheetPage({ params }: Props) {
         >
           ← zurück zum Kurs
         </Link>
-        <p className="text-xs text-zinc-500">
-          Druckvorschau · identisch zum finalen PDF. Über Browser-Druck
-          (⌘/Ctrl+P) siehst du das A4-Layout, wie es die AfA erhält.
-        </p>
+        <div className="print-toolbar-actions">
+          <a
+            href={`/api/courses/${courseId}/participants/${participantId}/pdf`}
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+          >
+            PDF herunterladen
+          </a>
+          <p className="text-xs text-zinc-500">
+            Headless-Chromium rendert dieselbe Seite nach A4 — 1:1 mit dem
+            finalen AfA-PDF.
+          </p>
+        </div>
       </div>
 
       <Stundennachweis
@@ -220,6 +228,12 @@ const toolbarCss = `
     margin: 0 auto;
     padding: 4mm 10mm;
   }
+  .print-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .print-toolbar-actions p { margin: 0; max-width: 30ch; }
   @media print {
     .print-wrapper { background: #fff; padding: 0; }
     [data-print-hide] { display: none !important; }
