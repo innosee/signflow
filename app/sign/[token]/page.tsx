@@ -1,3 +1,4 @@
+import { AutoRefresh } from "@/components/auto-refresh";
 import { resolveParticipantToken } from "@/lib/participant-tokens";
 
 import { ParticipantSignatureOnboarding } from "./signature-onboarding";
@@ -31,6 +32,8 @@ export default async function ParticipantSignPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-xl px-4 py-8 space-y-6">
+      {/* Polling damit frisch vom Coach angelegte Sessions sofort auftauchen */}
+      <AutoRefresh />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">
           {resolved.courseTitle}

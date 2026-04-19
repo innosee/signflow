@@ -5,6 +5,8 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
+import { AutoRefresh } from "@/components/auto-refresh";
+
 import { CoachSignForm } from "./coach-sign-form";
 import { NotifyParticipantsButton } from "./notify-button";
 
@@ -122,6 +124,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
+      {/* Polling-Refresh damit TN-Signaturen live reinkommen ohne F5 */}
+      <AutoRefresh />
       {showReusedBanner && (
         <div
           role="status"
