@@ -157,7 +157,7 @@ export async function sendParticipantMagicLink(params: {
   `;
   await sendEmail({
     to: params.to,
-    subject: `Anwesenheit bestätigen – ${esc(params.courseTitle)}`,
+    subject: `Anwesenheit bestätigen – ${params.courseTitle}`,
     html: renderLayout("Anwesenheit bestätigen", body),
   });
 }
@@ -183,7 +183,10 @@ export async function sendParticipantPreview(params: {
   `;
   await sendEmail({
     to: params.to,
-    subject: `Nachweis freigeben – ${esc(params.courseTitle)}`,
+    // Subject ist plaintext-Feld → KEIN HTML-Escaping, sonst würden
+    // Entity-Sequenzen wie `&amp;` im Inbox-Betreff sichtbar. Escaping
+    // bleibt auf dem HTML-Body.
+    subject: `Nachweis freigeben – ${params.courseTitle}`,
     html: renderLayout("Stundennachweis zur Freigabe", body),
   });
 }

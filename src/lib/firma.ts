@@ -57,10 +57,16 @@ export async function sealWithFes(input: FesSealInput): Promise<FesSealResult> {
     console.info(
       `[firma.dev mock] sealed course "${input.courseTitle}" → ${envelopeId}`,
     );
+    // Distinct URL zurückgeben, damit im Audit-/UI-Layer klar ist: der
+    // gespeicherte Artefakt-Link ist NICHT identisch mit dem (mutable)
+    // Input-PDF. Im Live-Modus wäre das der Firma.dev-Signed-PDF-Link
+    // nach Upload in unseren Storage — im Mock reicht ein Query-Param
+    // mit Envelope-ID als Marker.
+    const sep = input.pdfUrl.includes("?") ? "&" : "?";
     return {
       envelopeId,
       status: "completed",
-      signedPdfUrl: input.pdfUrl,
+      signedPdfUrl: `${input.pdfUrl}${sep}sealed=${envelopeId}`,
     };
   }
 

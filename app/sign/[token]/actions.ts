@@ -222,8 +222,14 @@ export async function approveFinalDocument(
         .limit(1);
       if (!cp) throw new Error("NOT_ENROLLED");
 
+      // Preview/Freigabe ist nur gültig, wenn ALLE Sessions des Kurses
+      // `status='completed'` sind — das bedeutet Coach + alle enrollten
+      // TN haben signiert (siehe recomputeSessionStatus). Früher prüften
+      // wir nur TN-Signaturen des aktuellen Teilnehmers, wodurch ein TN
+      // theoretisch per Direct-POST approven konnte, bevor andere TN
+      // oder der Coach unterschrieben hatten.
       const allSessions = await tx
-        .select({ id: schema.sessions.id })
+        .select({ id: schema.sessions.id, status: schema.sessions.status })
         .from(schema.sessions)
         .where(
           and(
@@ -232,19 +238,9 @@ export async function approveFinalDocument(
           ),
         );
       if (allSessions.length === 0) throw new Error("NO_SESSIONS");
-
-      const signed = await tx
-        .select({ sessionId: schema.signatures.sessionId })
-        .from(schema.signatures)
-        .where(
-          and(
-            eq(schema.signatures.courseParticipantId, cp.id),
-            eq(schema.signatures.signerType, "participant"),
-          ),
-        );
-      const signedIds = new Set(signed.map((s) => s.sessionId));
-      const allSigned = allSessions.every((s) => signedIds.has(s.id));
-      if (!allSigned) throw new Error("SESSIONS_OPEN");
+      if (allSessions.some((s) => s.status !== "completed")) {
+        throw new Error("SESSIONS_OPEN");
+      }
 
       // Doppel-Freigabe verhindern. Unique-Index auf (course, participant)
       // würde das auch kicken, aber wir wollen eine saubere Fehlermeldung.

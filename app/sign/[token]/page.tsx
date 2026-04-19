@@ -47,33 +47,52 @@ export default async function ParticipantSignPage({ params }: Props) {
       courseId: resolved.courseId,
       participantId: resolved.participantId,
     });
-    if (sheet) {
+    // Wenn wir im Preview-Modus sind (alle Sessions signiert + nicht
+    // approved), MUSS das Sheet ladbar sein — sonst wäre die TN hier
+    // wieder im normalen „alle bestätigt"-Flow und könnte nie freigeben.
+    // Statt stillschweigend den alten Flow zu zeigen, hart fehlschlagen
+    // mit klarer Meldung.
+    if (!sheet) {
       return (
-        <div className="preview-wrapper">
-          <header className="preview-header">
-            <h1 className="text-lg font-semibold">Dein Stundennachweis</h1>
-            <p className="mt-1 text-sm text-zinc-600">
-              Bitte prüfe das Dokument — so wird es an die Agentur für Arbeit
-              gemeldet. Mit der Freigabe bestätigst du die inhaltliche
-              Richtigkeit.
+        <div className="mx-auto max-w-md px-4 py-16">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-6">
+            <h1 className="text-lg font-semibold text-red-800">
+              Nachweis gerade nicht ladbar
+            </h1>
+            <p className="mt-2 text-sm text-red-700">
+              Wir konnten dein fertiges Dokument gerade nicht zusammenstellen.
+              Bitte in ein paar Minuten erneut probieren oder deinen Coach
+              informieren.
             </p>
-          </header>
-          <div className="preview-sheet">
-            <Stundennachweis
-              course={sheet.course}
-              bedarfstraeger={sheet.bedarfstraeger}
-              coach={sheet.coach}
-              participant={sheet.participant}
-              sessions={sheet.sessions}
-            />
           </div>
-          <div className="preview-cta">
-            <ApproveForm token={token} />
-          </div>
-          <style>{previewCss}</style>
         </div>
       );
     }
+    return (
+      <div className="preview-wrapper">
+        <header className="preview-header">
+          <h1 className="text-lg font-semibold">Dein Stundennachweis</h1>
+          <p className="mt-1 text-sm text-zinc-600">
+            Bitte prüfe das Dokument — so wird es an die Agentur für Arbeit
+            gemeldet. Mit der Freigabe bestätigst du die inhaltliche
+            Richtigkeit.
+          </p>
+        </header>
+        <div className="preview-sheet">
+          <Stundennachweis
+            course={sheet.course}
+            bedarfstraeger={sheet.bedarfstraeger}
+            coach={sheet.coach}
+            participant={sheet.participant}
+            sessions={sheet.sessions}
+          />
+        </div>
+        <div className="preview-cta">
+          <ApproveForm token={token} />
+        </div>
+        <style>{previewCss}</style>
+      </div>
+    );
   }
 
   if (resolved.hasApproved) {

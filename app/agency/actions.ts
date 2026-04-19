@@ -174,16 +174,28 @@ export async function submitCourseToAfa(
     return { error: "Kurs wurde bereits an die AfA übermittelt." };
   }
 
+  // Atomares Submit: WHERE afa_status='pending' verhindert, dass zwei
+  // parallele Requests beide `submitted` setzen. Wir prüfen danach ob
+  // wirklich eine Zeile geschrieben wurde — nur dann das Audit-Log
+  // schreiben, sonst doppeltes Log bei Concurrent-Submit.
   const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
+  const submittedByAction = await db.transaction(async (tx) => {
+    const updated = await tx
       .update(schema.finalDocuments)
       .set({
         afaStatus: "submitted",
         submittedToAfaAt: now,
         submittedBy: agencyUserId,
       })
-      .where(eq(schema.finalDocuments.id, doc.id));
+      .where(
+        and(
+          eq(schema.finalDocuments.id, doc.id),
+          eq(schema.finalDocuments.afaStatus, "pending"),
+        ),
+      )
+      .returning({ id: schema.finalDocuments.id });
+
+    if (updated.length === 0) return false;
 
     await logAudit(
       {
@@ -195,7 +207,12 @@ export async function submitCourseToAfa(
       },
       tx,
     );
+    return true;
   });
+
+  if (!submittedByAction) {
+    return { error: "Kurs wurde zwischenzeitlich bereits übermittelt." };
+  }
 
   revalidatePath("/agency/submissions");
   return { submitted: true };

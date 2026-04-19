@@ -323,11 +323,17 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             {!impersonating && (
               <SendPreviewButton
                 courseId={course.id}
-                disabled={!allSessionsCompleted || allApproved}
+                disabled={
+                  participants.length === 0 ||
+                  !allSessionsCompleted ||
+                  allApproved
+                }
                 disabledReason={
-                  !allSessionsCompleted
-                    ? "Erst wenn alle Sessions signiert sind"
-                    : "Alle Teilnehmer haben bereits freigegeben"
+                  participants.length === 0
+                    ? "Keine Teilnehmer im Kurs"
+                    : !allSessionsCompleted
+                      ? "Erst wenn alle Sessions signiert sind"
+                      : "Alle Teilnehmer haben bereits freigegeben"
                 }
                 alreadySent={previewSent}
               />

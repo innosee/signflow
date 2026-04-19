@@ -410,7 +410,13 @@ export async function sendPreviewToParticipants(
       });
       success++;
     } catch (err) {
-      console.error(`sendPreview failed for ${p.email}:`, err);
+      // Kein `p.email` in Logs — PII gehört in die Datenbank, nicht in
+      // Log-Aggregatoren. Die E-Mail ist in `failedEmails` für die
+      // UI-Rückmeldung (nur an den Coach, unter Auth) weiterhin sichtbar.
+      console.error(
+        `sendPreview failed for participant ${p.participantId} in course ${ownedCourseId}:`,
+        err,
+      );
       failedEmails.push(p.email);
     }
   }
@@ -455,13 +461,22 @@ export async function sealCourse(
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
+  // Vor-Checks laufen unter dem UNIQUE(course_id)-Constraint und einer
+  // Insert-bzw.-Update-mit-WHERE-Strategie atomar — zwei gleichzeitige
+  // Klicks auf „Siegeln" dürfen die externe FES-API nur einmal treffen.
   const [existingDoc] = await db
-    .select({ id: schema.finalDocuments.id, fesStatus: schema.finalDocuments.fesStatus })
+    .select({
+      id: schema.finalDocuments.id,
+      fesStatus: schema.finalDocuments.fesStatus,
+    })
     .from(schema.finalDocuments)
     .where(eq(schema.finalDocuments.courseId, ownedCourseId))
     .limit(1);
   if (existingDoc?.fesStatus === "completed") {
     return { error: "Kurs ist bereits mit FES gesiegelt." };
+  }
+  if (existingDoc?.fesStatus === "sent") {
+    return { error: "Siegelung läuft bereits — bitte warten." };
   }
 
   // Sessions-Gate: jede nicht-gelöschte Session muss vollständig signiert sein.
@@ -529,7 +544,47 @@ export async function sealCourse(
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const pdfUrl = `${base}/api/courses/${ownedCourseId}/participants/${firstParticipantId}/pdf`;
 
+  // Slot-Reservierung BEVOR der externe FES-Call läuft: atomar auf
+  // fes_status='sent' setzen (bzw. insert falls noch keine Row da).
+  // Wenn rowCount=0, hat ein paralleler Call uns zuvorgekommen →
+  // sofort bail, KEIN FES-Call abgesetzt.
+  const reservedId = await db.transaction(async (tx) => {
+    if (existingDoc) {
+      const updated = await tx
+        .update(schema.finalDocuments)
+        .set({ fesStatus: "sent", pdfUrl, sealedBy: coachId })
+        .where(
+          and(
+            eq(schema.finalDocuments.id, existingDoc.id),
+            eq(schema.finalDocuments.fesStatus, "pending"),
+          ),
+        )
+        .returning({ id: schema.finalDocuments.id });
+      return updated[0]?.id ?? null;
+    }
+    // ON CONFLICT DO NOTHING auf UNIQUE(course_id) verhindert, dass zwei
+    // parallele Inserts für denselben Kurs gleichzeitig durchgehen.
+    const inserted = await tx
+      .insert(schema.finalDocuments)
+      .values({
+        courseId: ownedCourseId,
+        pdfUrl,
+        sealedBy: coachId,
+        fesStatus: "sent",
+      })
+      .onConflictDoNothing({ target: schema.finalDocuments.courseId })
+      .returning({ id: schema.finalDocuments.id });
+    return inserted[0]?.id ?? null;
+  });
+
+  if (!reservedId) {
+    return {
+      error: "Siegelung läuft bereits oder wurde soeben abgeschlossen.",
+    };
+  }
+
   let envelopeId: string;
+  let signedPdfUrl: string;
   try {
     const seal = await sealWithFes({
       pdfUrl,
@@ -538,34 +593,33 @@ export async function sealCourse(
       courseTitle: course.title,
     });
     envelopeId = seal.envelopeId;
+    // Gesiegelte URL als finalen Artefakt-Link persistieren — im Mock
+    // unterscheidet sie sich vom Input-PDF nur durch `?sealed=<env>`,
+    // im Live-Modus wäre es der Firma.dev-Signed-PDF-Link bzw. der
+    // Storage-Link nach Download.
+    signedPdfUrl = seal.signedPdfUrl;
   } catch (err) {
     console.error("firma.dev seal failed:", err);
+    // Reservierung zurückdrehen, damit ein erneuter Klick einen neuen
+    // Versuch machen kann statt im „sent"-Limbo festzuhängen.
+    await db
+      .update(schema.finalDocuments)
+      .set({ fesStatus: "pending" })
+      .where(eq(schema.finalDocuments.id, reservedId));
     return { error: "Siegelung fehlgeschlagen — bitte erneut versuchen." };
   }
 
   const now = new Date();
   await db.transaction(async (tx) => {
-    if (existingDoc) {
-      await tx
-        .update(schema.finalDocuments)
-        .set({
-          pdfUrl,
-          sealedBy: coachId,
-          firmaEnvelopeId: envelopeId,
-          fesStatus: "completed",
-          completedAt: now,
-        })
-        .where(eq(schema.finalDocuments.id, existingDoc.id));
-    } else {
-      await tx.insert(schema.finalDocuments).values({
-        courseId: ownedCourseId,
-        pdfUrl,
-        sealedBy: coachId,
+    await tx
+      .update(schema.finalDocuments)
+      .set({
+        pdfUrl: signedPdfUrl,
         firmaEnvelopeId: envelopeId,
         fesStatus: "completed",
         completedAt: now,
-      });
-    }
+      })
+      .where(eq(schema.finalDocuments.id, reservedId));
 
     await logAudit(
       {
