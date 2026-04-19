@@ -246,10 +246,18 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             Teilnehmer ({participants.length})
           </h2>
           {!impersonating && (
-            <NotifyParticipantsButton
-              courseId={course.id}
-              participantCount={participants.length}
-            />
+            <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-start">
+              <Link
+                href={`/coach/courses/${course.id}/participants/new`}
+                className="rounded-lg border border-zinc-500 px-3 py-2 text-sm font-medium hover:bg-zinc-50"
+              >
+                + Teilnehmer hinzufügen
+              </Link>
+              <NotifyParticipantsButton
+                courseId={course.id}
+                participantCount={participants.length}
+              />
+            </div>
           )}
         </div>
         <ul className="divide-y divide-zinc-200 text-sm">

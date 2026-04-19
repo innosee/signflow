@@ -87,6 +87,16 @@ export async function submitParticipantSignature(
         .limit(1);
       if (!cp) throw new Error("NOT_ENROLLED");
 
+      // Teilnehmer muss seine Canvas-Signatur bereits einmalig angelegt
+      // haben — ohne die ist die AfA-Beweiskraft nicht gegeben.
+      const [part] = await tx
+        .select({ signatureUrl: schema.participants.signatureUrl })
+        .from(schema.participants)
+        .where(eq(schema.participants.id, tok.participantId))
+        .limit(1);
+      const participantSignatureUrl = part?.signatureUrl ?? null;
+      if (!participantSignatureUrl) throw new Error("NO_SIGNATURE");
+
       // Doppel-Signatur verhindern
       const existing = await tx
         .select({ id: schema.signatures.id })
@@ -105,10 +115,10 @@ export async function submitParticipantSignature(
         sessionId: sess.id,
         courseParticipantId: cp.id,
         signerType: "participant",
-        // Placeholder bis die Teilnehmer-Canvas-Signatur-Phase signature_pad
-        // + Object Storage verdrahtet (siehe CLAUDE.md → Zeitplan). Für den
-        // Coach-Flow ist der Canvas-Upload bereits verdrahtet.
-        signatureUrl: "placeholder://pending-canvas-integration",
+        // Snapshot der einmalig angelegten Teilnehmer-Unterschrift — siehe
+        // CLAUDE.md → „Unterschriften": pro Session aktive Bestätigung
+        // (Klick + Zeitstempel) + Signatur-URL als Nachweis im PDF.
+        signatureUrl: participantSignatureUrl,
         ipAddress,
       });
 
@@ -130,6 +140,12 @@ export async function submitParticipantSignature(
     }
     if (message === "NOT_ENROLLED") {
       return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
+    }
+    if (message === "NO_SIGNATURE") {
+      return {
+        error:
+          "Du hast noch keine Unterschrift hinterlegt. Bitte Seite neu laden und zuerst die Unterschrift anlegen.",
+      };
     }
     if (message === "ALREADY_SIGNED") {
       return { error: "Diese Einheit wurde bereits bestätigt." };

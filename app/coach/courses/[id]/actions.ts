@@ -56,6 +56,21 @@ export async function createSession(
     return { error: "Modus muss Präsenz oder Online sein." };
   }
 
+  // Wochenend-Sperre: Sa/So sind für Coachings nicht zulässig. Datum
+  // als pure Kalendertag interpretieren (sessionDate ist YYYY-MM-DD,
+  // nicht UTC-Midnight) — split statt new Date(), damit kein TZ-Schlag
+  // den Tag verschiebt.
+  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
+  if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+    // Date.UTC + getUTCDay um lokale TZ-Effekte komplett auszuschließen.
+    const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    if (weekday === 0 || weekday === 6) {
+      return {
+        error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
+      };
+    }
+  }
+
   // UE + Geeignet hängen voneinander ab: beim Erstgespräch gilt UE=0 und
   // geeignet wird zur Pflicht; bei regulärer Session ist UE>0 und geeignet
   // wird gar nicht erfasst. Der DB-Check `sessions_erstgespraech_consistency`
@@ -104,6 +119,99 @@ export async function createSession(
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
+}
+
+export type AddParticipantState =
+  | { error?: string; reused?: boolean }
+  | undefined;
+
+function looksLikeEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+/**
+ * Nachträglich einen Teilnehmer zu einem bestehenden Kurs einschreiben.
+ * Analog zur Teilnehmer-Logik in `createCourse`: existiert die E-Mail
+ * schon in `participants` → bestehender Datensatz wird wiederverwendet
+ * (Name + Kunden-Nr. bleiben), ansonsten neuer Teilnehmer anlegen. In
+ * beiden Fällen landet eine Zeile in `course_participants`.
+ */
+export async function addParticipant(
+  _prev: AddParticipantState,
+  formData: FormData,
+): Promise<AddParticipantState> {
+  const session = await requireCoach();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const kundenNr = String(formData.get("kundenNr") ?? "").trim();
+
+  if (!courseId) return { error: "Kurs fehlt." };
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  if (!name || !email || !kundenNr) {
+    return { error: "Name, E-Mail und Kunden-Nr. sind Pflicht." };
+  }
+  if (!looksLikeEmail(email)) {
+    return { error: `Ungültige E-Mail-Adresse: ${email}` };
+  }
+
+  let reused = false;
+  try {
+    await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ id: schema.participants.id })
+        .from(schema.participants)
+        .where(eq(schema.participants.email, email))
+        .limit(1);
+
+      let participantId: string;
+      if (existing) {
+        participantId = existing.id;
+        reused = true;
+      } else {
+        const [created] = await tx
+          .insert(schema.participants)
+          .values({ name, email, kundenNr })
+          .returning({ id: schema.participants.id });
+        if (!created) throw new Error("PARTICIPANT_INSERT_FAILED");
+        participantId = created.id;
+      }
+
+      // Double-Enrollment vermeiden — es gibt einen UNIQUE-Index auf
+      // (courseId, participantId), der uns sonst einen rohen Fehler gäbe.
+      const [already] = await tx
+        .select({ id: schema.courseParticipants.id })
+        .from(schema.courseParticipants)
+        .where(
+          and(
+            eq(schema.courseParticipants.courseId, ownedCourseId),
+            eq(schema.courseParticipants.participantId, participantId),
+          ),
+        )
+        .limit(1);
+      if (already) throw new Error("ALREADY_ENROLLED");
+
+      await tx.insert(schema.courseParticipants).values({
+        courseId: ownedCourseId,
+        participantId,
+      });
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "ALREADY_ENROLLED") {
+      return { error: "Dieser Teilnehmer ist bereits im Kurs." };
+    }
+    return { error: `Teilnehmer konnte nicht hinzugefügt werden (${message}).` };
+  }
+
+  redirect(
+    `/coach/courses/${ownedCourseId}${reused ? "?reused=1" : ""}`,
+  );
 }
 
 export type NotifyState =
