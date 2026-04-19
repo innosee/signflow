@@ -1,40 +1,47 @@
-import Link from "next/link";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
 
-import { db, schema } from "@/db";
+import { LandingFaq } from "@/components/landing/faq";
+import { LandingFeatures } from "@/components/landing/features";
+import { LandingFooter } from "@/components/landing/footer";
+import { LandingHero } from "@/components/landing/hero";
+import { LandingHowItWorks } from "@/components/landing/how-it-works";
+import { LandingNav } from "@/components/landing/nav";
+import { LandingPricing } from "@/components/landing/pricing";
+import { LandingWaitlist } from "@/components/landing/waitlist";
 import { getCurrentSession } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = {
+  title: "Signflow — digitale AfA-Stundennachweise mit FES",
+  description:
+    "Stundennachweise für AVGS-Maßnahmen digital erfassen, von Coach und Teilnehmer:innen signieren, als A4-PDF mit fortgeschrittener elektronischer Signatur (FES) an die Agentur für Arbeit übermitteln.",
+};
+
 export default async function Home() {
+  // Eingeloggte User landen direkt im jeweiligen Dashboard — die Landing
+  // ist nur für Anonyme. Bootstrap-Redirect auf /setup (aus der vorherigen
+  // Single-Tenant-Logik) entfällt, damit die öffentliche Startseite
+  // erreichbar bleibt. Setup-Route ist manuell aufrufbar, bis der
+  // Multi-Tenant-Agency-Signup die Bootstrap-Story sauber ablöst.
   const session = await getCurrentSession();
   if (session) {
     redirect(session.user.role === "agency" ? "/agency" : "/coach");
   }
 
-  const hasAgency = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.role, "agency"))
-    .limit(1);
-
-  if (hasAgency.length === 0) redirect("/setup");
-
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-16">
-      <div className="max-w-md space-y-6 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">Signflow</h1>
-        <p className="text-zinc-600">
-          Digitale Anwesenheitsnachweise für Coaches und Kursteilnehmer.
-        </p>
-        <Link
-          href="/login"
-          className="inline-block rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800"
-        >
-          Anmelden
-        </Link>
-      </div>
+    <div className="flex min-h-screen flex-col bg-white text-zinc-900">
+      <LandingNav />
+      <main className="flex-1">
+        <LandingHero />
+        <LandingHowItWorks />
+        <LandingFeatures />
+        <LandingPricing />
+        <LandingFaq />
+        <LandingWaitlist />
+      </main>
+      <LandingFooter />
     </div>
   );
 }
