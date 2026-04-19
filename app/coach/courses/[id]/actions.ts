@@ -120,8 +120,19 @@ export async function createSession(
     return { error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
   }
   const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
-  // Date.UTC + getUTCDay um lokale TZ-Effekte komplett auszuschließen.
-  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  // Date.UTC rollt Overflow-Werte still um (2026-02-30 → 2026-03-02).
+  // Wir prüfen per Round-Trip, dass die Eingabe auch ein echtes Kalenderdatum
+  // ist — sonst würde die Wochenend-Logik auf dem Ersatz-Datum rechnen und
+  // der Insert später an der date-Spalte der DB crashen.
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  const isValidDate =
+    parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() === m - 1 &&
+    parsed.getUTCDate() === d;
+  if (!isValidDate) {
+    return { error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
+  }
+  const weekday = parsed.getUTCDay();
   if (weekday === 0 || weekday === 6) {
     return {
       error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
