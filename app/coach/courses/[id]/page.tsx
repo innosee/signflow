@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { isImpersonating, requireCoach } from "@/lib/dal";
@@ -9,6 +9,8 @@ import { AutoRefresh } from "@/components/auto-refresh";
 
 import { CoachSignForm } from "./coach-sign-form";
 import { NotifyParticipantsButton } from "./notify-button";
+import { SendPreviewButton } from "./preview-button";
+import { SealCourseButton } from "./seal-button";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +123,50 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
   const geleisteteUe = sessions
     .filter((s) => s.status === "completed")
     .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
+
+  // Freigabe-Status pro Teilnehmer: Map<participantId, approvedAt>.
+  // Wird unten für das "Abschluss"-Panel gebraucht, damit der Coach auf
+  // einen Blick sieht, wer den Preview noch freigeben muss.
+  const approvedRows = participants.length
+    ? await db
+        .select({
+          participantId: schema.participantApprovals.participantId,
+          approvedAt: schema.participantApprovals.approvedAt,
+        })
+        .from(schema.participantApprovals)
+        .where(
+          and(
+            eq(schema.participantApprovals.courseId, id),
+            inArray(
+              schema.participantApprovals.participantId,
+              participants.map((p) => p.id),
+            ),
+          ),
+        )
+    : [];
+  const approvalByParticipant = new Map<string, Date>(
+    approvedRows.map((r) => [r.participantId, r.approvedAt]),
+  );
+
+  const [finalDoc] = await db
+    .select({
+      fesStatus: schema.finalDocuments.fesStatus,
+      pdfUrl: schema.finalDocuments.pdfUrl,
+      completedAt: schema.finalDocuments.completedAt,
+      afaStatus: schema.finalDocuments.afaStatus,
+      submittedToAfaAt: schema.finalDocuments.submittedToAfaAt,
+    })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, id))
+    .limit(1);
+
+  const allSessionsCompleted =
+    sessions.length > 0 && sessions.every((s) => s.status === "completed");
+  const allApproved =
+    participants.length > 0 &&
+    participants.every((p) => approvalByParticipant.has(p.id));
+  const previewSent = approvedRows.length > 0; // heuristic; we don't track sent separately
+  const isSealed = finalDoc?.fesStatus === "completed";
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
@@ -245,6 +291,90 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       </section>
 
       <section className="rounded-xl border border-zinc-300 bg-white">
+        <div className="border-b border-zinc-300 px-6 py-4">
+          <h2 className="text-lg font-semibold">Abschluss</h2>
+          <p className="mt-1 text-sm text-zinc-600">
+            Wenn alle Sessions signiert sind, sende den Teilnehmern die
+            Vorschau. Nach deren Freigabe kannst du das Dokument mit FES
+            versiegeln — die Übermittlung an die AfA übernimmt deine Firma.
+          </p>
+        </div>
+        <div className="divide-y divide-zinc-200">
+          <Step
+            index={1}
+            title="Sessions vollständig signiert"
+            done={allSessionsCompleted}
+            subtitle={
+              allSessionsCompleted
+                ? "Alle Einheiten von Coach und Teilnehmern bestätigt."
+                : `${sessions.filter((s) => s.status === "completed").length} von ${sessions.length} vollständig.`
+            }
+          />
+          <Step
+            index={2}
+            title="Freigabe der Teilnehmer einholen"
+            done={allApproved}
+            subtitle={
+              participants.length === 0
+                ? "Noch keine Teilnehmer im Kurs."
+                : `${approvalByParticipant.size} von ${participants.length} Teilnehmern haben freigegeben.`
+            }
+          >
+            {!impersonating && (
+              <SendPreviewButton
+                courseId={course.id}
+                disabled={
+                  participants.length === 0 ||
+                  !allSessionsCompleted ||
+                  allApproved
+                }
+                disabledReason={
+                  participants.length === 0
+                    ? "Keine Teilnehmer im Kurs"
+                    : !allSessionsCompleted
+                      ? "Erst wenn alle Sessions signiert sind"
+                      : "Alle Teilnehmer haben bereits freigegeben"
+                }
+                alreadySent={previewSent}
+              />
+            )}
+          </Step>
+          <Step
+            index={3}
+            title="Mit FES versiegeln"
+            done={isSealed}
+            subtitle={
+              isSealed
+                ? `Gesiegelt am ${finalDoc?.completedAt ? new Date(finalDoc.completedAt).toLocaleString("de-DE") : "—"}.`
+                : "Nach der Freigabe aller Teilnehmer."
+            }
+          >
+            {!impersonating && !isSealed && (
+              <SealCourseButton
+                courseId={course.id}
+                disabled={!allApproved}
+                disabledReason={
+                  !allSessionsCompleted
+                    ? "Erst wenn alle Sessions signiert sind"
+                    : "Mindestens ein Teilnehmer hat noch nicht freigegeben"
+                }
+              />
+            )}
+            {isSealed && finalDoc?.pdfUrl && (
+              <a
+                href={finalDoc.pdfUrl}
+                className="text-xs text-emerald-800 underline-offset-2 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Gesiegeltes PDF öffnen
+              </a>
+            )}
+          </Step>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="flex items-start justify-between gap-4 border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">
             Teilnehmer ({participants.length})
@@ -265,24 +395,75 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           )}
         </div>
         <ul className="divide-y divide-zinc-200 text-sm">
-          {participants.map((p) => (
-            <li key={p.id} className="flex items-baseline gap-4 px-6 py-3">
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{p.name}</div>
-                <div className="text-xs text-zinc-500">{p.email}</div>
-              </div>
-              <div className="text-xs text-zinc-500">Kd-Nr. {p.kundenNr}</div>
-              <Link
-                href={`/coach/courses/${course.id}/print/${p.id}`}
-                className="text-xs text-zinc-700 underline-offset-2 hover:underline"
-                title="Druckvorschau / Stundennachweis"
-              >
-                Nachweis ansehen
-              </Link>
-            </li>
-          ))}
+          {participants.map((p) => {
+            const approvedAt = approvalByParticipant.get(p.id);
+            return (
+              <li key={p.id} className="flex items-baseline gap-4 px-6 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{p.name}</div>
+                  <div className="text-xs text-zinc-500">{p.email}</div>
+                </div>
+                {approvedAt ? (
+                  <span
+                    title={`Freigegeben am ${new Date(approvedAt).toLocaleString("de-DE")}`}
+                    className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800"
+                  >
+                    ✓ freigegeben
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                    offen
+                  </span>
+                )}
+                <div className="text-xs text-zinc-500">Kd-Nr. {p.kundenNr}</div>
+                <Link
+                  href={`/coach/courses/${course.id}/print/${p.id}`}
+                  className="text-xs text-zinc-700 underline-offset-2 hover:underline"
+                  title="Druckvorschau / Stundennachweis"
+                >
+                  Nachweis ansehen
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </section>
+    </div>
+  );
+}
+
+function Step({
+  index,
+  title,
+  subtitle,
+  done,
+  children,
+}: {
+  index: number;
+  title: string;
+  subtitle: string;
+  done: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex gap-4 px-6 py-4">
+      <div
+        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
+          done
+            ? "bg-emerald-600 text-white"
+            : "bg-zinc-200 text-zinc-700"
+        }`}
+        aria-hidden
+      >
+        {done ? "✓" : index}
+      </div>
+      <div className="flex-1 space-y-2">
+        <div>
+          <div className="text-sm font-medium">{title}</div>
+          <div className="text-xs text-zinc-500">{subtitle}</div>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

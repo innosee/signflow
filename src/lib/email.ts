@@ -157,7 +157,36 @@ export async function sendParticipantMagicLink(params: {
   `;
   await sendEmail({
     to: params.to,
-    subject: `Anwesenheit bestätigen – ${esc(params.courseTitle)}`,
+    subject: `Anwesenheit bestätigen – ${params.courseTitle}`,
     html: renderLayout("Anwesenheit bestätigen", body),
+  });
+}
+
+/**
+ * Preview-Mail: alle Sessions sind vom Coach+TN signiert, Coach möchte jetzt
+ * die finale Freigabe einholen. URL führt auf dieselbe Sign-Page wie der
+ * normale Magic-Link — die Page entscheidet anhand des Signatur-Stands
+ * automatisch, dass der Preview-Modus angezeigt wird (pixel-identisch zum
+ * späteren PDF inkl. Freigabe-Button).
+ */
+export async function sendParticipantPreview(params: {
+  to: string;
+  participantName: string;
+  courseTitle: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo ${esc(params.participantName)},</p>
+    <p>Dein Kurs <strong>${esc(params.courseTitle)}</strong> ist abgeschlossen. Bitte sieh dir den fertigen Stundennachweis einmal an und gib ihn für die Übermittlung an die Agentur für Arbeit frei.</p>
+    ${renderButton(params.url, "Nachweis ansehen & freigeben")}
+    <p style="font-size:12px; color:#888;">Der Link ist 24 Stunden gültig. Die Freigabe ist kein rechtliches Siegel — das setzt im Anschluss dein Coach.</p>
+  `;
+  await sendEmail({
+    to: params.to,
+    // Subject ist plaintext-Feld → KEIN HTML-Escaping, sonst würden
+    // Entity-Sequenzen wie `&amp;` im Inbox-Betreff sichtbar. Escaping
+    // bleibt auf dem HTML-Body.
+    subject: `Nachweis freigeben – ${params.courseTitle}`,
+    html: renderLayout("Stundennachweis zur Freigabe", body),
   });
 }

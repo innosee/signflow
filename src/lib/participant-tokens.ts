@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { sendParticipantMagicLink } from "@/lib/email";
+import { sendParticipantMagicLink, sendParticipantPreview } from "@/lib/email";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h per CLAUDE.md
 
@@ -111,6 +111,61 @@ export async function sendParticipantInvite(params: {
   });
 }
 
+/**
+ * Preview-Variant: identisch zu `sendParticipantInvite`, aber mit der
+ * Preview-Mail-Vorlage. Flow (CLAUDE.md Schritt 7-8):
+ *   - Alle Sessions sind signiert → Coach klickt "Preview senden"
+ *   - TN bekommt frischen 24-h-Token + eine andere Betreffzeile/CTA
+ *   - Sign-Page erkennt automatisch den Preview-Stand (keine offenen
+ *     Sessions mehr, aber noch keine Freigabe) und zeigt das finale
+ *     Dokument zur Freigabe an.
+ *
+ * Schema-mäßig ist das DERSELBE Token-Typ — der Stand im Workflow wird
+ * aus dem Signatur-/Freigabe-State abgeleitet, nicht aus einem Flag am
+ * Token.
+ */
+export async function sendParticipantPreviewInvite(params: {
+  courseId: string;
+  participantId: string;
+}): Promise<void> {
+  const rows = await db
+    .select({
+      participantName: schema.participants.name,
+      participantEmail: schema.participants.email,
+      courseTitle: schema.courses.title,
+    })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.courses,
+      eq(schema.courses.id, schema.courseParticipants.courseId),
+    )
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(
+      and(
+        eq(schema.courseParticipants.courseId, params.courseId),
+        eq(schema.courseParticipants.participantId, params.participantId),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) {
+    throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
+  }
+
+  const { url } = await createParticipantMagicLink(params);
+
+  await sendParticipantPreview({
+    to: row.participantEmail,
+    participantName: row.participantName,
+    courseTitle: row.courseTitle,
+    url,
+  });
+}
+
 export type ResolvedToken = {
   tokenId: string;
   courseId: string;
@@ -126,6 +181,12 @@ export type ResolvedToken = {
    */
   participantSignatureUrl: string | null;
   courseTitle: string;
+  /**
+   * Finale Freigabe des Teilnehmers nach Preview (siehe CLAUDE.md Schritt 8).
+   * `true` → Teilnehmer hat das fertige Dokument gesehen und freigegeben,
+   * FES kann vom Coach ausgelöst werden.
+   */
+  hasApproved: boolean;
   sessions: Array<{
     id: string;
     sessionDate: string;
@@ -227,6 +288,17 @@ export async function resolveParticipantToken(
     ).map((r) => r.sessionId),
   );
 
+  const [approval] = await db
+    .select({ id: schema.participantApprovals.id })
+    .from(schema.participantApprovals)
+    .where(
+      and(
+        eq(schema.participantApprovals.courseId, head.courseId),
+        eq(schema.participantApprovals.participantId, head.participantId),
+      ),
+    )
+    .limit(1);
+
   return {
     tokenId: head.tokenId,
     courseId: head.courseId,
@@ -235,6 +307,7 @@ export async function resolveParticipantToken(
     participantEmail: head.participantEmail,
     participantSignatureUrl: head.participantSignatureUrl ?? null,
     courseTitle: head.courseTitle,
+    hasApproved: !!approval,
     sessions: rawSessions.map((s) => ({
       id: s.id,
       sessionDate: s.sessionDate,

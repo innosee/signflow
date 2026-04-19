@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -27,6 +28,22 @@ export const sessionStatus = pgEnum("session_status", [
 ]);
 export const signerType = pgEnum("signer_type", ["coach", "participant"]);
 export const fesStatus = pgEnum("fes_status", ["pending", "sent", "completed"]);
+/**
+ * Status der AfA-Übermittlung. Unabhängig vom FES-Status, weil die
+ * Übermittlung (durch die Firma) zeitlich nach dem Siegel (durch den
+ * Coach) passiert und separat geloggt werden muss.
+ */
+export const afaSubmissionStatus = pgEnum("afa_submission_status", [
+  "pending",
+  "submitted",
+]);
+/** Wer hat eine Aktion ausgelöst? Participants haben keinen `users`-Row. */
+export const auditActorType = pgEnum("audit_actor_type", [
+  "agency",
+  "coach",
+  "participant",
+  "system",
+]);
 /** AfA-Bedarfsträger-Typ: Jobcenter (JC) oder Arbeitsagentur (AA). */
 export const bedarfstraegerType = pgEnum("bedarfstraeger_type", ["JC", "AA"]);
 /** Durchführungsmodus einer Kurseinheit. */
@@ -358,13 +375,118 @@ export const finalDocuments = pgTable("final_documents", {
     .unique()
     .references(() => courses.id, { onDelete: "cascade" }),
   pdfUrl: text("pdf_url").notNull(),
+  /** Coach, der FES ausgelöst hat. Muss `coach_id` des Kurses sein. */
+  sealedBy: uuid("sealed_by").references(() => users.id, {
+    onDelete: "restrict",
+  }),
   firmaEnvelopeId: text("firma_envelope_id"),
   fesStatus: fesStatus("fes_status").notNull().default("pending"),
+  /**
+   * AfA-Übermittlung ist Firma/Agency-Aufgabe — separat vom FES-Seal.
+   * `submittedBy` referenziert den Agency-User, der die Übermittlung
+   * ausgelöst hat. Wird später mit dem Rechnungsflow gekoppelt.
+   */
+  afaStatus: afaSubmissionStatus("afa_status").notNull().default("pending"),
+  submittedToAfaAt: timestamp("submitted_to_afa_at", { withTimezone: true }),
+  submittedBy: uuid("submitted_by").references(() => users.id, {
+    onDelete: "restrict",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
+
+/**
+ * Finale Freigabe eines Teilnehmers nach dem Preview — ohne FES, reiner
+ * Audit-Nachweis ("Ich habe das Dokument gesehen und bestätige es für
+ * die AfA-Übermittlung"). Sobald ALLE enrollten Teilnehmer eines Kurses
+ * hier einen Eintrag haben, darf der Coach das PDF via Firma.dev siegeln.
+ *
+ * Unique(course_id, participant_id): jede Paarung genau einmal — erneute
+ * Freigaben sind kein Use-Case (eine Korrektur am Dokument setzt den
+ * Eintrag via separaten Flow zurück, später).
+ */
+export const participantApprovals = pgTable(
+  "participant_approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    participantId: uuid("participant_id")
+      .notNull()
+      .references(() => participants.id, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ipAddress: text("ip_address").notNull(),
+    userAgent: text("user_agent"),
+  },
+  (t) => [
+    uniqueIndex("participant_approvals_course_participant_uq").on(
+      t.courseId,
+      t.participantId,
+    ),
+    index("participant_approvals_course_idx").on(t.courseId),
+  ],
+);
+
+/**
+ * Generisches Audit-Log. Schreibt alles, was rechtlich/organisatorisch
+ * nachvollziehbar sein muss: Impersonation-Events, Freigaben, FES-Seal,
+ * AfA-Übermittlung.
+ *
+ * `actor_id` ist polymorph (users.id ODER participants.id) und bewusst
+ * OHNE Foreign Key — sonst könnten wir weder Agency- noch Participant-
+ * Zeilen schreiben, und soft-gelöschte User würden Audit-Einträge
+ * ungültig machen. `actor_type` disambiguiert.
+ *
+ * Queries nach Monat/Jahr laufen über den `period_month`-Expression-
+ * Index auf `date_trunc('month', created_at)`.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorType: auditActorType("actor_type").notNull(),
+    /** users.id oder participants.id, je nach actor_type. Null bei actor_type='system'. */
+    actorId: uuid("actor_id"),
+    /**
+     * Falls die Aktion unter Impersonation lief: die Agency-User-ID, die
+     * den Coach gerade "fährt". Muss in jeder Write-Aktion miterfasst
+     * werden (siehe CLAUDE.md → Impersonation).
+     */
+    impersonatorId: uuid("impersonator_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Dotted Action, z.B. `course.seal`, `course.submit_afa`,
+     * `participant.approve`, `impersonation.start`. Kein Enum, damit neue
+     * Aktionen ohne Migration addierbar sind — Konsistenz per Konvention
+     * und zentralem Helper in `src/lib/audit.ts`.
+     */
+    action: text("action").notNull(),
+    resourceType: text("resource_type").notNull(),
+    resourceId: uuid("resource_id").notNull(),
+    metadata: jsonb("metadata"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Chronologisch absteigend — das häufigste Query-Pattern ("zeig mir
+    // die letzten N Einträge"). Reicht auch für Monats-Reports via Range:
+    // `WHERE created_at >= start AND created_at < end` nutzt diesen Index.
+    // (Ein Expression-Index auf date_trunc('month', ...) geht nicht, weil
+    // date_trunc auf timestamptz STABLE statt IMMUTABLE ist.)
+    index("audit_log_created_at_idx").on(t.createdAt.desc()),
+    index("audit_log_resource_idx").on(t.resourceType, t.resourceId),
+    index("audit_log_actor_idx").on(t.actorId, t.createdAt),
+  ],
+);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -386,6 +508,10 @@ export type Signature = typeof signatures.$inferSelect;
 export type NewSignature = typeof signatures.$inferInsert;
 export type FinalDocument = typeof finalDocuments.$inferSelect;
 export type NewFinalDocument = typeof finalDocuments.$inferInsert;
+export type ParticipantApproval = typeof participantApprovals.$inferSelect;
+export type NewParticipantApproval = typeof participantApprovals.$inferInsert;
+export type AuditLog = typeof auditLog.$inferSelect;
+export type NewAuditLog = typeof auditLog.$inferInsert;
 export type AuthSession = typeof authSession.$inferSelect;
 export type AuthAccount = typeof authAccount.$inferSelect;
 export type AuthVerification = typeof authVerification.$inferSelect;
