@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireCoach } from "@/lib/dal";
@@ -13,43 +13,28 @@ import { recomputeSessionStatus } from "@/lib/session-status";
 export type SessionFormState = { error?: string } | undefined;
 
 /**
- * Schickt automatisch Magic-Links an alle eingeschriebenen Teilnehmer,
- * die gerade KEINEN aktiven Link haben (also weder einen unbenutzten noch
- * einen unabgelaufenen). Wird vom Coach-Sign-Flow ausgelöst: sobald der
- * Coach eine Session signiert, soll der TN ohne manuellen Klick auf
- * „Teilnehmer benachrichtigen" einen Link bekommen. Wenn schon ein Link
- * aktiv ist, skippen wir — der enthält die neue Session ohnehin (Liste
- * wird on-demand aufgelöst), so gibt's keine Mail-Spam bei mehreren
- * kurz aufeinanderfolgenden Coach-Signaturen.
+ * Schickt bei jedem Coach-Sign einen frischen Magic-Link an alle
+ * eingeschriebenen Teilnehmer des Kurses. Alte Tokens werden durch
+ * `createParticipantMagicLink` (revoke + re-issue in einer Tx)
+ * invalidiert — der TN hat nach jedem Coach-Sign garantiert einen
+ * aktuellen 24-h-Link.
+ *
+ * Frühere Version hatte einen „skip wenn aktiver Link da" Guard — der
+ * war zu aggressiv: nach einmaligem Benachrichtigen blieb der TN für
+ * 24 h ohne Mail, obwohl der Coach zwischenzeitlich weitere Sessions
+ * signiert hatte. Der Coach erwartet 1:1 Mapping Coach-Sign → Mail.
+ * Bei realem Batch-Signing (mehrere Sessions binnen Sekunden) gibt's
+ * ggf. mehrere Mails in Folge — akzeptiert als Preis für garantierten
+ * Notify. Debounce können wir später per expliziter `created_at`-
+ * Spalte nachrüsten.
  */
-async function autoNotifyParticipantsWithoutActiveToken(
-  courseId: string,
-): Promise<void> {
-  const now = new Date();
-
-  const activeTokenParticipantIds = (
-    await db
-      .select({
-        participantId: schema.participantAccessTokens.participantId,
-      })
-      .from(schema.participantAccessTokens)
-      .where(
-        and(
-          eq(schema.participantAccessTokens.courseId, courseId),
-          isNull(schema.participantAccessTokens.usedAt),
-          gt(schema.participantAccessTokens.expiresAt, now),
-        ),
-      )
-  ).map((r) => r.participantId);
-  const withActive = new Set(activeTokenParticipantIds);
-
+async function autoNotifyAllParticipants(courseId: string): Promise<void> {
   const enrolled = await db
     .select({ participantId: schema.courseParticipants.participantId })
     .from(schema.courseParticipants)
     .where(eq(schema.courseParticipants.courseId, courseId));
 
   for (const p of enrolled) {
-    if (withActive.has(p.participantId)) continue;
     try {
       await sendParticipantInvite({
         courseId,
@@ -448,7 +433,7 @@ export async function signSessionAsCoach(
   // sodass „Coach signiert" nicht im UI-Limbo „wartet auf TN" steckenbleibt
   // ohne dass der TN davon erfährt. Bewusst NACH dem Transaction-Commit,
   // damit die Signatur auch bei Mail-Problemen persistiert ist.
-  await autoNotifyParticipantsWithoutActiveToken(ownedCourseId);
+  await autoNotifyAllParticipants(ownedCourseId);
 
   revalidatePath(`/coach/courses/${ownedCourseId}`);
   return undefined;
