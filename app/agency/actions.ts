@@ -3,10 +3,12 @@
 import crypto from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { and, eq, isNull } from "drizzle-orm";
 import { APIError } from "better-auth/api";
 
 import { db, schema } from "@/db";
+import { logAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
 import { requireAgency, isImpersonating, getCurrentSession } from "@/lib/dal";
 
@@ -125,4 +127,76 @@ export async function stopImpersonating(): Promise<void> {
 
   await auth.api.stopImpersonating({ headers: await headers() });
   redirect("/agency");
+}
+
+export type SubmitAfaState =
+  | { error?: string; submitted?: boolean }
+  | undefined;
+
+/**
+ * Firma/Agency markiert den (bereits vom Coach gesiegelten) Stundennachweis
+ * als an die AfA übermittelt. Aktuell rein dokumentarisch — die tatsächliche
+ * Übermittlung (E-Mail-Anhang an den Bedarfsträger, Portal-Upload, o.ä.)
+ * bleibt manueller Prozess, bis der Rechnungs-Flow in Phase 2 das koppelt.
+ *
+ * Nur `role=agency` darf das sehen/auslösen — Coaches haben auf AfA-
+ * Übermittlung keinen Zugriff. Während Impersonation hart blockiert, weil
+ * AfA-Übermittlung eine Firmen-Aktion ist und nicht unter Coach-Identität
+ * laufen darf.
+ */
+export async function submitCourseToAfa(
+  _prev: SubmitAfaState,
+  formData: FormData,
+): Promise<SubmitAfaState> {
+  const session = await requireAgency();
+  if (isImpersonating(session)) {
+    return { error: "Während Impersonation nicht möglich." };
+  }
+  const agencyUserId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const [doc] = await db
+    .select({
+      id: schema.finalDocuments.id,
+      fesStatus: schema.finalDocuments.fesStatus,
+      afaStatus: schema.finalDocuments.afaStatus,
+    })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, courseId))
+    .limit(1);
+  if (!doc) return { error: "Kurs ist noch nicht gesiegelt." };
+  if (doc.fesStatus !== "completed") {
+    return { error: "FES-Siegel fehlt — erst muss der Coach siegeln." };
+  }
+  if (doc.afaStatus === "submitted") {
+    return { error: "Kurs wurde bereits an die AfA übermittelt." };
+  }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.finalDocuments)
+      .set({
+        afaStatus: "submitted",
+        submittedToAfaAt: now,
+        submittedBy: agencyUserId,
+      })
+      .where(eq(schema.finalDocuments.id, doc.id));
+
+    await logAudit(
+      {
+        actorType: "agency",
+        actorId: agencyUserId,
+        action: "course.submit_afa",
+        resourceType: "course",
+        resourceId: courseId,
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/agency/submissions");
+  return { submitted: true };
 }

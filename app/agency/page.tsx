@@ -1,4 +1,5 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import Link from "next/link";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { requireAgency } from "@/lib/dal";
@@ -23,6 +24,20 @@ export default async function AgencyDashboard({ searchParams }: Props) {
   await requireAgency();
   const { imp_error } = await searchParams;
   const impErrorMsg = imp_error ? IMP_ERRORS[imp_error] : undefined;
+
+  // Offene AfA-Übermittlungen (gesiegelt, aber noch nicht an die AfA raus)
+  // — als Teaser oben in der Übersicht anzeigen, damit der Firmen-User
+  // direkt sieht, dass Arbeit im Stapel liegt.
+  const [pendingSubmissionsRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.finalDocuments)
+    .where(
+      and(
+        eq(schema.finalDocuments.fesStatus, "completed"),
+        eq(schema.finalDocuments.afaStatus, "pending"),
+      ),
+    );
+  const pendingSubmissions = pendingSubmissionsRow?.count ?? 0;
 
   const coaches = await db
     .select({
@@ -55,6 +70,27 @@ export default async function AgencyDashboard({ searchParams }: Props) {
           {impErrorMsg}
         </div>
       )}
+
+      <section className="rounded-xl border border-zinc-300 bg-white p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">AfA-Übermittlungen</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              {pendingSubmissions === 0
+                ? "Aktuell kein Kurs zur Übermittlung bereit."
+                : `${pendingSubmissions} gesiegelter ${
+                    pendingSubmissions === 1 ? "Kurs wartet" : "Kurse warten"
+                  } auf Übermittlung.`}
+            </p>
+          </div>
+          <Link
+            href="/agency/submissions"
+            className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+          >
+            Öffnen
+          </Link>
+        </div>
+      </section>
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6">
         <h2 className="text-lg font-semibold">Coach einladen</h2>

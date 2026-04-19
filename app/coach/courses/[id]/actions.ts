@@ -6,8 +6,13 @@ import { headers } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { logAudit } from "@/lib/audit";
 import { assertNotImpersonating, requireCoach } from "@/lib/dal";
-import { sendParticipantInvite } from "@/lib/participant-tokens";
+import { sealWithFes } from "@/lib/firma";
+import {
+  sendParticipantInvite,
+  sendParticipantPreviewInvite,
+} from "@/lib/participant-tokens";
 import { recomputeSessionStatus } from "@/lib/session-status";
 
 export type SessionFormState = { error?: string } | undefined;
@@ -332,6 +337,251 @@ export async function notifyParticipants(
     success,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+/**
+ * Triggert an alle Teilnehmer eine Preview-Mail (neuer 24-h-Token + Mail
+ * mit Freigabe-CTA). Nur erlaubt, wenn jede nicht-gelöschte Session des
+ * Kurses `status = 'completed'` hat (= Coach + alle TN signiert).
+ *
+ * Dieselbe Token-Infrastruktur wie beim normalen Magic-Link — die Sign-
+ * Page erkennt anhand des Signatur-Stands, dass jetzt der Preview-Modus
+ * angezeigt wird. Freigeben-Klick landet in `participant_approvals`.
+ */
+export async function sendPreviewToParticipants(
+  _prev: NotifyState,
+  formData: FormData,
+): Promise<NotifyState> {
+  const session = await requireCoach();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Gate: jede Session muss vollständig signiert sein. Auch "no sessions"
+  // ist kein valider Preview-Trigger — es gäbe nichts freizugeben.
+  const openSessions = await db
+    .select({ id: schema.sessions.id, status: schema.sessions.status })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+
+  if (openSessions.length === 0) {
+    return { error: "Kurs hat noch keine Sessions." };
+  }
+  const incomplete = openSessions.filter((s) => s.status !== "completed");
+  if (incomplete.length > 0) {
+    return {
+      error: `Noch ${incomplete.length} Session(s) nicht komplett signiert — Preview erst möglich, wenn alle bestätigt sind.`,
+    };
+  }
+
+  const participants = await db
+    .select({
+      participantId: schema.participants.id,
+      email: schema.participants.email,
+    })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+
+  if (participants.length === 0) {
+    return { error: "Kurs hat keine Teilnehmer." };
+  }
+
+  const failedEmails: string[] = [];
+  let success = 0;
+  for (const p of participants) {
+    try {
+      await sendParticipantPreviewInvite({
+        courseId: ownedCourseId,
+        participantId: p.participantId,
+      });
+      success++;
+    } catch (err) {
+      console.error(`sendPreview failed for ${p.email}:`, err);
+      failedEmails.push(p.email);
+    }
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return {
+    success,
+    failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
+  };
+}
+
+export type SealState = { error?: string; sealed?: boolean } | undefined;
+
+/**
+ * Coach löst FES-Siegelung für den gesamten Kurs aus (CLAUDE.md Schritt 9-10,
+ * aktuell gegen `src/lib/firma.ts` **gemockt**). Pre-Conditions:
+ *   - Coach besitzt den Kurs, nicht unter Impersonation
+ *   - Jede nicht-gelöschte Session ist `status = 'completed'`
+ *   - JEDER enrollte Teilnehmer hat eine Freigabe in `participant_approvals`
+ *   - Kurs noch nicht gesiegelt (`final_documents.fesStatus != 'completed'`)
+ *
+ * Speichert anschließend einen `final_documents`-Datensatz mit Envelope-ID
+ * und setzt `fesStatus = 'completed'`. `afaStatus` bleibt `pending` — die
+ * AfA-Übermittlung ist eine separate Aktion der Firma/Agency.
+ *
+ * Der PDF-URL zeigt für den Mock aktuell auf den bestehenden Per-TN-PDF-
+ * Endpoint des ersten Teilnehmers, damit der "Download"-Link im Coach-UI
+ * überhaupt was liefert. Real-Flow: Firma.dev liefert das gesiegelte PDF,
+ * wir laden es in unser Storage und zeigen dessen URL.
+ */
+export async function sealCourse(
+  _prev: SealState,
+  formData: FormData,
+): Promise<SealState> {
+  const session = await requireCoach();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const [existingDoc] = await db
+    .select({ id: schema.finalDocuments.id, fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, ownedCourseId))
+    .limit(1);
+  if (existingDoc?.fesStatus === "completed") {
+    return { error: "Kurs ist bereits mit FES gesiegelt." };
+  }
+
+  // Sessions-Gate: jede nicht-gelöschte Session muss vollständig signiert sein.
+  const allSessions = await db
+    .select({ id: schema.sessions.id, status: schema.sessions.status })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+  if (allSessions.length === 0) {
+    return { error: "Kurs hat keine Sessions — nichts zu siegeln." };
+  }
+  if (allSessions.some((s) => s.status !== "completed")) {
+    return {
+      error: "Mindestens eine Session ist noch nicht vollständig signiert.",
+    };
+  }
+
+  // Approval-Gate: jeder enrollte Teilnehmer muss freigegeben haben.
+  const enrolled = await db
+    .select({ participantId: schema.courseParticipants.participantId })
+    .from(schema.courseParticipants)
+    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+
+  if (enrolled.length === 0) {
+    return { error: "Kurs hat keine Teilnehmer." };
+  }
+
+  const approvals = await db
+    .select({ participantId: schema.participantApprovals.participantId })
+    .from(schema.participantApprovals)
+    .where(eq(schema.participantApprovals.courseId, ownedCourseId));
+  const approvedSet = new Set(approvals.map((a) => a.participantId));
+  const missing = enrolled.filter((e) => !approvedSet.has(e.participantId));
+  if (missing.length > 0) {
+    return {
+      error: `Noch ${missing.length} Teilnehmer haben nicht freigegeben — Siegel erst möglich, wenn alle zugestimmt haben.`,
+    };
+  }
+
+  // Coach-Daten für den Envelope-Body ziehen.
+  const [coach] = await db
+    .select({
+      name: schema.users.name,
+      email: schema.users.email,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, coachId))
+    .limit(1);
+  const [course] = await db
+    .select({ title: schema.courses.title })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!coach || !course) return { error: "Kurs- oder Coach-Daten fehlen." };
+
+  // Mock-URL: zeigt auf den bestehenden Per-TN-PDF-Endpoint des ersten TN,
+  // damit der Coach aus dem UI heraus einen sinnvollen Download-Klick hat.
+  // Real-Flow (TODO): PDF rendern → Firma.dev hochladen → signed-PDF
+  // herunterladen → eigenen Storage + URL.
+  const firstParticipantId = enrolled[0]!.participantId;
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const pdfUrl = `${base}/api/courses/${ownedCourseId}/participants/${firstParticipantId}/pdf`;
+
+  let envelopeId: string;
+  try {
+    const seal = await sealWithFes({
+      pdfUrl,
+      signerName: coach.name,
+      signerEmail: coach.email,
+      courseTitle: course.title,
+    });
+    envelopeId = seal.envelopeId;
+  } catch (err) {
+    console.error("firma.dev seal failed:", err);
+    return { error: "Siegelung fehlgeschlagen — bitte erneut versuchen." };
+  }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    if (existingDoc) {
+      await tx
+        .update(schema.finalDocuments)
+        .set({
+          pdfUrl,
+          sealedBy: coachId,
+          firmaEnvelopeId: envelopeId,
+          fesStatus: "completed",
+          completedAt: now,
+        })
+        .where(eq(schema.finalDocuments.id, existingDoc.id));
+    } else {
+      await tx.insert(schema.finalDocuments).values({
+        courseId: ownedCourseId,
+        pdfUrl,
+        sealedBy: coachId,
+        firmaEnvelopeId: envelopeId,
+        fesStatus: "completed",
+        completedAt: now,
+      });
+    }
+
+    await logAudit(
+      {
+        actorType: "coach",
+        actorId: coachId,
+        action: "course.seal",
+        resourceType: "course",
+        resourceId: ownedCourseId,
+        metadata: { envelopeId, mock: process.env.FIRMA_DEV_MODE !== "live" },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { sealed: true };
 }
 
 export type SignSessionState = { error?: string } | undefined;

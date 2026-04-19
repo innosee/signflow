@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { logAudit } from "@/lib/audit";
 import { recomputeSessionStatus } from "@/lib/session-status";
 
 export type SignState = { error?: string } | undefined;
@@ -149,6 +150,158 @@ export async function submitParticipantSignature(
     }
     if (message === "ALREADY_SIGNED") {
       return { error: "Diese Einheit wurde bereits bestätigt." };
+    }
+    throw err;
+  }
+
+  revalidatePath(`/sign/${token}`);
+  return undefined;
+}
+
+export type ApproveState = { error?: string } | undefined;
+
+/**
+ * Finale Freigabe des Stundennachweises durch den Teilnehmer (CLAUDE.md
+ * Schritt 8). Keine FES, rein dokumentarisch — aktive Bestätigung per
+ * Klick + Zeitstempel + IP/User-Agent im Audit-Log.
+ *
+ * Pre-Conditions (zur Sicherheit hier nochmal geprüft, obwohl die UI
+ * den Button nur im entsprechenden State zeigt):
+ *   - Token gültig & nicht invalidiert
+ *   - Teilnehmer ist im Kurs
+ *   - ALLE nicht-gelöschten Sessions des Kurses haben die TN-Signatur
+ *   - Noch keine bestehende Approval für diese (course × participant)
+ */
+export async function approveFinalDocument(
+  _prev: ApproveState,
+  formData: FormData,
+): Promise<ApproveState> {
+  const token = String(formData.get("token") ?? "");
+  const confirmed = formData.get("confirm") === "on";
+
+  if (!token) return { error: "Token fehlt." };
+  if (!confirmed) return { error: "Bitte aktiv bestätigen." };
+
+  const tokenHash = hashToken(token);
+  const h = await headers();
+  const ipAddress =
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const userAgent = h.get("user-agent") ?? null;
+
+  try {
+    await db.transaction(async (tx) => {
+      const [tok] = await tx
+        .select({
+          courseId: schema.participantAccessTokens.courseId,
+          participantId: schema.participantAccessTokens.participantId,
+        })
+        .from(schema.participantAccessTokens)
+        .where(
+          and(
+            eq(schema.participantAccessTokens.tokenHash, tokenHash),
+            isNull(schema.participantAccessTokens.usedAt),
+            gt(schema.participantAccessTokens.expiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (!tok) throw new Error("TOKEN_INVALID");
+
+      // Enrollment + pro TN signierten Sessions prüfen. Wir stellen
+      // sicher, dass JEDE nicht-gelöschte Session eine TN-Signatur vom
+      // Teilnehmer hat — ohne das wäre die finale Freigabe inhaltlich
+      // falsch (es gibt noch offene Einheiten).
+      const [cp] = await tx
+        .select({ id: schema.courseParticipants.id })
+        .from(schema.courseParticipants)
+        .where(
+          and(
+            eq(schema.courseParticipants.courseId, tok.courseId),
+            eq(schema.courseParticipants.participantId, tok.participantId),
+          ),
+        )
+        .limit(1);
+      if (!cp) throw new Error("NOT_ENROLLED");
+
+      const allSessions = await tx
+        .select({ id: schema.sessions.id })
+        .from(schema.sessions)
+        .where(
+          and(
+            eq(schema.sessions.courseId, tok.courseId),
+            isNull(schema.sessions.deletedAt),
+          ),
+        );
+      if (allSessions.length === 0) throw new Error("NO_SESSIONS");
+
+      const signed = await tx
+        .select({ sessionId: schema.signatures.sessionId })
+        .from(schema.signatures)
+        .where(
+          and(
+            eq(schema.signatures.courseParticipantId, cp.id),
+            eq(schema.signatures.signerType, "participant"),
+          ),
+        );
+      const signedIds = new Set(signed.map((s) => s.sessionId));
+      const allSigned = allSessions.every((s) => signedIds.has(s.id));
+      if (!allSigned) throw new Error("SESSIONS_OPEN");
+
+      // Doppel-Freigabe verhindern. Unique-Index auf (course, participant)
+      // würde das auch kicken, aber wir wollen eine saubere Fehlermeldung.
+      const [existing] = await tx
+        .select({ id: schema.participantApprovals.id })
+        .from(schema.participantApprovals)
+        .where(
+          and(
+            eq(schema.participantApprovals.courseId, tok.courseId),
+            eq(schema.participantApprovals.participantId, tok.participantId),
+          ),
+        )
+        .limit(1);
+      if (existing) throw new Error("ALREADY_APPROVED");
+
+      await tx.insert(schema.participantApprovals).values({
+        courseId: tok.courseId,
+        participantId: tok.participantId,
+        ipAddress,
+        userAgent,
+      });
+
+      await logAudit(
+        {
+          actorType: "participant",
+          actorId: tok.participantId,
+          action: "participant.approve",
+          resourceType: "course",
+          resourceId: tok.courseId,
+          ipAddress,
+          userAgent,
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "TOKEN_INVALID") {
+      return {
+        error:
+          "Link ist abgelaufen oder wurde durch einen neueren ersetzt. Bitte neuen Link beim Coach anfordern.",
+      };
+    }
+    if (message === "NOT_ENROLLED") {
+      return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
+    }
+    if (message === "NO_SESSIONS") {
+      return { error: "Der Kurs hat noch keine Sessions." };
+    }
+    if (message === "SESSIONS_OPEN") {
+      return {
+        error:
+          "Du hast noch nicht alle Einheiten bestätigt. Bitte zuerst alle offenen Termine signieren.",
+      };
+    }
+    if (message === "ALREADY_APPROVED") {
+      return { error: "Du hast den Nachweis bereits freigegeben." };
     }
     throw err;
   }

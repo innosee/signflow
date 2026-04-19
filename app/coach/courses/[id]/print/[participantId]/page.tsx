@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { Stundennachweis } from "@/components/stundennachweis";
 import { db, schema } from "@/db";
 import { requireCoach } from "@/lib/dal";
+import { loadStundennachweisSheet } from "@/lib/sheet-data";
 
 export const dynamic = "force-dynamic";
 
@@ -16,29 +17,12 @@ export default async function PrintSheetPage({ params }: Props) {
   const session = await requireCoach();
   const { id: courseId, participantId } = await params;
 
-  // Ownership + Kurs-Daten in einem Query — inkl. Bedarfsträger + Coach-Name.
-  const [ctx] = await db
-    .select({
-      courseId: schema.courses.id,
-      title: schema.courses.title,
-      avgsNummer: schema.courses.avgsNummer,
-      durchfuehrungsort: schema.courses.durchfuehrungsort,
-      startDate: schema.courses.startDate,
-      endDate: schema.courses.endDate,
-      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
-      flagUnter2Termine: schema.courses.flagUnter2Termine,
-      flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
-      begruendungText: schema.courses.begruendungText,
-      bedarfstraegerName: schema.bedarfstraeger.name,
-      bedarfstraegerType: schema.bedarfstraeger.type,
-      coachName: schema.users.name,
-    })
+  // Ownership-Gate BEVOR wir das Sheet laden — sonst könnte ein Coach die
+  // Nachweise fremder Kurse abfragen. Der Sheet-Helper selbst prüft kein
+  // Coach-Scoping, weil er auch vom Teilnehmer-Preview genutzt wird.
+  const [owned] = await db
+    .select({ id: schema.courses.id })
     .from(schema.courses)
-    .innerJoin(
-      schema.bedarfstraeger,
-      eq(schema.bedarfstraeger.id, schema.courses.bedarfstraegerId),
-    )
-    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
     .where(
       and(
         eq(schema.courses.id, courseId),
@@ -47,120 +31,10 @@ export default async function PrintSheetPage({ params }: Props) {
       ),
     )
     .limit(1);
-  if (!ctx) notFound();
+  if (!owned) notFound();
 
-  // Teilnehmer muss im Kurs eingeschrieben sein — sonst könnte der Coach
-  // Nachweise für fremde Teilnehmer generieren.
-  const [enrollment] = await db
-    .select({
-      cpId: schema.courseParticipants.id,
-      participantName: schema.participants.name,
-      kundenNr: schema.participants.kundenNr,
-    })
-    .from(schema.courseParticipants)
-    .innerJoin(
-      schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
-    )
-    .where(
-      and(
-        eq(schema.courseParticipants.courseId, courseId),
-        eq(schema.courseParticipants.participantId, participantId),
-      ),
-    )
-    .limit(1);
-  if (!enrollment) notFound();
-
-  const sessions = await db
-    .select({
-      id: schema.sessions.id,
-      sessionDate: schema.sessions.sessionDate,
-      topic: schema.sessions.topic,
-      anzahlUe: schema.sessions.anzahlUe,
-      modus: schema.sessions.modus,
-      isErstgespraech: schema.sessions.isErstgespraech,
-      geeignet: schema.sessions.geeignet,
-    })
-    .from(schema.sessions)
-    .where(
-      and(
-        eq(schema.sessions.courseId, courseId),
-        isNull(schema.sessions.deletedAt),
-      ),
-    )
-    .orderBy(asc(schema.sessions.sessionDate));
-
-  // Nur die Signaturen ziehen, die für diesen Nachweis relevant sind: alle
-  // Coach-Signaturen des Kurses + die TN-Signaturen DIESES Teilnehmers.
-  // Signaturen anderer TN bleiben außen vor, sonst würde ein gemischter
-  // Sessions-Join die Layout-Tabelle verzerren.
-  const signatures = await db
-    .select({
-      sessionId: schema.signatures.sessionId,
-      signerType: schema.signatures.signerType,
-      signatureUrl: schema.signatures.signatureUrl,
-      signedAt: schema.signatures.signedAt,
-    })
-    .from(schema.signatures)
-    .innerJoin(
-      schema.sessions,
-      eq(schema.sessions.id, schema.signatures.sessionId),
-    )
-    .where(
-      and(
-        eq(schema.sessions.courseId, courseId),
-        or(
-          eq(schema.signatures.signerType, "coach"),
-          and(
-            eq(schema.signatures.signerType, "participant"),
-            eq(schema.signatures.courseParticipantId, enrollment.cpId),
-          ),
-        ),
-      ),
-    );
-
-  const sigBySession = new Map<
-    string,
-    {
-      coachSignatureUrl: string | null;
-      coachSignedAt: string | null;
-      participantSignatureUrl: string | null;
-      participantSignedAt: string | null;
-    }
-  >();
-  for (const sig of signatures) {
-    const slot = sigBySession.get(sig.sessionId) ?? {
-      coachSignatureUrl: null,
-      coachSignedAt: null,
-      participantSignatureUrl: null,
-      participantSignedAt: null,
-    };
-    if (sig.signerType === "coach") {
-      slot.coachSignatureUrl = sig.signatureUrl;
-      slot.coachSignedAt = sig.signedAt.toISOString();
-    } else {
-      slot.participantSignatureUrl = sig.signatureUrl;
-      slot.participantSignedAt = sig.signedAt.toISOString();
-    }
-    sigBySession.set(sig.sessionId, slot);
-  }
-
-  const sheetSessions = sessions.map((s) => {
-    const sig = sigBySession.get(s.id);
-    return {
-      id: s.id,
-      sessionDate: s.sessionDate,
-      topic: s.topic,
-      anzahlUe: s.anzahlUe,
-      modus: s.modus,
-      isErstgespraech: s.isErstgespraech,
-      geeignet: s.geeignet,
-      coachSignatureUrl: sig?.coachSignatureUrl ?? null,
-      coachSignedAt: sig?.coachSignedAt ?? null,
-      participantSignatureUrl: sig?.participantSignatureUrl ?? null,
-      participantSignedAt: sig?.participantSignedAt ?? null,
-    };
-  });
+  const sheet = await loadStundennachweisSheet({ courseId, participantId });
+  if (!sheet) notFound();
 
   return (
     <div className="print-wrapper">
@@ -186,27 +60,11 @@ export default async function PrintSheetPage({ params }: Props) {
       </div>
 
       <Stundennachweis
-        course={{
-          title: ctx.title,
-          avgsNummer: ctx.avgsNummer,
-          durchfuehrungsort: ctx.durchfuehrungsort,
-          startDate: ctx.startDate,
-          endDate: ctx.endDate,
-          anzahlBewilligteUe: ctx.anzahlBewilligteUe,
-          flagUnter2Termine: ctx.flagUnter2Termine,
-          flagVorzeitigesEnde: ctx.flagVorzeitigesEnde,
-          begruendungText: ctx.begruendungText,
-        }}
-        bedarfstraeger={{
-          name: ctx.bedarfstraegerName,
-          type: ctx.bedarfstraegerType,
-        }}
-        coach={{ name: ctx.coachName }}
-        participant={{
-          name: enrollment.participantName,
-          kundenNr: enrollment.kundenNr,
-        }}
-        sessions={sheetSessions}
+        course={sheet.course}
+        bedarfstraeger={sheet.bedarfstraeger}
+        coach={sheet.coach}
+        participant={sheet.participant}
+        sessions={sheet.sessions}
       />
 
       <style>{toolbarCss}</style>
