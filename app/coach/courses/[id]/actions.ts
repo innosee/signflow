@@ -114,16 +114,18 @@ export async function createSession(
   // Wochenend-Sperre: Sa/So sind für Coachings nicht zulässig. Datum
   // als pure Kalendertag interpretieren (sessionDate ist YYYY-MM-DD,
   // nicht UTC-Midnight) — split statt new Date(), damit kein TZ-Schlag
-  // den Tag verschiebt.
+  // den Tag verschiebt. Malformed-Input wird hart abgelehnt statt
+  // stillschweigend die Validierung zu skippen.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    return { error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
+  }
   const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
-  if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
-    // Date.UTC + getUTCDay um lokale TZ-Effekte komplett auszuschließen.
-    const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-    if (weekday === 0 || weekday === 6) {
-      return {
-        error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
-      };
-    }
+  // Date.UTC + getUTCDay um lokale TZ-Effekte komplett auszuschließen.
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  if (weekday === 0 || weekday === 6) {
+    return {
+      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
+    };
   }
 
   // UE + Geeignet hängen voneinander ab: beim Erstgespräch gilt UE=0 und
@@ -212,7 +214,9 @@ export async function addParticipant(
     return { error: "Name, E-Mail und Kunden-Nr. sind Pflicht." };
   }
   if (!looksLikeEmail(email)) {
-    return { error: `Ungültige E-Mail-Adresse: ${email}` };
+    // E-Mail nicht in die Fehlermeldung echo'en — PII gehört nicht in
+    // Error-Logs oder Browser-DevTools.
+    return { error: "Ungültige E-Mail-Adresse." };
   }
 
   let reused = false;

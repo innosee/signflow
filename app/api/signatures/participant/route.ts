@@ -73,10 +73,19 @@ export async function POST(req: Request) {
   try {
     url = await uploadSignature(`participant-${participantId}`, file);
   } catch (err) {
+    // Fehler-Internals (Storage-Provider-Namen, Stack-Traces) bleiben im
+    // Server-Log — der Client sieht nur eine generische Meldung.
     const message = err instanceof Error ? err.message : String(err);
     console.error("Participant signature upload failed:", err);
-    const status = message.includes("BLOB_READ_WRITE_TOKEN") ? 503 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const isConfig = message.includes("BLOB_READ_WRITE_TOKEN");
+    return NextResponse.json(
+      {
+        error: isConfig
+          ? "Storage ist aktuell nicht konfiguriert. Bitte melde dich beim Coach."
+          : "Upload fehlgeschlagen. Bitte erneut versuchen.",
+      },
+      { status: isConfig ? 503 : 500 },
+    );
   }
 
   const [previous] = await db
