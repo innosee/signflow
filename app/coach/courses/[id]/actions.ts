@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireCoach } from "@/lib/dal";
@@ -11,6 +11,61 @@ import { sendParticipantInvite } from "@/lib/participant-tokens";
 import { recomputeSessionStatus } from "@/lib/session-status";
 
 export type SessionFormState = { error?: string } | undefined;
+
+/**
+ * Schickt automatisch Magic-Links an alle eingeschriebenen Teilnehmer,
+ * die gerade KEINEN aktiven Link haben (also weder einen unbenutzten noch
+ * einen unabgelaufenen). Wird vom Coach-Sign-Flow ausgelöst: sobald der
+ * Coach eine Session signiert, soll der TN ohne manuellen Klick auf
+ * „Teilnehmer benachrichtigen" einen Link bekommen. Wenn schon ein Link
+ * aktiv ist, skippen wir — der enthält die neue Session ohnehin (Liste
+ * wird on-demand aufgelöst), so gibt's keine Mail-Spam bei mehreren
+ * kurz aufeinanderfolgenden Coach-Signaturen.
+ */
+async function autoNotifyParticipantsWithoutActiveToken(
+  courseId: string,
+): Promise<void> {
+  const now = new Date();
+
+  const activeTokenParticipantIds = (
+    await db
+      .select({
+        participantId: schema.participantAccessTokens.participantId,
+      })
+      .from(schema.participantAccessTokens)
+      .where(
+        and(
+          eq(schema.participantAccessTokens.courseId, courseId),
+          isNull(schema.participantAccessTokens.usedAt),
+          gt(schema.participantAccessTokens.expiresAt, now),
+        ),
+      )
+  ).map((r) => r.participantId);
+  const withActive = new Set(activeTokenParticipantIds);
+
+  const enrolled = await db
+    .select({ participantId: schema.courseParticipants.participantId })
+    .from(schema.courseParticipants)
+    .where(eq(schema.courseParticipants.courseId, courseId));
+
+  for (const p of enrolled) {
+    if (withActive.has(p.participantId)) continue;
+    try {
+      await sendParticipantInvite({
+        courseId,
+        participantId: p.participantId,
+      });
+    } catch (err) {
+      // Mailversand-Fehler dürfen die Coach-Signatur nicht blockieren —
+      // der Coach kann über "Teilnehmer benachrichtigen" manuell
+      // nachlegen.
+      console.error(
+        `auto-notify failed for participant ${p.participantId}:`,
+        err,
+      );
+    }
+  }
+}
 
 async function requireOwnedCourseId(
   courseId: string,
@@ -373,6 +428,12 @@ export async function signSessionAsCoach(
     }
     return { error: `Signatur fehlgeschlagen (${message}).` };
   }
+
+  // Auto-Notify: TN ohne aktiven Magic-Link werden direkt angeschrieben,
+  // sodass „Coach signiert" nicht im UI-Limbo „wartet auf TN" steckenbleibt
+  // ohne dass der TN davon erfährt. Bewusst NACH dem Transaction-Commit,
+  // damit die Signatur auch bei Mail-Problemen persistiert ist.
+  await autoNotifyParticipantsWithoutActiveToken(ownedCourseId);
 
   revalidatePath(`/coach/courses/${ownedCourseId}`);
   return undefined;

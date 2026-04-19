@@ -289,7 +289,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const SESSION_STATUS_LABEL: Record<string, string> = {
   pending: "offen",
-  coach_signed: "wartet auf TN",
+  coach_signed: "Link verschickt, wartet auf TN",
   completed: "abgeschlossen",
 };
 
