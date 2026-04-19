@@ -15,15 +15,19 @@ export default async function CoachLayout({
 
   return (
     <>
-      <AppHeader
-        brandHref="/coach"
-        navLinks={[{ href: "/coach", label: "Kurse" }]}
-        userName={session.user.name}
-        userEmail={session.user.email}
-        impersonating={isImpersonating(session)}
-        logoutAction={logoutAction}
-        stopImpersonationAction={stopImpersonating}
-      />
+      {/* Im Print-Modus (Ctrl+P oder Puppeteer → PDF) wird der AppHeader
+          ausgeblendet — der gehört in Browser-Chrome, nicht ins AfA-Blatt. */}
+      <div className="print:hidden">
+        <AppHeader
+          brandHref="/coach"
+          navLinks={[{ href: "/coach", label: "Kurse" }]}
+          userName={session.user.name}
+          userEmail={session.user.email}
+          impersonating={isImpersonating(session)}
+          logoutAction={logoutAction}
+          stopImpersonationAction={stopImpersonating}
+        />
+      </div>
       <main className="flex-1">{children}</main>
     </>
   );

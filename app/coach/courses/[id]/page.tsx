@@ -267,9 +267,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 <div className="font-medium">{p.name}</div>
                 <div className="text-xs text-zinc-500">{p.email}</div>
               </div>
-              <div className="text-xs text-zinc-500">
-                Kd-Nr. {p.kundenNr}
-              </div>
+              <div className="text-xs text-zinc-500">Kd-Nr. {p.kundenNr}</div>
+              <Link
+                href={`/coach/courses/${course.id}/print/${p.id}`}
+                className="text-xs text-zinc-700 underline-offset-2 hover:underline"
+                title="Druckvorschau / Stundennachweis"
+              >
+                Nachweis ansehen
+              </Link>
             </li>
           ))}
         </ul>
