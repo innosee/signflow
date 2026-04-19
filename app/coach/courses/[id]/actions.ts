@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireCoach } from "@/lib/dal";
@@ -11,6 +11,61 @@ import { sendParticipantInvite } from "@/lib/participant-tokens";
 import { recomputeSessionStatus } from "@/lib/session-status";
 
 export type SessionFormState = { error?: string } | undefined;
+
+/**
+ * Schickt automatisch Magic-Links an alle eingeschriebenen Teilnehmer,
+ * die gerade KEINEN aktiven Link haben (also weder einen unbenutzten noch
+ * einen unabgelaufenen). Wird vom Coach-Sign-Flow ausgelöst: sobald der
+ * Coach eine Session signiert, soll der TN ohne manuellen Klick auf
+ * „Teilnehmer benachrichtigen" einen Link bekommen. Wenn schon ein Link
+ * aktiv ist, skippen wir — der enthält die neue Session ohnehin (Liste
+ * wird on-demand aufgelöst), so gibt's keine Mail-Spam bei mehreren
+ * kurz aufeinanderfolgenden Coach-Signaturen.
+ */
+async function autoNotifyParticipantsWithoutActiveToken(
+  courseId: string,
+): Promise<void> {
+  const now = new Date();
+
+  const activeTokenParticipantIds = (
+    await db
+      .select({
+        participantId: schema.participantAccessTokens.participantId,
+      })
+      .from(schema.participantAccessTokens)
+      .where(
+        and(
+          eq(schema.participantAccessTokens.courseId, courseId),
+          isNull(schema.participantAccessTokens.usedAt),
+          gt(schema.participantAccessTokens.expiresAt, now),
+        ),
+      )
+  ).map((r) => r.participantId);
+  const withActive = new Set(activeTokenParticipantIds);
+
+  const enrolled = await db
+    .select({ participantId: schema.courseParticipants.participantId })
+    .from(schema.courseParticipants)
+    .where(eq(schema.courseParticipants.courseId, courseId));
+
+  for (const p of enrolled) {
+    if (withActive.has(p.participantId)) continue;
+    try {
+      await sendParticipantInvite({
+        courseId,
+        participantId: p.participantId,
+      });
+    } catch (err) {
+      // Mailversand-Fehler dürfen die Coach-Signatur nicht blockieren —
+      // der Coach kann über "Teilnehmer benachrichtigen" manuell
+      // nachlegen.
+      console.error(
+        `auto-notify failed for participant ${p.participantId}:`,
+        err,
+      );
+    }
+  }
+}
 
 async function requireOwnedCourseId(
   courseId: string,
@@ -54,6 +109,34 @@ export async function createSession(
   if (!topic) return { error: "Themen / Inhalte fehlen." };
   if (modus !== "praesenz" && modus !== "online") {
     return { error: "Modus muss Präsenz oder Online sein." };
+  }
+
+  // Wochenend-Sperre: Sa/So sind für Coachings nicht zulässig. Datum
+  // als pure Kalendertag interpretieren (sessionDate ist YYYY-MM-DD,
+  // nicht UTC-Midnight) — split statt new Date(), damit kein TZ-Schlag
+  // den Tag verschiebt. Malformed-Input wird hart abgelehnt statt
+  // stillschweigend die Validierung zu skippen.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    return { error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
+  }
+  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
+  // Date.UTC rollt Overflow-Werte still um (2026-02-30 → 2026-03-02).
+  // Wir prüfen per Round-Trip, dass die Eingabe auch ein echtes Kalenderdatum
+  // ist — sonst würde die Wochenend-Logik auf dem Ersatz-Datum rechnen und
+  // der Insert später an der date-Spalte der DB crashen.
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  const isValidDate =
+    parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() === m - 1 &&
+    parsed.getUTCDate() === d;
+  if (!isValidDate) {
+    return { error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
+  }
+  const weekday = parsed.getUTCDay();
+  if (weekday === 0 || weekday === 6) {
+    return {
+      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
+    };
   }
 
   // UE + Geeignet hängen voneinander ab: beim Erstgespräch gilt UE=0 und
@@ -104,6 +187,101 @@ export async function createSession(
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
+}
+
+export type AddParticipantState =
+  | { error?: string; reused?: boolean }
+  | undefined;
+
+function looksLikeEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+/**
+ * Nachträglich einen Teilnehmer zu einem bestehenden Kurs einschreiben.
+ * Analog zur Teilnehmer-Logik in `createCourse`: existiert die E-Mail
+ * schon in `participants` → bestehender Datensatz wird wiederverwendet
+ * (Name + Kunden-Nr. bleiben), ansonsten neuer Teilnehmer anlegen. In
+ * beiden Fällen landet eine Zeile in `course_participants`.
+ */
+export async function addParticipant(
+  _prev: AddParticipantState,
+  formData: FormData,
+): Promise<AddParticipantState> {
+  const session = await requireCoach();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const kundenNr = String(formData.get("kundenNr") ?? "").trim();
+
+  if (!courseId) return { error: "Kurs fehlt." };
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  if (!name || !email || !kundenNr) {
+    return { error: "Name, E-Mail und Kunden-Nr. sind Pflicht." };
+  }
+  if (!looksLikeEmail(email)) {
+    // E-Mail nicht in die Fehlermeldung echo'en — PII gehört nicht in
+    // Error-Logs oder Browser-DevTools.
+    return { error: "Ungültige E-Mail-Adresse." };
+  }
+
+  let reused = false;
+  try {
+    await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ id: schema.participants.id })
+        .from(schema.participants)
+        .where(eq(schema.participants.email, email))
+        .limit(1);
+
+      let participantId: string;
+      if (existing) {
+        participantId = existing.id;
+        reused = true;
+      } else {
+        const [created] = await tx
+          .insert(schema.participants)
+          .values({ name, email, kundenNr })
+          .returning({ id: schema.participants.id });
+        if (!created) throw new Error("PARTICIPANT_INSERT_FAILED");
+        participantId = created.id;
+      }
+
+      // Double-Enrollment vermeiden — es gibt einen UNIQUE-Index auf
+      // (courseId, participantId), der uns sonst einen rohen Fehler gäbe.
+      const [already] = await tx
+        .select({ id: schema.courseParticipants.id })
+        .from(schema.courseParticipants)
+        .where(
+          and(
+            eq(schema.courseParticipants.courseId, ownedCourseId),
+            eq(schema.courseParticipants.participantId, participantId),
+          ),
+        )
+        .limit(1);
+      if (already) throw new Error("ALREADY_ENROLLED");
+
+      await tx.insert(schema.courseParticipants).values({
+        courseId: ownedCourseId,
+        participantId,
+      });
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "ALREADY_ENROLLED") {
+      return { error: "Dieser Teilnehmer ist bereits im Kurs." };
+    }
+    return { error: `Teilnehmer konnte nicht hinzugefügt werden (${message}).` };
+  }
+
+  redirect(
+    `/coach/courses/${ownedCourseId}${reused ? "?reused=1" : ""}`,
+  );
 }
 
 export type NotifyState =
@@ -265,6 +443,12 @@ export async function signSessionAsCoach(
     }
     return { error: `Signatur fehlgeschlagen (${message}).` };
   }
+
+  // Auto-Notify: TN ohne aktiven Magic-Link werden direkt angeschrieben,
+  // sodass „Coach signiert" nicht im UI-Limbo „wartet auf TN" steckenbleibt
+  // ohne dass der TN davon erfährt. Bewusst NACH dem Transaction-Commit,
+  // damit die Signatur auch bei Mail-Problemen persistiert ist.
+  await autoNotifyParticipantsWithoutActiveToken(ownedCourseId);
 
   revalidatePath(`/coach/courses/${ownedCourseId}`);
   return undefined;

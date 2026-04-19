@@ -117,6 +117,14 @@ export type ResolvedToken = {
   participantId: string;
   participantName: string;
   participantEmail: string;
+  /**
+   * Einmal angelegte Teilnehmer-Unterschrift. `null` → der Teilnehmer hat
+   * noch nie unterschrieben und muss beim Öffnen des Magic-Links zuerst
+   * seine Unterschrift via Canvas anlegen, bevor er Sessions bestätigen
+   * kann. Ist die URL gesetzt, wird sie als Snapshot in `signatures` pro
+   * Session übernommen (analog zum Coach-Flow).
+   */
+  participantSignatureUrl: string | null;
   courseTitle: string;
   sessions: Array<{
     id: string;
@@ -147,6 +155,7 @@ export async function resolveParticipantToken(
       participantId: schema.participantAccessTokens.participantId,
       participantName: schema.participants.name,
       participantEmail: schema.participants.email,
+      participantSignatureUrl: schema.participants.signatureUrl,
       courseTitle: schema.courses.title,
     })
     .from(schema.participantAccessTokens)
@@ -224,6 +233,7 @@ export async function resolveParticipantToken(
     participantId: head.participantId,
     participantName: head.participantName,
     participantEmail: head.participantEmail,
+    participantSignatureUrl: head.participantSignatureUrl ?? null,
     courseTitle: head.courseTitle,
     sessions: rawSessions.map((s) => ({
       id: s.id,

@@ -11,6 +11,12 @@ type Props = {
    * Der Endpoint muss mit `{ url: string }` oder `{ error: string }` antworten.
    */
   action: string;
+  /**
+   * Zusätzliche FormData-Felder (z.B. `token`) die neben `signature`
+   * mit-gepostet werden. Wird für Magic-Link-authentifizierte Endpoints
+   * genutzt, bei denen kein Cookie-Session verfügbar ist.
+   */
+  extraFields?: Record<string, string>;
   /** Wird mit der zurückgegebenen URL aufgerufen, sobald der Upload erfolgreich war. */
   onUploaded?: (url: string) => void;
   /** Optionale Einleitung über dem Canvas. */
@@ -28,6 +34,7 @@ type Props = {
 export function SignatureCanvas({
   submitLabel = "Unterschrift speichern",
   action,
+  extraFields,
   onUploaded,
   hint,
 }: Props) {
@@ -96,6 +103,11 @@ export function SignatureCanvas({
       });
       const fd = new FormData();
       fd.append("signature", blob, "signature.png");
+      if (extraFields) {
+        for (const [key, value] of Object.entries(extraFields)) {
+          fd.append(key, value);
+        }
+      }
       const res = await fetch(action, { method: "POST", body: fd });
       const payload = (await res.json().catch(() => ({}))) as {
         url?: string;

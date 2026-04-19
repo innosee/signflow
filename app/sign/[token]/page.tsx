@@ -1,5 +1,6 @@
 import { resolveParticipantToken } from "@/lib/participant-tokens";
 
+import { ParticipantSignatureOnboarding } from "./signature-onboarding";
 import { SignForm } from "./sign-form";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function ParticipantSignPage({ params }: Props) {
     );
   }
 
+  const hasSignature = !!resolved.participantSignatureUrl;
   const open = resolved.sessions.filter((s) => !s.hasParticipantSignature);
   const done = resolved.sessions.filter((s) => s.hasParticipantSignature);
 
@@ -34,13 +36,18 @@ export default async function ParticipantSignPage({ params }: Props) {
           {resolved.courseTitle}
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Hallo {resolved.participantName}, bitte bestätige die unten
-          aufgeführten Termine. Du kannst alle offenen Einheiten in einem Rutsch
-          erledigen.
+          {hasSignature
+            ? `Hallo ${resolved.participantName}, bitte bestätige die unten aufgeführten Termine. Du kannst alle offenen Einheiten in einem Rutsch erledigen.`
+            : "Kurze Einrichtung, dann kannst du die einzelnen Einheiten bestätigen."}
         </p>
       </header>
 
-      {open.length === 0 ? (
+      {!hasSignature ? (
+        <ParticipantSignatureOnboarding
+          token={token}
+          participantName={resolved.participantName}
+        />
+      ) : open.length === 0 ? (
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
           Alle Einheiten sind bestätigt – danke! Sobald dein Coach den Kurs
           abschließt, bekommst du eine Vorschau zur finalen Freigabe.
@@ -56,7 +63,7 @@ export default async function ParticipantSignPage({ params }: Props) {
         </section>
       )}
 
-      {done.length > 0 && (
+      {hasSignature && done.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-zinc-700">
             Bereits bestätigt ({done.length})
@@ -67,11 +74,12 @@ export default async function ParticipantSignPage({ params }: Props) {
         </section>
       )}
 
-      <p className="text-xs text-zinc-500">
-        Hinweis: Die Unterschriftserfassung via Canvas folgt in der nächsten
-        Ausbaustufe. Heute bestätigst du per Klick — IP und Zeitstempel werden
-        gespeichert.
-      </p>
+      {hasSignature && (
+        <p className="text-xs text-zinc-500">
+          Bestätigung per aktivem Klick + Zeitstempel — deine einmal angelegte
+          Unterschrift wird dabei als Snapshot in den AfA-Nachweis übernommen.
+        </p>
+      )}
     </div>
   );
 }
