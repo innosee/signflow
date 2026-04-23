@@ -20,7 +20,10 @@ export default async function CoachLayout({
       <div className="print:hidden">
         <AppHeader
           brandHref="/coach"
-          navLinks={[{ href: "/coach", label: "Kurse" }]}
+          navLinks={[
+            { href: "/coach", label: "Kurse" },
+            { href: "/coach/checker", label: "Berichts-Checker" },
+          ]}
           userName={session.user.name}
           userEmail={session.user.email}
           impersonating={isImpersonating(session)}

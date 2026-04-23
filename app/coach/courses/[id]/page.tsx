@@ -148,6 +148,21 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     approvedRows.map((r) => [r.participantId, r.approvedAt]),
   );
 
+  const berRows = participants.length
+    ? await db
+        .select({
+          participantId: schema.abschlussberichte.participantId,
+          status: schema.abschlussberichte.status,
+          submittedAt: schema.abschlussberichte.submittedAt,
+          updatedAt: schema.abschlussberichte.updatedAt,
+        })
+        .from(schema.abschlussberichte)
+        .where(eq(schema.abschlussberichte.courseId, id))
+    : [];
+  const berByParticipant = new Map(
+    berRows.map((r) => [r.participantId, r]),
+  );
+
   const [finalDoc] = await db
     .select({
       fesStatus: schema.finalDocuments.fesStatus,
@@ -397,32 +412,77 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
         <ul className="divide-y divide-zinc-200 text-sm">
           {participants.map((p) => {
             const approvedAt = approvalByParticipant.get(p.id);
+            const ber = berByParticipant.get(p.id);
             return (
-              <li key={p.id} className="flex items-baseline gap-4 px-6 py-3">
-                <div className="min-w-0 flex-1">
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3"
+              >
+                <div className="min-w-0 flex-1 basis-48">
                   <div className="font-medium">{p.name}</div>
-                  <div className="text-xs text-zinc-500">{p.email}</div>
+                  <div className="text-xs text-zinc-500">
+                    Kd-Nr. {p.kundenNr} · {p.email}
+                  </div>
                 </div>
-                {approvedAt ? (
-                  <span
-                    title={`Freigegeben am ${new Date(approvedAt).toLocaleString("de-DE")}`}
-                    className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800"
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-400">
+                    ANW
+                  </span>
+                  {approvedAt ? (
+                    <span
+                      title={`Freigegeben am ${new Date(approvedAt).toLocaleString("de-DE")}`}
+                      className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800"
+                    >
+                      ✓
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                      offen
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-400">
+                    BER
+                  </span>
+                  {ber?.status === "submitted" ? (
+                    <span
+                      title={`Eingereicht am ${ber.submittedAt ? new Date(ber.submittedAt).toLocaleString("de-DE") : "—"}`}
+                      className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800"
+                    >
+                      ✓ eingereicht
+                    </span>
+                  ) : ber ? (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                      Entwurf
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                      fehlt
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 text-xs">
+                  {!impersonating && (
+                    <Link
+                      href={`/coach/courses/${course.id}/teilnehmer/${p.id}/bericht`}
+                      className="text-zinc-700 underline-offset-2 hover:underline"
+                      title="Abschlussbericht schreiben / bearbeiten"
+                    >
+                      {ber ? "BER bearbeiten" : "BER schreiben"}
+                    </Link>
+                  )}
+                  <Link
+                    href={`/coach/courses/${course.id}/print/${p.id}`}
+                    className="text-zinc-700 underline-offset-2 hover:underline"
+                    title="Stundennachweis-Druckvorschau"
                   >
-                    ✓ freigegeben
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
-                    offen
-                  </span>
-                )}
-                <div className="text-xs text-zinc-500">Kd-Nr. {p.kundenNr}</div>
-                <Link
-                  href={`/coach/courses/${course.id}/print/${p.id}`}
-                  className="text-xs text-zinc-700 underline-offset-2 hover:underline"
-                  title="Druckvorschau / Stundennachweis"
-                >
-                  Nachweis ansehen
-                </Link>
+                    Nachweis
+                  </Link>
+                </div>
               </li>
             );
           })}
