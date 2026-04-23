@@ -48,6 +48,13 @@ export const auditActorType = pgEnum("audit_actor_type", [
 export const bedarfstraegerType = pgEnum("bedarfstraeger_type", ["JC", "AA"]);
 /** Durchführungsmodus einer Kurseinheit. */
 export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
+/**
+ * Lebenszyklus eines Abschlussberichts.
+ * `draft` = Coach arbeitet noch dran (Autosave); `submitted` = Coach hat an die Bildungsträgerin
+ * abgegeben. Edit nach Submit bleibt erlaubt (Korrekturen); Status ändert sich dadurch nicht,
+ * nur `updated_at` läuft hoch.
+ */
+export const berStatus = pgEnum("ber_status", ["draft", "submitted"]);
 
 export const users = pgTable(
   "users",
@@ -488,6 +495,58 @@ export const auditLog = pgTable(
   ],
 );
 
+/**
+ * TN-bezogener Abschlussbericht (BER). Ein BER gehört genau einem Teilnehmer in einem Kurs —
+ * Unique-Index verhindert Duplikate. Nur Coach-der-Kurs darf schreiben/lesen, Agency hat
+ * Read-Access für Überblick.
+ *
+ * DSGVO-Hintergrund: Inhalte hier dürfen **per Design** keine Art.-9-Daten enthalten —
+ * der Checker ist ein harter Gate vor `submit`. Gespeichert werden also nur regulär-persönliche
+ * Stammdaten des TN plus Coaching-Text (Art. 6(1)(b) DSGVO, Vertragserfüllung).
+ */
+export const abschlussberichte = pgTable(
+  "abschlussberichte",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    participantId: uuid("participant_id")
+      .notNull()
+      .references(() => participants.id, { onDelete: "restrict" }),
+    coachId: uuid("coach_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    teilnahme: text("teilnahme").notNull().default(""),
+    ablauf: text("ablauf").notNull().default(""),
+    fazit: text("fazit").notNull().default(""),
+    status: berStatus("status").notNull().default("draft"),
+    /**
+     * Hat die letzte finale Prüfung (nicht nur Live-Regex) bestanden?
+     * `submit` setzt das Flag und cacht das Ergebnis — UI zeigt "eingereicht mit
+     * bestandener Prüfung" als Qualitätssignal.
+     */
+    lastCheckPassed: boolean("last_check_passed").notNull().default(false),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("abschlussberichte_course_participant_uq").on(
+      t.courseId,
+      t.participantId,
+    ),
+    index("abschlussberichte_course_idx").on(t.courseId),
+    index("abschlussberichte_coach_idx").on(t.coachId),
+    index("abschlussberichte_status_idx").on(t.status),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Course = typeof courses.$inferSelect;
@@ -512,6 +571,8 @@ export type ParticipantApproval = typeof participantApprovals.$inferSelect;
 export type NewParticipantApproval = typeof participantApprovals.$inferInsert;
 export type AuditLog = typeof auditLog.$inferSelect;
 export type NewAuditLog = typeof auditLog.$inferInsert;
+export type Abschlussbericht = typeof abschlussberichte.$inferSelect;
+export type NewAbschlussbericht = typeof abschlussberichte.$inferInsert;
 export type AuthSession = typeof authSession.$inferSelect;
 export type AuthAccount = typeof authAccount.$inferSelect;
 export type AuthVerification = typeof authVerification.$inferSelect;

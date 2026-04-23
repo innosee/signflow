@@ -23,7 +23,11 @@ export type AuditAction =
   | "course.seal"
   | "course.submit_afa"
   | "impersonation.start"
-  | "impersonation.end";
+  | "impersonation.end"
+  | "checker.report_submitted"
+  | "ber.draft_saved"
+  | "ber.submitted"
+  | "ber.edited_after_submit";
 
 export type AuditActorType = "agency" | "coach" | "participant" | "system";
 
@@ -34,7 +38,13 @@ export type AuditEntry = {
   /** Agency-User-ID, falls die Aktion unter Impersonation lief. */
   impersonatorId?: string | null;
   action: AuditAction;
-  resourceType: "course" | "participant" | "session" | "final_document";
+  resourceType:
+    | "course"
+    | "participant"
+    | "session"
+    | "final_document"
+    | "checker_run"
+    | "abschlussbericht";
   resourceId: string;
   metadata?: Record<string, unknown> | null;
   ipAddress?: string | null;
