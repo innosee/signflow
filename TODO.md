@@ -9,7 +9,7 @@ Was nach dem Preview/FES/AfA-Build (April 2026) noch ansteht. Reihenfolge ≈ Pr
 - [ ] **Storage-Privatisierung** — Vercel Blob ist aktuell `public` mit Random-Suffix-Obfuskation. Vor Prod: auf privaten Bucket (R2/S3) mit signierten URLs migrieren. TODO steht in [src/lib/storage.ts](src/lib/storage.ts).
 - [ ] **Neon DB-Passwort-Rotation** — letzter Schritt vor Prod-Cutover, siehe Memory.
 - [ ] **Data-Isolation-Audit** — systematisch alle Coach-Queries durchsehen, dass `coach_id = session.user.id` serverseitig erzwungen wird. UI-Filter alleine reichen nicht.
-- [ ] **Audit-Log für Impersonation start/stop** — Helper in [src/lib/audit.ts](src/lib/audit.ts) ist da, aber `bildungstraeger/actions.ts` (`impersonateCoach` / `stopImpersonating`) loggt noch nicht. Einbinden, sobald Real-Compliance-Anforderung greift.
+- [ ] **Audit-Log für Impersonation start/stop** — Helper in [src/lib/audit.ts](src/lib/audit.ts) ist da, aber [app/bildungstraeger/actions.ts](app/bildungstraeger/actions.ts) (`impersonateCoach` / `stopImpersonating`) loggt noch nicht. Einbinden, sobald Real-Compliance-Anforderung greift.
 
 ## Tech-Debt / nice to have
 

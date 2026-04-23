@@ -31,7 +31,7 @@ const COACH_FAQ: Q[] = [
   },
 ];
 
-const AGENCY_FAQ: Q[] = [
+const BILDUNGSTRAEGER_FAQ: Q[] = [
   {
     q: "Ist die elektronische Signatur rechtsgültig für die AfA?",
     a: "Ja. Wir nutzen die fortgeschrittene elektronische Signatur (FES) nach eIDAS (EU-Verordnung 910/2014) über Firma.dev. Die AfA akzeptiert FES für Stundennachweise — eine qualifizierte Signatur (QES) ist nicht erforderlich und würde deutlich höhere Kosten verursachen.",
@@ -64,7 +64,7 @@ const AGENCY_FAQ: Q[] = [
 
 export function LandingFaq() {
   const [tab, setTab] = useState<"coach" | "bildungstraeger">("bildungstraeger");
-  const list = tab === "coach" ? COACH_FAQ : AGENCY_FAQ;
+  const list = tab === "coach" ? COACH_FAQ : BILDUNGSTRAEGER_FAQ;
 
   return (
     <section id="faq" className="border-t border-zinc-200 bg-zinc-50">

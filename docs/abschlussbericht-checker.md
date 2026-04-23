@@ -296,7 +296,7 @@ Datenverarbeitende Dienstleister, mit denen AVV vorliegen muss:
 - [ ] **DSB-Pflicht** für Signflow UG prüfen (bei regelmäßiger Art.-9-Verarbeitung wahrscheinlich)
 - [ ] **Storage-Anbieter** final: Cloudflare R2 vs. Vercel Blob (aktuell Vercel Blob, siehe TODO.md)
 - [ ] **Azure-Region** festlegen: Sweden Central (mehr OpenAI-Modelle) vs. Germany West Central (näher)
-- [ ] **Bildungsträger-Rolle umbenennen** auf „Bildungsträger" (siehe separate Memory)
+- [x] ~~Rolle umbenennen auf „Bildungsträger"~~ — **erledigt 2026-04-23**, Migration `apply-bildungstraeger-rename-migration.mjs` angewendet
 - [ ] **Scope-Entscheidung ANW vs. BER** (siehe § 12, Regelkatalog ist da)
 - [ ] **Input-Format** für Checker: nur Text-Paste, oder auch PDF-Upload?
 
@@ -341,7 +341,7 @@ Die Anonymisierungs-Pipeline (IONOS → Azure) bleibt für den Checker-Schritt e
 ### Noch offen
 
 - [ ] Email-Send an Bildungsträger-Postfach bei `submit` (Resend) — optional, Nutzerwunsch
-- [ ] Bildungsträger-Detail-View für einzelne BERs (lesen/read-only) — aktuell nur Aggregat-Fortschritt
+- [x] ~~Bildungsträger-Detail-View für einzelne BERs~~ — **erledigt 2026-04-23** (`/bildungstraeger/abschlussberichte/[berId]` + Drilldown-Liste, read-only + Print)
 - [ ] Metadaten-Form-Felder (AVGS-Maßnahme etc.) im BER-Export-Layout
 - [ ] Aufbewahrungsfrist für submitted BERs + automatische Löschung
 
