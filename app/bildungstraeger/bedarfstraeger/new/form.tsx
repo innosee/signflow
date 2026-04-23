@@ -72,7 +72,7 @@ export function BedarfstraegerForm() {
           {pending ? "Wird angelegt…" : "Anlegen"}
         </button>
         <a
-          href="/agency/bedarfstraeger"
+          href="/bildungstraeger/bedarfstraeger"
           className="text-sm text-zinc-600 underline-offset-2 hover:underline"
         >
           Abbrechen

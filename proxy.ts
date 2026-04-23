@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * Components / Server Actions), so this is a UX optimization, not the
  * security boundary.
  */
-const PROTECTED_PREFIXES = ["/agency", "/coach"];
+const PROTECTED_PREFIXES = ["/bildungstraeger", "/coach"];
 const AUTH_ONLY_PAGES = ["/login", "/setup"];
 
 function hasSessionCookie(req: NextRequest): boolean {

@@ -253,7 +253,7 @@ export async function submitBerAction(
   revalidatePath(`/coach/courses/${courseId}`);
   revalidatePath(`/coach/courses/${courseId}/teilnehmer/${participantId}/bericht`);
   revalidatePath("/coach/checker");
-  revalidatePath("/agency");
+  revalidatePath("/bildungstraeger");
 
   return { savedAt: now.toISOString() };
 }

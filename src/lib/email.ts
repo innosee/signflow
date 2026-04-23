@@ -123,7 +123,7 @@ export async function sendInviteEmail(params: {
     <p>Hallo ${esc(params.name)},</p>
     <p>du wurdest als Coach zu Signflow eingeladen. Klick den Button unten, um dein Passwort festzulegen und loszulegen.</p>
     ${renderButton(params.url, "Passwort festlegen")}
-    <p style="font-size:12px; color:#888;">Der Link ist zeitlich begrenzt gültig. Falls er abgelaufen ist, kontaktiere deine Agentur für eine neue Einladung.</p>
+    <p style="font-size:12px; color:#888;">Der Link ist zeitlich begrenzt gültig. Falls er abgelaufen ist, kontaktiere deinen Bildungsträger für eine neue Einladung.</p>
   `;
   await sendEmail({
     to: params.to,

@@ -24,8 +24,8 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 ## Rollen
 | Rolle | Beschreibung |
 |---|---|
-| **agency** | Super Admin – verwaltet (lädt ein/deaktiviert) Coaches, hat Gesamtübersicht, kann Coaches impersonaten (Support) |
-| **coach** | Wird von Agency per Einladung angelegt, setzt Passwort über Invite-Token, erstellt Kurse und Einheiten, unterschreibt als Erster |
+| **bildungstraeger** | Super Admin (die Firma / der Bildungsträger) – verwaltet (lädt ein/deaktiviert) Coaches, hat Gesamtübersicht, kann Coaches impersonaten (Support) |
+| **coach** | Wird von Bildungsträger per Einladung angelegt, setzt Passwort über Invite-Token, erstellt Kurse und Einheiten, unterschreibt als Erster |
 | **participant** | Kein eigener Account – erhält Magic Link per E-Mail (24h gültig), unterschreibt nur |
 
 ---
@@ -68,11 +68,11 @@ Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seit
 - Mobile-optimierte Webseite mit Canvas – keine React Native App (Phase 2)
 
 ### Auth & Berechtigungen
-- **Coach-Signup: nur per Einladung**, kein offener `/signup`-Endpoint. Agency legt Coach an (Name + E-Mail) → System schickt Setup-Mail mit einmaligem Invite-Token → Coach setzt Passwort + erstellt Unterschrift.
-- **Impersonation (Agency → Coach)**: Agency kann in die Sicht eines Coaches wechseln. Session führt `impersonated_by`-Feld (DB-Spalte) / `impersonatedBy` (Drizzle/TS). Jede Aktion wird im Audit-Log mit beiden IDs geloggt.
-- **Schreibende Aktionen während Impersonation sind hart blockiert** – insbesondere das Leisten von Unterschriften. Sonst ist die Beweiskraft der digitalen Unterschrift kaputt (Coach könnte behaupten, Agency habe in seinem Namen signiert).
+- **Coach-Signup: nur per Einladung**, kein offener `/signup`-Endpoint. Bildungsträger legt Coach an (Name + E-Mail) → System schickt Setup-Mail mit einmaligem Invite-Token → Coach setzt Passwort + erstellt Unterschrift.
+- **Impersonation (Bildungsträger → Coach)**: Bildungsträger kann in die Sicht eines Coaches wechseln. Session führt `impersonated_by`-Feld (DB-Spalte) / `impersonatedBy` (Drizzle/TS). Jede Aktion wird im Audit-Log mit beiden IDs geloggt.
+- **Schreibende Aktionen während Impersonation sind hart blockiert** – insbesondere das Leisten von Unterschriften. Sonst ist die Beweiskraft der digitalen Unterschrift kaputt (Coach könnte behaupten, Bildungsträger habe in seinem Namen signiert).
 - **Data-Isolation**: jede Coach-Query serverseitig mit `coach_id = session.user.id` filtern – nicht auf UI verlassen.
-- **Single-Tenant**: aktuell eine Agency pro Deployment (`users` hat keine `agency_id`). Multi-Tenancy wäre Schema-Change.
+- **Single-Tenant**: aktuell ein Bildungsträger pro Deployment (`users` hat keine `bildungstraeger_id`-Spalte). Multi-Tenancy wäre Schema-Change.
 
 ---
 
@@ -85,7 +85,7 @@ Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seit
 id: uuid PK
 email: string (unique)
 name: string
-role: enum('agency', 'coach')
+role: enum('bildungstraeger', 'coach')
 signature_url: string | null  // einmalig gesetzt beim Onboarding
 created_at: timestamp
 updated_at: timestamp
@@ -225,10 +225,10 @@ course_participants.course_id
 Geplant, aber erst nach Core-Flow (Kurs → Session → Signatur → PDF → FES).
 Kein Schema-Vorbau nötig — wird später eigenständig gebaut.
 
-### Monatsreport für Agency (`/agency/reports`)
+### Monatsreport für Bildungsträger (`/bildungstraeger/reports`)
 Pro-Coach-Statistik im Monat: aktive Kurse, bewilligte UE kumuliert, geleistete UE, Fortschritt in %. Rein Query-Arbeit auf bestehenden Tabellen (`courses` + `sessions` + `signatures`). Keine Schema-Änderung.
 
-### Rechnungswesen + Mahnwesen (`/agency/invoices`)
+### Rechnungswesen + Mahnwesen (`/bildungstraeger/invoices`)
 Nach Kursabschluss Rechnung erzeugen, per E-Mail versenden, automatische Erinnerung nach 14 Tagen wenn unbezahlt.
 - **Abrechnungsmodell:** pro-UE × Stundensatz (variabel pro AVGS-Maßnahme / Bedarfsträger) — **keine** Pauschale pro Kurs
 - Eigenes Domain-Schema später: `invoices`, `invoice_items`, `invoice_reminders`, evtl. `billing_addresses`

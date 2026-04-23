@@ -29,13 +29,17 @@ export type AuditAction =
   | "ber.submitted"
   | "ber.edited_after_submit";
 
-export type AuditActorType = "agency" | "coach" | "participant" | "system";
+export type AuditActorType =
+  | "bildungstraeger"
+  | "coach"
+  | "participant"
+  | "system";
 
 export type AuditEntry = {
   actorType: AuditActorType;
   /** users.id oder participants.id, je nach actorType. Null bei 'system'. */
   actorId: string | null;
-  /** Agency-User-ID, falls die Aktion unter Impersonation lief. */
+  /** Bildungsträger-User-ID, falls die Aktion unter Impersonation lief. */
   impersonatorId?: string | null;
   action: AuditAction;
   resourceType:

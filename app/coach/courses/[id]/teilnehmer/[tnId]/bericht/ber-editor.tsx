@@ -231,7 +231,7 @@ export function BerEditor({
 
   // 60-Sekunden-Buffer filtert Mikro-Autosaves direkt nach dem Submit raus
   // (z.B. wenn der Submit kurz nach einem Tipp kommt). Gleicher Wert wie
-  // auf der Agency-Seite — nicht auseinanderlaufen lassen.
+  // auf der Bildungsträger-Seite — nicht auseinanderlaufen lassen.
   const wasEditedAfterSubmit =
     status === "submitted" &&
     submittedAt !== null &&

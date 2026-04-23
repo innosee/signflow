@@ -56,7 +56,7 @@ export const auth = betterAuth({
     // Der Invite-Flow für Coaches läuft über `requestPasswordReset` — nach
     // Klick auf den Link hat der Coach seine Mailbox-Zugehörigkeit bewiesen
     // und ein Passwort gesetzt. Das ist unser Signal „Einladung angenommen",
-    // auf das die Agency-UI über `emailVerified` prüft.
+    // auf das die Bildungsträger-UI über `emailVerified` prüft.
     onPasswordReset: async ({ user }) => {
       await db
         .update(schema.users)
@@ -130,9 +130,9 @@ export const auth = betterAuth({
   plugins: [
     admin({
       defaultRole: "coach",
-      adminRoles: ["agency"],
+      adminRoles: ["bildungstraeger"],
       impersonationSessionDuration: 60 * 60, // 1h
-      roles: { agency: adminAc, coach: userAc },
+      roles: { bildungstraeger: adminAc, coach: userAc },
     }),
     nextCookies(),
   ],

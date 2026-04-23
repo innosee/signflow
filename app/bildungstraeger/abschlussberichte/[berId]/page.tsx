@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
-import { requireAgency } from "@/lib/dal";
+import { requireBildungstraeger } from "@/lib/dal";
 
 import { PrintButton } from "./print-toolbar";
 
@@ -14,8 +14,8 @@ type Props = {
   params: Promise<{ berId: string }>;
 };
 
-export default async function AgencyBerDetailPage({ params }: Props) {
-  await requireAgency();
+export default async function BildungstraegerBerDetailPage({ params }: Props) {
+  await requireBildungstraeger();
   const { berId } = await params;
 
   const [row] = await db
@@ -82,7 +82,7 @@ export default async function AgencyBerDetailPage({ params }: Props) {
       <div className="review-toolbar" data-print-hide>
         <div className="min-w-0">
           <Link
-            href={`/agency/courses/${course.id}/berichte`}
+            href={`/bildungstraeger/courses/${course.id}/berichte`}
             className="text-xs text-zinc-500 hover:text-zinc-900"
           >
             ← zurück zur Kurs-Übersicht

@@ -296,13 +296,13 @@ Datenverarbeitende Dienstleister, mit denen AVV vorliegen muss:
 - [ ] **DSB-Pflicht** für Signflow UG prüfen (bei regelmäßiger Art.-9-Verarbeitung wahrscheinlich)
 - [ ] **Storage-Anbieter** final: Cloudflare R2 vs. Vercel Blob (aktuell Vercel Blob, siehe TODO.md)
 - [ ] **Azure-Region** festlegen: Sweden Central (mehr OpenAI-Modelle) vs. Germany West Central (näher)
-- [ ] **Agency-Rolle umbenennen** auf „Bildungsträger" (siehe separate Memory)
+- [x] ~~Rolle umbenennen auf „Bildungsträger"~~ — **erledigt 2026-04-23**, Migration `apply-bildungstraeger-rename-migration.mjs` angewendet
 - [ ] **Scope-Entscheidung ANW vs. BER** (siehe § 12, Regelkatalog ist da)
 - [ ] **Input-Format** für Checker: nur Text-Paste, oder auch PDF-Upload?
 
 ---
 
-## 14. Update 2026-04-22: Persistierter BER-Workflow + Agency-Sicht
+## 14. Update 2026-04-22: Persistierter BER-Workflow + Bildungsträger-Sicht
 
 Der Checker ist kein Standalone-Tool mehr — er ist jetzt in den Kurs-Graph integriert. Coach schreibt BER je Teilnehmer, reicht ein, Bildungsträger sieht Fortschritt.
 
@@ -312,7 +312,7 @@ Der Checker ist kein Standalone-Tool mehr — er ist jetzt in den Kurs-Graph int
 - **BER-Editor-Route** `/coach/courses/[id]/teilnehmer/[tnId]/bericht` — Server-Actions `saveBerDraftAction` (Autosave) + `submitBerAction` (harter Gate: nur einreichen, wenn finale Prüfung pass)
 - **Coach-Kurs-Detail** zeigt je TN zwei Status-Badges: ANW (bestehend) + BER (neu)
 - **Coach-Dashboard `/coach/checker`** zeigt Cross-Course-Übersicht: „fehlen noch / Entwurf / eingereicht" mit Zähler + Listen
-- **Agency-Dashboard `/agency`** hat neue Sektion „Abschlussberichte — Fortschritt" pro Kurs (grün/gelb/grau + %-Angabe)
+- **Bildungsträger-Dashboard `/bildungstraeger`** hat neue Sektion „Abschlussberichte — Fortschritt" pro Kurs (grün/gelb/grau + %-Angabe)
 - **Audit-Events**: `ber.draft_saved`, `ber.submitted`, `ber.edited_after_submit`
 
 ### Edit-nach-Einreichung
@@ -341,7 +341,7 @@ Die Anonymisierungs-Pipeline (IONOS → Azure) bleibt für den Checker-Schritt e
 ### Noch offen
 
 - [ ] Email-Send an Bildungsträger-Postfach bei `submit` (Resend) — optional, Nutzerwunsch
-- [ ] Agency-Detail-View für einzelne BERs (lesen/read-only) — aktuell nur Aggregat-Fortschritt
+- [x] ~~Bildungsträger-Detail-View für einzelne BERs~~ — **erledigt 2026-04-23** (`/bildungstraeger/abschlussberichte/[berId]` + Drilldown-Liste, read-only + Print)
 - [ ] Metadaten-Form-Felder (AVGS-Maßnahme etc.) im BER-Export-Layout
 - [ ] Aufbewahrungsfrist für submitted BERs + automatische Löschung
 

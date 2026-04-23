@@ -2,7 +2,7 @@ const STEPS = [
   {
     num: "01",
     title: "Kurs + Teilnehmer:innen anlegen",
-    desc: "Agentur legt Kurse an, Coach ergänzt Teilnehmer:innen, Sessions laufend dokumentieren — Datum, UE, Themen, Modus.",
+    desc: "Bildungsträger legt Kurse an, Coach ergänzt Teilnehmer:innen, Sessions laufend dokumentieren — Datum, UE, Themen, Modus.",
   },
   {
     num: "02",

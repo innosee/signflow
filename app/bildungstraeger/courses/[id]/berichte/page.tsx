@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireAgency } from "@/lib/dal";
+import { requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +17,8 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
-export default async function AgencyCourseBerListPage({ params }: Props) {
-  await requireAgency();
+export default async function BildungstraegerCourseBerListPage({ params }: Props) {
+  await requireBildungstraeger();
   const { id: courseId } = await params;
 
   const [course] = await db
@@ -72,7 +72,7 @@ export default async function AgencyCourseBerListPage({ params }: Props) {
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-6">
       <div>
         <Link
-          href="/agency"
+          href="/bildungstraeger"
           className="text-xs text-zinc-500 hover:text-zinc-900"
         >
           ← zurück zum Dashboard
@@ -132,7 +132,7 @@ export default async function AgencyCourseBerListPage({ params }: Props) {
                   </div>
                   {isSubmitted && r.berId ? (
                     <Link
-                      href={`/agency/abschlussberichte/${r.berId}`}
+                      href={`/bildungstraeger/abschlussberichte/${r.berId}`}
                       className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800"
                     >
                       Bericht ansehen →

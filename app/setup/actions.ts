@@ -10,7 +10,7 @@ import { auth } from "@/lib/auth";
 
 export type SetupFormState = { error?: string } | undefined;
 
-export async function bootstrapAgency(
+export async function bootstrapBildungstraeger(
   _prev: SetupFormState,
   formData: FormData,
 ): Promise<SetupFormState> {
@@ -30,7 +30,7 @@ export async function bootstrapAgency(
   const passwordHash = await hashPassword(password);
 
   // Existence-Check UND beide Inserts in einer Transaktion —
-  // verhindert TOCTOU-Race (zwei parallele Requests erstellen je eine Agency)
+  // verhindert TOCTOU-Race (zwei parallele Requests erstellen je eine Bildungsträger)
   // und orphan-User (users eingefügt, authAccount-Insert scheitert).
   let userId: string | null = null;
   try {
@@ -38,15 +38,15 @@ export async function bootstrapAgency(
       const existing = await tx
         .select({ id: schema.users.id })
         .from(schema.users)
-        .where(eq(schema.users.role, "agency"))
+        .where(eq(schema.users.role, "bildungstraeger"))
         .limit(1);
       if (existing.length > 0) {
-        throw new Error("AGENCY_EXISTS");
+        throw new Error("BILDUNGSTRAEGER_EXISTS");
       }
 
       const [user] = await tx
         .insert(schema.users)
-        .values({ email, name, role: "agency", emailVerified: true })
+        .values({ email, name, role: "bildungstraeger", emailVerified: true })
         .returning();
       if (!user) throw new Error("USER_INSERT_FAILED");
 
@@ -61,8 +61,8 @@ export async function bootstrapAgency(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (message === "AGENCY_EXISTS") {
-      return { error: "Es existiert bereits ein Agency-Account." };
+    if (message === "BILDUNGSTRAEGER_EXISTS") {
+      return { error: "Es existiert bereits ein Bildungsträger-Account." };
     }
     return { error: "Benutzer konnte nicht erstellt werden." };
   }
@@ -80,5 +80,5 @@ export async function bootstrapAgency(
     redirect("/login");
   }
 
-  redirect("/agency");
+  redirect("/bildungstraeger");
 }

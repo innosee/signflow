@@ -16,7 +16,13 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const userRole = pgEnum("user_role", ["agency", "coach"]);
+/**
+ * Rollen: `bildungstraeger` = oberste Ebene (Firma, die Coaches beschäftigt
+ * und an die AfA übermittelt), `coach` = Einzel-Coach im Kurs. Enum-Wert
+ * wurde 2026-04-23 von `agency` umbenannt, siehe Migration
+ * `apply-bildungstraeger-rename-migration.mjs`.
+ */
+export const userRole = pgEnum("user_role", ["bildungstraeger", "coach"]);
 export const courseStatus = pgEnum("course_status", [
   "active",
   "completed",
@@ -40,7 +46,7 @@ export const afaSubmissionStatus = pgEnum("afa_submission_status", [
 ]);
 /** Wer hat eine Aktion ausgelöst? Participants haben keinen `users`-Row. */
 export const auditActorType = pgEnum("audit_actor_type", [
-  "agency",
+  "bildungstraeger",
   "coach",
   "participant",
   "system",
@@ -390,8 +396,8 @@ export const finalDocuments = pgTable("final_documents", {
   firmaEnvelopeId: text("firma_envelope_id"),
   fesStatus: fesStatus("fes_status").notNull().default("pending"),
   /**
-   * AfA-Übermittlung ist Firma/Agency-Aufgabe — separat vom FES-Seal.
-   * `submittedBy` referenziert den Agency-User, der die Übermittlung
+   * AfA-Übermittlung ist Firma/Bildungsträger-Aufgabe — separat vom FES-Seal.
+   * `submittedBy` referenziert den Bildungsträger-User, der die Übermittlung
    * ausgelöst hat. Wird später mit dem Rechnungsflow gekoppelt.
    */
   afaStatus: afaSubmissionStatus("afa_status").notNull().default("pending"),
@@ -446,7 +452,7 @@ export const participantApprovals = pgTable(
  * AfA-Übermittlung.
  *
  * `actor_id` ist polymorph (users.id ODER participants.id) und bewusst
- * OHNE Foreign Key — sonst könnten wir weder Agency- noch Participant-
+ * OHNE Foreign Key — sonst könnten wir weder Bildungsträger- noch Participant-
  * Zeilen schreiben, und soft-gelöschte User würden Audit-Einträge
  * ungültig machen. `actor_type` disambiguiert.
  *
@@ -461,7 +467,7 @@ export const auditLog = pgTable(
     /** users.id oder participants.id, je nach actor_type. Null bei actor_type='system'. */
     actorId: uuid("actor_id"),
     /**
-     * Falls die Aktion unter Impersonation lief: die Agency-User-ID, die
+     * Falls die Aktion unter Impersonation lief: die Bildungsträger-User-ID, die
      * den Coach gerade "fährt". Muss in jeder Write-Aktion miterfasst
      * werden (siehe CLAUDE.md → Impersonation).
      */
@@ -498,7 +504,7 @@ export const auditLog = pgTable(
 
 /**
  * TN-bezogener Abschlussbericht (BER). Ein BER gehört genau einem Teilnehmer in einem Kurs —
- * Unique-Index verhindert Duplikate. Nur Coach-der-Kurs darf schreiben/lesen, Agency hat
+ * Unique-Index verhindert Duplikate. Nur Coach-der-Kurs darf schreiben/lesen, Bildungsträger hat
  * Read-Access für Überblick.
  *
  * DSGVO-Hintergrund: Inhalte hier dürfen **per Design** keine Art.-9-Daten enthalten —

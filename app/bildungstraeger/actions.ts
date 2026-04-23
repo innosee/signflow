@@ -10,7 +10,7 @@ import { APIError } from "better-auth/api";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
-import { requireAgency, isImpersonating, getCurrentSession } from "@/lib/dal";
+import { requireBildungstraeger, isImpersonating, getCurrentSession } from "@/lib/dal";
 
 export type InviteFormState =
   | { error?: string; success?: string }
@@ -20,7 +20,7 @@ export async function inviteCoach(
   _prev: InviteFormState,
   formData: FormData,
 ): Promise<InviteFormState> {
-  await requireAgency();
+  await requireBildungstraeger();
 
   const email = String(formData.get("email") ?? "")
     .trim()
@@ -66,7 +66,7 @@ export async function inviteCoach(
         .where(eq(schema.users.id, createdUserId))
         .catch(() => {
           // Cleanup best-effort — in der Fehlermeldung steht, dass die
-          // Agency sich ggf. manuell kümmern muss.
+          // Bildungsträger sich ggf. manuell kümmern muss.
         });
     }
     if (err instanceof APIError) {
@@ -80,14 +80,14 @@ export async function inviteCoach(
   return { success: `Einladung an ${email} versendet.` };
 }
 
-function backToAgencyWithError(code: string): never {
-  redirect(`/agency?imp_error=${encodeURIComponent(code)}`);
+function backToBildungstraegerWithError(code: string): never {
+  redirect(`/bildungstraeger?imp_error=${encodeURIComponent(code)}`);
 }
 
 export async function impersonateCoach(formData: FormData): Promise<void> {
-  await requireAgency();
+  await requireBildungstraeger();
   const userId = String(formData.get("userId") ?? "");
-  if (!userId) backToAgencyWithError("invalid");
+  if (!userId) backToBildungstraegerWithError("invalid");
 
   const [target] = await db
     .select({
@@ -104,8 +104,8 @@ export async function impersonateCoach(formData: FormData): Promise<void> {
     )
     .limit(1);
 
-  if (!target) backToAgencyWithError("unknown");
-  if (target.banned) backToAgencyWithError("banned");
+  if (!target) backToBildungstraegerWithError("unknown");
+  if (target.banned) backToBildungstraegerWithError("banned");
 
   try {
     await auth.api.impersonateUser({
@@ -115,7 +115,7 @@ export async function impersonateCoach(formData: FormData): Promise<void> {
   } catch (err) {
     // redirect() wirft intern NEXT_REDIRECT — nicht abfangen
     if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) throw err;
-    if (err instanceof APIError) backToAgencyWithError("api");
+    if (err instanceof APIError) backToBildungstraegerWithError("api");
     throw err;
   }
   redirect("/coach");
@@ -126,7 +126,7 @@ export async function stopImpersonating(): Promise<void> {
   if (!session || !isImpersonating(session)) return;
 
   await auth.api.stopImpersonating({ headers: await headers() });
-  redirect("/agency");
+  redirect("/bildungstraeger");
 }
 
 export type SubmitAfaState =
@@ -134,12 +134,12 @@ export type SubmitAfaState =
   | undefined;
 
 /**
- * Firma/Agency markiert den (bereits vom Coach gesiegelten) Stundennachweis
+ * Firma/Bildungsträger markiert den (bereits vom Coach gesiegelten) Stundennachweis
  * als an die AfA übermittelt. Aktuell rein dokumentarisch — die tatsächliche
  * Übermittlung (E-Mail-Anhang an den Bedarfsträger, Portal-Upload, o.ä.)
  * bleibt manueller Prozess, bis der Rechnungs-Flow in Phase 2 das koppelt.
  *
- * Nur `role=agency` darf das sehen/auslösen — Coaches haben auf AfA-
+ * Nur `role=bildungstraeger` darf das sehen/auslösen — Coaches haben auf AfA-
  * Übermittlung keinen Zugriff. Während Impersonation hart blockiert, weil
  * AfA-Übermittlung eine Firmen-Aktion ist und nicht unter Coach-Identität
  * laufen darf.
@@ -148,11 +148,11 @@ export async function submitCourseToAfa(
   _prev: SubmitAfaState,
   formData: FormData,
 ): Promise<SubmitAfaState> {
-  const session = await requireAgency();
+  const session = await requireBildungstraeger();
   if (isImpersonating(session)) {
     return { error: "Während Impersonation nicht möglich." };
   }
-  const agencyUserId = session.user.id;
+  const bildungstraegerUserId = session.user.id;
 
   const courseId = String(formData.get("courseId") ?? "").trim();
   if (!courseId) return { error: "Kurs fehlt." };
@@ -185,7 +185,7 @@ export async function submitCourseToAfa(
       .set({
         afaStatus: "submitted",
         submittedToAfaAt: now,
-        submittedBy: agencyUserId,
+        submittedBy: bildungstraegerUserId,
       })
       .where(
         and(
@@ -199,8 +199,8 @@ export async function submitCourseToAfa(
 
     await logAudit(
       {
-        actorType: "agency",
-        actorId: agencyUserId,
+        actorType: "bildungstraeger",
+        actorId: bildungstraegerUserId,
         action: "course.submit_afa",
         resourceType: "course",
         resourceId: courseId,
@@ -214,6 +214,6 @@ export async function submitCourseToAfa(
     return { error: "Kurs wurde zwischenzeitlich bereits übermittelt." };
   }
 
-  revalidatePath("/agency/submissions");
+  revalidatePath("/bildungstraeger/submissions");
   return { submitted: true };
 }

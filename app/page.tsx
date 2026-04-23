@@ -24,10 +24,10 @@ export default async function Home() {
   // ist nur für Anonyme. Bootstrap-Redirect auf /setup (aus der vorherigen
   // Single-Tenant-Logik) entfällt, damit die öffentliche Startseite
   // erreichbar bleibt. Setup-Route ist manuell aufrufbar, bis der
-  // Multi-Tenant-Agency-Signup die Bootstrap-Story sauber ablöst.
+  // Multi-Tenant-Bildungsträger-Signup die Bootstrap-Story sauber ablöst.
   const session = await getCurrentSession();
   if (session) {
-    redirect(session.user.role === "agency" ? "/agency" : "/coach");
+    redirect(session.user.role === "bildungstraeger" ? "/bildungstraeger" : "/coach");
   }
 
   return (
