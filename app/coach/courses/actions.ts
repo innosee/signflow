@@ -85,7 +85,7 @@ export async function createCourse(
   }
 
   // Bedarfsträger-Existenz serverseitig validieren — Client könnte die Option
-  // mit dem DevTools manipulieren oder der Agency-User hat den Datensatz
+  // mit dem DevTools manipulieren oder der Bildungsträger-User hat den Datensatz
   // inzwischen soft-gelöscht.
   const [bt] = await db
     .select({ id: schema.bedarfstraeger.id })

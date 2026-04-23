@@ -2,11 +2,11 @@
 
 import { useActionState } from "react";
 
-import { bootstrapAgency, type SetupFormState } from "./actions";
+import { bootstrapBildungstraeger, type SetupFormState } from "./actions";
 
 export function SetupForm() {
   const [state, action, pending] = useActionState<SetupFormState, FormData>(
-    bootstrapAgency,
+    bootstrapBildungstraeger,
     undefined,
   );
 
@@ -32,7 +32,7 @@ export function SetupForm() {
         disabled={pending}
         className="w-full rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
       >
-        {pending ? "Wird angelegt…" : "Agency-Account anlegen"}
+        {pending ? "Wird angelegt…" : "Bildungsträger-Account anlegen"}
       </button>
     </form>
   );

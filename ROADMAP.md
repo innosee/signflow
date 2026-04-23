@@ -10,7 +10,7 @@ Strategische Statusübersicht über die gesamte Software. Komplementär zu [TODO
 
 ### Signature-Tool (Stundennachweis-Flow)
 
-- [x] Auth via Better Auth (Coach-Invite, Passwort-Reset, Agency-Impersonation mit Write-Block)
+- [x] Auth via Better Auth (Coach-Invite, Passwort-Reset, Bildungsträger-Impersonation mit Write-Block)
 - [x] Kurs-Anlage mit AVGS-Nr., Bedarfsträger, UE-Kontingent, Durchführungsort
 - [x] Teilnehmer einschreiben
 - [x] Sessions + Erstgespräch-Sonderlogik
@@ -33,7 +33,7 @@ Strategische Statusübersicht über die gesamte Software. Komplementär zu [TODO
 - [x] DB-Persistenz (`abschlussberichte`-Tabelle, 1:1 pro Kurs × TN)
 - [x] BER-Editor je Teilnehmer (scoped, Autosave, Submit-Gate)
 - [x] Cross-Course Coach-Dashboard
-- [x] Agency-BER-Fortschritts-Sektion (aggregiert pro Kurs)
+- [x] Bildungsträger-BER-Fortschritts-Sektion (aggregiert pro Kurs)
 - [x] Audit-Events für BER-Submit/Edit
 - [x] Regelkatalog als Markdown-Referenz, System-Prompt fürs spätere Azure-Wiring
 
@@ -101,7 +101,7 @@ Strategische Statusübersicht über die gesamte Software. Komplementär zu [TODO
 ## 🟢 Checker-Loose-Ends (nice-to-have, keine Blocker)
 
 - [ ] E-Mail-Send an Bildungsträger-Postfach bei BER-Submit (Resend-Integration)
-- [x] Agency-Detail-View für einzelne BERs (read-only, mit Print-Option) — **erledigt 2026-04-23**
+- [x] Bildungsträger-Detail-View für einzelne BERs (read-only, mit Print-Option) — **erledigt 2026-04-23**
 - [ ] Metadaten-Form-Felder im BER-Export-Layout (AVGS-Maßnahme, TN-Name, Zeitraum — aktuell leer-Cells, Coach füllt per Hand)
 - [ ] Aufbewahrungsfrist-Automatik + Auto-Delete nach X Jahren für submitted BERs
 
@@ -109,7 +109,7 @@ Strategische Statusübersicht über die gesamte Software. Komplementär zu [TODO
 
 ## ⚪ Tech-Debt
 
-- [ ] `agency`-Rolle umbenennen auf `bildungsträger` (Enum-Migration, Routen, Impersonation) — kein Zeitdruck
+- [x] `agency`-Rolle umbenannt auf `bildungstraeger` — **erledigt 2026-04-23** (Enum-Migration, Routen, Code-Refs, UI-Strings)
 - [ ] Auto-Notify nach Coach-Sign debouncen (aktuell 1 Mail pro Sign, Batch-Signing erzeugt mehrere in Folge)
 - [ ] Coach-Print-Toolbar-CSS nach `globals.css` extrahieren
 
@@ -117,7 +117,7 @@ Strategische Statusübersicht über die gesamte Software. Komplementär zu [TODO
 
 ## 📦 Phase 2 (bewusst deferred, nicht im MVP)
 
-- [ ] **Agency-Monatsreport** (`/agency/reports`) — pro-Coach kumulierte UE, Fortschritt vs. Bewilligung
+- [ ] **Bildungsträger-Monatsreport** (`/bildungstraeger/reports`) — pro-Coach kumulierte UE, Fortschritt vs. Bewilligung
 - [ ] **Rechnungswesen + Mahnwesen** — Rechnung pro abgeschlossenem Kurs (UE × variabler Stundensatz), 14-Tage-Reminder, eigenes Schema
 - [ ] **Kurs-Modell-Redesign** — Kurse als Maßnahme-Templates + TN-Bibliothek (wartet auf 1:1-vs-Gruppen-Entscheidung)
 

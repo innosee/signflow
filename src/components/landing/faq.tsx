@@ -7,7 +7,7 @@ type Q = { q: string; a: string };
 const COACH_FAQ: Q[] = [
   {
     q: "Muss ich mir einen Account anlegen?",
-    a: "Nein — dein Arbeitgeber (die Weiterbildungsträger-Agentur) lädt dich per E-Mail ein. Du klickst den Link, setzt dein Passwort und legst einmalig deine Unterschrift im Browser-Canvas an. Danach brauchst du sie pro Session nur noch mit einem Klick zu bestätigen.",
+    a: "Nein — dein Arbeitgeber (der Bildungsträger) lädt dich per E-Mail ein. Du klickst den Link, setzt dein Passwort und legst einmalig deine Unterschrift im Browser-Canvas an. Danach brauchst du sie pro Session nur noch mit einem Klick zu bestätigen.",
   },
   {
     q: "Brauche ich ein Tablet oder einen Stift?",
@@ -42,11 +42,11 @@ const AGENCY_FAQ: Q[] = [
   },
   {
     q: "Wie übernimmt Signflow die Daten-Isolation zwischen Coaches?",
-    a: "Jeder Coach sieht nur seine eigenen Kurse — Data-Isolation auf DB-Query-Ebene via `coach_id`-Filter, nicht nur UI-seitig. Agentur-Admins können über Impersonation in die Coach-Sicht wechseln, schreibende Aktionen (Signaturen!) sind während Impersonation hart gesperrt, damit Beweiskraft der Unterschrift nicht kippt.",
+    a: "Jeder Coach sieht nur seine eigenen Kurse — Data-Isolation auf DB-Query-Ebene via `coach_id`-Filter, nicht nur UI-seitig. Bildungsträger-Admins können über Impersonation in die Coach-Sicht wechseln, schreibende Aktionen (Signaturen!) sind während Impersonation hart gesperrt, damit Beweiskraft der Unterschrift nicht kippt.",
   },
   {
     q: "Wie laufen Onboarding und Rollout?",
-    a: "Agentur-Admin registriert sich, wird via E-Mail verifiziert, und legt im Dashboard beliebig viele Coaches + Bedarfsträger (Jobcenter/Arbeitsagentur) an. Coaches bekommen einen Invite-Link, richten Passwort + Unterschrift ein — Time-to-First-Nachweis typisch unter 15 Minuten.",
+    a: "Bildungsträger-Admin registriert sich, wird via E-Mail verifiziert, und legt im Dashboard beliebig viele Coaches + Bedarfsträger (Jobcenter/Arbeitsagentur) an. Coaches bekommen einen Invite-Link, richten Passwort + Unterschrift ein — Time-to-First-Nachweis typisch unter 15 Minuten.",
   },
   {
     q: "Was kostet es und wie wird abgerechnet?",
@@ -58,12 +58,12 @@ const AGENCY_FAQ: Q[] = [
   },
   {
     q: "Was, wenn ein Coach ausscheidet?",
-    a: "Agentur-Admin kann den Coach deaktivieren (Soft-Delete). Session + Unterschriftenhistorie bleiben für die Audit-Anforderung erhalten, der Coach verliert sofort Zugriff. Eine erneute Einladung derselben E-Mail ist später problemlos möglich.",
+    a: "Bildungsträger-Admin kann den Coach deaktivieren (Soft-Delete). Session + Unterschriftenhistorie bleiben für die Audit-Anforderung erhalten, der Coach verliert sofort Zugriff. Eine erneute Einladung derselben E-Mail ist später problemlos möglich.",
   },
 ];
 
 export function LandingFaq() {
-  const [tab, setTab] = useState<"coach" | "agency">("agency");
+  const [tab, setTab] = useState<"coach" | "bildungstraeger">("bildungstraeger");
   const list = tab === "coach" ? COACH_FAQ : AGENCY_FAQ;
 
   return (
@@ -84,9 +84,9 @@ export function LandingFaq() {
           className="mb-6 inline-flex rounded-lg border border-zinc-300 bg-white p-1"
         >
           <TabButton
-            active={tab === "agency"}
-            onClick={() => setTab("agency")}
-            id="faq-tab-agency"
+            active={tab === "bildungstraeger"}
+            onClick={() => setTab("bildungstraeger")}
+            id="faq-tab-bildungstraeger"
           >
             Für Entscheider:innen
           </TabButton>

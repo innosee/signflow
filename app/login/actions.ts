@@ -27,8 +27,8 @@ export async function loginAction(
       headers: await headers(),
     });
 
-    const role = result.user?.role === "agency" ? "agency" : "coach";
-    redirect(role === "agency" ? "/agency" : "/coach");
+    const role = result.user?.role === "bildungstraeger" ? "bildungstraeger" : "coach";
+    redirect(role === "bildungstraeger" ? "/bildungstraeger" : "/coach");
   } catch (err) {
     if (err instanceof APIError) {
       return { error: "E-Mail oder Passwort ist falsch." };

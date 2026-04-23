@@ -2,15 +2,15 @@ import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireAgency } from "@/lib/dal";
+import { requireBildungstraeger } from "@/lib/dal";
 
 import { SubmitAfaButton } from "./submit-button";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Firma-/Agency-Ansicht über alle gesiegelten Stundennachweise. Nur
- * `role=agency` hat Zugriff (requireAgency redirect). Coaches sehen diese
+ * Firma-/Bildungsträger-Ansicht über alle gesiegelten Stundennachweise. Nur
+ * `role=bildungstraeger` hat Zugriff (requireBildungstraeger redirect). Coaches sehen diese
  * Seite nicht und können die AfA-Übermittlung nicht auslösen — siehe
  * CLAUDE.md → FES / AfA-Übermittlung (Firma-seitig, nicht Coach-seitig).
  *
@@ -18,8 +18,8 @@ export const dynamic = "force-dynamic";
  * ODER noch in 'pending'). Unsubmitted = oben, damit der Arbeitsstapel
  * sichtbar ist.
  */
-export default async function AgencySubmissionsPage() {
-  await requireAgency();
+export default async function BildungstraegerSubmissionsPage() {
+  await requireBildungstraeger();
 
   const rows = await db
     .select({
@@ -65,7 +65,7 @@ export default async function AgencySubmissionsPage() {
           </p>
         </div>
         <Link
-          href="/agency"
+          href="/bildungstraeger"
           className="text-sm text-zinc-600 underline-offset-2 hover:underline"
         >
           ← zurück

@@ -1,11 +1,11 @@
-import { requireAgency } from "@/lib/dal";
+import { requireBildungstraeger } from "@/lib/dal";
 
 import { BedarfstraegerForm } from "./form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewBedarfstraegerPage() {
-  await requireAgency();
+  await requireBildungstraeger();
 
   return (
     <div className="mx-auto w-full max-w-xl px-6 py-10 space-y-6">

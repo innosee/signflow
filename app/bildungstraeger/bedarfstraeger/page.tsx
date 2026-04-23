@@ -2,7 +2,7 @@ import Link from "next/link";
 import { asc, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireAgency } from "@/lib/dal";
+import { requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ const TYPE_LABEL = {
 } as const;
 
 export default async function BedarfstraegerListPage() {
-  await requireAgency();
+  await requireBildungstraeger();
 
   const rows = await db
     .select({
@@ -40,7 +40,7 @@ export default async function BedarfstraegerListPage() {
           </p>
         </div>
         <Link
-          href="/agency/bedarfstraeger/new"
+          href="/bildungstraeger/bedarfstraeger/new"
           className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
         >
           + Neuer Bedarfsträger

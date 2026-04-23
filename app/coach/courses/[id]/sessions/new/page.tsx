@@ -14,7 +14,7 @@ type Props = {
 
 export default async function NewSessionPage({ params }: Props) {
   const session = await requireCoach();
-  // Session-Anlage ist ein schreibender Vorgang → Agency darf das während
+  // Session-Anlage ist ein schreibender Vorgang → Bildungsträger darf das während
   // Impersonation nicht auslösen (siehe CLAUDE.md → Auth & Berechtigungen).
   assertNotImpersonating(session);
 

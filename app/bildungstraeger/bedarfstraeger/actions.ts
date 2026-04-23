@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { db, schema } from "@/db";
-import { assertNotImpersonating, requireAgency } from "@/lib/dal";
+import { assertNotImpersonating, requireBildungstraeger } from "@/lib/dal";
 
 export type BedarfstraegerFormState = { error?: string } | undefined;
 
@@ -15,7 +15,7 @@ export async function createBedarfstraeger(
   _prev: BedarfstraegerFormState,
   formData: FormData,
 ): Promise<BedarfstraegerFormState> {
-  const session = await requireAgency();
+  const session = await requireBildungstraeger();
   assertNotImpersonating(session);
 
   const name = String(formData.get("name") ?? "").trim();
@@ -48,5 +48,5 @@ export async function createBedarfstraeger(
     return { error: "Konnte nicht angelegt werden. Bitte erneut versuchen." };
   }
 
-  redirect("/agency/bedarfstraeger");
+  redirect("/bildungstraeger/bedarfstraeger");
 }

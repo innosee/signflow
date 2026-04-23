@@ -440,7 +440,7 @@ export type SealState = { error?: string; sealed?: boolean } | undefined;
  *
  * Speichert anschließend einen `final_documents`-Datensatz mit Envelope-ID
  * und setzt `fesStatus = 'completed'`. `afaStatus` bleibt `pending` — die
- * AfA-Übermittlung ist eine separate Aktion der Firma/Agency.
+ * AfA-Übermittlung ist eine separate Aktion der Firma/Bildungsträger.
  *
  * Der PDF-URL zeigt für den Mock aktuell auf den bestehenden Per-TN-PDF-
  * Endpoint des ersten Teilnehmers, damit der "Download"-Link im Coach-UI

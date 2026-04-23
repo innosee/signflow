@@ -24,9 +24,9 @@ function looksLikeEmail(v: string): boolean {
 
 /**
  * Leitet einen Warteliste-Eintrag per E-Mail an info@innosee.de weiter.
- * Kein DB-Schema für Waitlist (vorerst) — bis die Agency-Self-Signup-
+ * Kein DB-Schema für Waitlist (vorerst) — bis die Bildungsträger-Self-Signup-
  * Phase kommt, reicht ein simpler Inbox-Drop; danach können wir das
- * Formular direkt in die Agency-Anlage mit E-Mail-Verifikation
+ * Formular direkt in die Bildungsträger-Anlage mit E-Mail-Verifikation
  * umwandeln.
  */
 export async function submitWaitlist(

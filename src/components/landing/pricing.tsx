@@ -23,7 +23,7 @@ const TIERS = [
     perCoach: "ab 1,99 € pro Coach",
     features: [
       "Alles aus Starter",
-      "Agency-Dashboard + Impersonation",
+      "Bildungsträger-Dashboard + Impersonation",
       "Priority-Support per E-Mail",
       "Monatsreports (Phase 2)",
       "Rechnungswesen-Vorbereitung",
@@ -31,7 +31,7 @@ const TIERS = [
     highlighted: true,
   },
   {
-    name: "Agency",
+    name: "Bildungsträger",
     price: "399 €",
     priceSuffix: "/ Monat",
     limit: "bis 200 Coaches",

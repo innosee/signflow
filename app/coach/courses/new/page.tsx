@@ -32,9 +32,9 @@ export default async function NewCoursePage() {
 
       {bedarfstraeger.length === 0 ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
-          Deine Agentur hat noch keine Bedarfsträger hinterlegt. Bitte wende
-          dich an die Agentur — erst wenn mindestens ein Bedarfsträger
-          existiert, kannst du einen Kurs anlegen.
+          Dein Bildungsträger hat noch keine Bedarfsträger hinterlegt. Bitte
+          wende dich an den Bildungsträger — erst wenn mindestens ein
+          Bedarfsträger existiert, kannst du einen Kurs anlegen.
         </div>
       ) : (
         <CourseForm bedarfstraeger={bedarfstraeger} />

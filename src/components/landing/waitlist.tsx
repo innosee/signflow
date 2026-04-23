@@ -75,7 +75,7 @@ export function LandingWaitlist() {
               />
               <Field
                 name="company"
-                label="Firma / Agentur"
+                label="Firma / Bildungsträger"
                 required
                 autoComplete="organization"
               />

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireAgency } from "@/lib/dal";
+import { requireBildungstraeger } from "@/lib/dal";
 
 import { impersonateCoach } from "./actions";
 import { InviteCoachForm } from "./invite-form";
@@ -26,8 +26,8 @@ const COURSE_STATUS_LABEL: Record<string, string> = {
   archived: "archiviert",
 };
 
-export default async function AgencyDashboard({ searchParams }: Props) {
-  await requireAgency();
+export default async function BildungstraegerDashboard({ searchParams }: Props) {
+  await requireBildungstraeger();
   const { imp_error } = await searchParams;
   const impErrorMsg = imp_error ? IMP_ERRORS[imp_error] : undefined;
 
@@ -105,7 +105,7 @@ export default async function AgencyDashboard({ searchParams }: Props) {
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-10">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">
-          Agency Dashboard
+          Bildungsträger Dashboard
         </h1>
       </header>
 
@@ -131,7 +131,7 @@ export default async function AgencyDashboard({ searchParams }: Props) {
             </p>
           </div>
           <Link
-            href="/agency/submissions"
+            href="/bildungstraeger/submissions"
             className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
           >
             Öffnen
@@ -199,7 +199,7 @@ export default async function AgencyDashboard({ searchParams }: Props) {
                     </span>
                   </div>
                   <Link
-                    href={`/agency/courses/${row.courseId}/berichte`}
+                    href={`/bildungstraeger/courses/${row.courseId}/berichte`}
                     className="text-xs text-zinc-700 underline-offset-2 hover:underline"
                   >
                     Berichte ansehen →

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   const session = await getCurrentSession();
   if (session) {
-    redirect(session.user.role === "agency" ? "/agency" : "/coach");
+    redirect(session.user.role === "bildungstraeger" ? "/bildungstraeger" : "/coach");
   }
 
   return (
@@ -18,7 +18,7 @@ export default async function LoginPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Anmelden</h1>
           <p className="mt-2 text-sm text-zinc-600">
-            Agency und Coaches melden sich hier mit E-Mail und Passwort an.
+            Bildungsträger und Coaches melden sich hier mit E-Mail und Passwort an.
             Teilnehmer erhalten einen Link per E-Mail.
           </p>
         </div>

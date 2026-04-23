@@ -1,7 +1,7 @@
 import { AppHeader } from "@/components/app-header";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
-import { stopImpersonating } from "../agency/actions";
+import { stopImpersonating } from "../bildungstraeger/actions";
 import { logoutAction } from "../login/actions";
 
 export const dynamic = "force-dynamic";

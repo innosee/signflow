@@ -25,9 +25,9 @@ export async function requireSession() {
   return session;
 }
 
-export async function requireAgency() {
+export async function requireBildungstraeger() {
   const session = await requireSession();
-  if (session.user.role !== "agency") redirect("/");
+  if (session.user.role !== "bildungstraeger") redirect("/");
   return session;
 }
 
@@ -44,8 +44,8 @@ export function isImpersonating(session: SessionData): boolean {
 /**
  * Schreibende Aktionen — insbesondere Signaturen — sind während Impersonation
  * hart blockiert, sonst wäre die rechtliche Beweiskraft der digitalen
- * Unterschrift kaputt (Coach könnte behaupten, Agency habe in seinem Namen
- * signiert). Siehe CLAUDE.md → Auth & Berechtigungen.
+ * Unterschrift kaputt (Coach könnte behaupten, Bildungsträger habe in seinem
+ * Namen signiert). Siehe CLAUDE.md → Auth & Berechtigungen.
  */
 export function assertNotImpersonating(session: SessionData): void {
   if (isImpersonating(session)) {
