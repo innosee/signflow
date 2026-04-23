@@ -93,7 +93,6 @@ export default async function BerEditorPage({ params }: Props) {
         coachName={session.user.name}
         participantName={row.participant.name}
         kundenNr={row.participant.kundenNr}
-        courseTitle={row.course.title}
         avgsNummer={row.course.avgsNummer}
         zeitraum={`${row.course.startDate} – ${row.course.endDate}`}
         gesamtzahlUe={String(row.course.anzahlBewilligteUe)}

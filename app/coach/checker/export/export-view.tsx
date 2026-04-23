@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { BerDocument } from "@/components/checker/ber-document";
-import type { CheckerInput } from "@/lib/checker/types";
+import { isCheckerInput, type CheckerInput } from "@/lib/checker/types";
 
 const STORAGE_KEY = "signflow:checker-export";
 
@@ -16,7 +16,10 @@ export function ExportView({ coachName }: { coachName: string }) {
     let parsed: CheckerInput | null = null;
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw) parsed = JSON.parse(raw) as CheckerInput;
+      if (raw) {
+        const maybe: unknown = JSON.parse(raw);
+        if (isCheckerInput(maybe)) parsed = maybe;
+      }
     } catch {
       // corrupted / missing — show fallback
     }

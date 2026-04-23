@@ -93,31 +93,53 @@ export async function saveBerDraftAction(
 
   const wasSubmittedBefore = existing?.status === "submitted";
 
+  let berId: string;
   if (existing) {
     await db
       .update(schema.abschlussberichte)
       .set({ teilnahme, ablauf, fazit })
       .where(eq(schema.abschlussberichte.id, existing.id));
+    berId = existing.id;
   } else {
-    await db.insert(schema.abschlussberichte).values({
-      courseId,
-      participantId,
-      coachId,
-      teilnahme,
-      ablauf,
-      fazit,
-    });
+    const [created] = await db
+      .insert(schema.abschlussberichte)
+      .values({
+        courseId,
+        participantId,
+        coachId,
+        teilnahme,
+        ablauf,
+        fazit,
+      })
+      .returning({ id: schema.abschlussberichte.id });
+    berId = created.id;
   }
 
+  // Audit-Logging:
+  // - Erste Draft-Anlage: ein Event (`ber.draft_saved`). Autosaves danach loggen bewusst nicht,
+  //   weil sonst bei Debounce von ~1 s der Log mit jedem Tipp-Event überfluten würde.
+  // - Edit nach Submit: jede Änderung wird als `ber.edited_after_submit` geloggt, damit die
+  //   Nachvollziehbarkeit der Bildungsträger-Sicht sauber bleibt.
+  const { ip, ua } = await currentRequestMeta();
   if (wasSubmittedBefore) {
-    const { ip, ua } = await currentRequestMeta();
     await logAudit({
       actorType: "coach",
       actorId: coachId,
       action: "ber.edited_after_submit",
       resourceType: "abschlussbericht",
-      resourceId: existing.id,
+      resourceId: berId,
       metadata: { courseId, participantId },
+      ipAddress: ip,
+      userAgent: ua,
+    });
+  } else if (!existing) {
+    await logAudit({
+      actorType: "coach",
+      actorId: coachId,
+      action: "ber.draft_saved",
+      resourceType: "abschlussbericht",
+      resourceId: berId,
+      metadata: { courseId, participantId, firstDraft: true },
       ipAddress: ip,
       userAgent: ua,
     });
@@ -130,10 +152,16 @@ export async function saveBerDraftAction(
 }
 
 /**
- * Finale Einreichung an den Bildungsträger. Setzt Status auf "submitted",
- * setzt `last_check_passed` (vom Client gemeldet — bewusst Trust-the-Client:
- * die Dummy-Validierung läuft ohnehin client-seitig; das echte KI-Gate kommt
- * später serverseitig und ersetzt diesen Pfad).
+ * Finale Einreichung an den Bildungsträger.
+ *
+ * ⚠️ TODO (vor Production): `lastCheckPassed` kommt aktuell aus dem FormData
+ * — also vom Client. Das ist bewusst so gelöst, weil die Validierung im
+ * MVP-Stand client-seitig (Regex-Dummy) läuft und es keine zweite Quelle
+ * gäbe, die der Server prüfen könnte. **Sobald das IONOS-/Azure-Wiring
+ * steht, muss dieser Pfad auf serverseitige Re-Validierung umgestellt
+ * werden** — die Azure-Response ist dann der autoritative Pass/Fail-Wert.
+ * Bis dahin bleibt Submit effektiv optional-gesichert; ein bewusst
+ * manipulierter Client kann submitten. Im Audit-Log ist das nachvollziehbar.
  */
 export async function submitBerAction(
   _prev: BerActionState,

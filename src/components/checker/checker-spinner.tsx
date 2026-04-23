@@ -3,13 +3,12 @@ export function CheckerSpinner({ size = 40 }: { size?: number }) {
   const radius = 20 - strokeWidth / 2 - 1;
 
   return (
-    <div
-      className="relative inline-block"
-      style={{ width: size, height: size }}
-    >
+    <div className="relative inline-block" aria-hidden>
       <svg
+        width={size}
+        height={size}
         viewBox="0 0 40 40"
-        className="absolute inset-0 animate-[spin_1.1s_linear_infinite]"
+        className="block animate-[spin_1.1s_linear_infinite]"
       >
         <defs>
           <linearGradient
@@ -37,8 +36,10 @@ export function CheckerSpinner({ size = 40 }: { size?: number }) {
         />
       </svg>
       <svg
+        width={size}
+        height={size}
         viewBox="0 0 40 40"
-        className="absolute inset-0 animate-[spin_2.4s_linear_infinite_reverse]"
+        className="absolute inset-0 block animate-[spin_2.4s_linear_infinite_reverse]"
       >
         <circle
           cx="20"

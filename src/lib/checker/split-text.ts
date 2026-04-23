@@ -66,7 +66,17 @@ export function splitReport(fullText: string): CheckerInput {
     result[current.id] = stripNoise(raw);
   }
 
-  if (positions.length === 0 && fullText.trim().length > 0) {
+  // Wenn mind. ein Header gefunden wurde, aber die erste Section (Teilnahme)
+  // vor dem ersten erkannten Header liegt (z.B. fehlende oder OCR-zerstörte
+  // Teilnahme-Überschrift), den führenden Text nicht still verwerfen.
+  if (positions.length > 0) {
+    const firstStart = positions[0].start;
+    const lead = fullText.slice(0, firstStart).trim();
+    const firstId = positions[0].id;
+    if (lead.length > 0 && firstId !== "teilnahme" && !result.teilnahme) {
+      result.teilnahme = stripNoise(lead);
+    }
+  } else if (fullText.trim().length > 0) {
     result.teilnahme = stripNoise(fullText);
   }
 

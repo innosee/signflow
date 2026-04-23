@@ -7,6 +7,12 @@ import { requireAgency } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
+const COURSE_STATUS_LABEL: Record<string, string> = {
+  active: "aktiv",
+  completed: "abgeschlossen",
+  archived: "archiviert",
+};
+
 type Props = {
   params: Promise<{ id: string }>;
 };
@@ -77,7 +83,7 @@ export default async function AgencyCourseBerListPage({ params }: Props) {
         <p className="mt-1 text-sm text-zinc-600">
           Coach: {course.coachName} · AVGS {course.avgsNummer} ·{" "}
           {course.startDate} bis {course.endDate} · Kurs-Status:{" "}
-          {course.status}
+          {COURSE_STATUS_LABEL[course.status] ?? course.status}
         </p>
       </div>
 

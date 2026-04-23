@@ -66,6 +66,10 @@ export default async function AgencyBerDetailPage({ params }: Props) {
   if (!row) notFound();
 
   const { ber, course, participant, coach } = row;
+
+  // Drafts sind bewusst nicht einsehbar — nur eingereichte BERs haben den
+  // AMDL-Gate durchlaufen und sind für die Bildungsträgerin freigegeben.
+  if (ber.status !== "submitted") notFound();
   const submittedAt = ber.submittedAt ? new Date(ber.submittedAt) : null;
   const updatedAt = ber.updatedAt ? new Date(ber.updatedAt) : null;
   const wasEditedAfterSubmit =

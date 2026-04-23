@@ -28,8 +28,10 @@ const SECTION_TITLES = [
 ];
 
 function Paragraphs({ text }: { text: string }) {
+  // `(?:\r?\n){2,}` matched sowohl Unix- als auch Windows-Zeilenenden;
+  // der Alt-Ausdruck `\r\n{2,}` hätte CRLF-Absätze nicht korrekt erkannt.
   const paras = text
-    .split(/\n{2,}|\r\n{2,}/)
+    .split(/(?:\r?\n){2,}/)
     .map((p) => p.trim())
     .filter(Boolean);
 

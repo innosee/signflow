@@ -28,7 +28,7 @@ Der Abschlussbericht-Checker ist ein **eigenständiges Modul** innerhalb von Sig
 
 **Leitprinzip: Rohdaten berühren niemals US-Infrastruktur.**
 
-```
+```text
 ┌──────────────────┐
 │  Coach-Browser   │
 │                  │
@@ -76,18 +76,20 @@ Der Abschlussbericht-Checker ist ein **eigenständiges Modul** innerhalb von Sig
 │  Mapped Feedback │
 │  auf Original    │
 └──────────────────┘
-```
+```text
 
-**Wer sieht was:**
+**Wer sieht was (Zielarchitektur mit Azure-Wiring):**
 
 | Komponente | Sieht Rohdaten | Sieht anonymisierte Daten | Sieht Metadaten |
 |---|---|---|---|
 | Coach-Browser | Ja (lokal) | Ja | Ja |
 | IONOS Compute VM (Frankfurt) | Ja (transient, RAM) | Ja | Nein |
 | IONOS AI Model Hub | Nur Residual-Fälle | – | Nein |
-| Vercel | **Nein** | Ja | Ja |
+| Vercel | **Nein** (nur orchestrierende Requests) | Ja | Ja |
 | Azure OpenAI EU | **Nein** | Ja | – |
-| Neon | **Nein** | **Nein** | Ja (30 Tage Stats, 12 Monate Audit) |
+| Neon | **Ja — nach bestandenem AMDL-Gate**: persistierte BER-Inhalte (`teilnahme/ablauf/fazit`) + Metadaten + Audit-Log | – | Ja |
+
+> Hinweis: Die Neon-Persistenz ist **nach dem harten Compliance-Gate** zulässig — submittete BERs sind per Design Art.-9-frei (siehe § 14). Während der Editier-Phase bleiben Rohdaten clientseitig, der Server speichert erst beim Submit die gate-geprüfte Version.
 
 ---
 
@@ -137,7 +139,7 @@ App liegt unter `app/` (App Router, kein `src/app/`). Auth via bestehendes `requ
 
 ### Neue Dateien
 
-```
+```text
 app/coach/checker/                      [NEW]
 ├── layout.tsx                          (optional, erbt von app/coach/layout.tsx)
 ├── page.tsx                            Dashboard: „Bericht prüfen" Button + Historie
@@ -150,18 +152,18 @@ app/api/checker/                        [NEW]
 ├── ionos-token/route.ts                Token-Exchange (kurzlebiger Proxy-Token für anon.signflow.de)
 ├── check/route.ts                      POST: anonymisierter Text → Azure OpenAI EU → Feedback
 └── log/route.ts                        POST: Metadaten-Logging (keine Inhalte!)
-```
+```text
 
 ### Geänderte Dateien
 
-```
+```text
 app/coach/layout.tsx                    NavLink „Abschlussbericht-Checker" hinzufügen
 src/lib/audit.ts                        Neuer Event-Typ: checker.report_submitted
-```
+```text
 
 ### Separates Repo
 
-```
+```text
 signflow-anon-proxy/                    [NEW REPO]
 ├── server.ts                           Express/Fastify: CORS + Auth + Pipeline
 ├── pipeline/
@@ -170,15 +172,16 @@ signflow-anon-proxy/                    [NEW REPO]
 │   └── llm-residual.ts                 Stufe 3: IONOS AI Model Hub Fallback
 ├── Dockerfile
 └── deploy.sh                           SSH-Deploy auf IONOS-VM
-```
+```text
 
-### DB-Entscheidung
+### DB-Entscheidung (überholt — siehe § 14)
 
-**Start stateless** — keine neue Tabelle. Nur Einträge im bestehenden `auditLog`:
-- `checker.report_submitted` (Zeitpunkt, Coach-ID, Anzahl geflaggter Regeln)
-- **Kein Berichtsinhalt, kein Hash, kein Mapping.**
+Ursprüngliche Annahme war „stateless, nur Audit". Mit dem Workflow-Update in § 14 gibt es jetzt eine Tabelle `abschlussberichte`, die submittete BER-Inhalte persistiert. Diese sind per AMDL-Gate **Art.-9-frei**, Speicherung damit auf Art. 6(1)(b) DSGVO gestützt. Draft-Entwürfe liegen weiterhin client-seitig (localStorage bzw. Server-Autosave im scoped Editor — in beiden Fällen gate-geprüft beim Submit).
 
-Falls später Statistik-Dashboard: `checker_runs`-Tabelle nur mit Metadaten (ohne Inhalt), 30-Tage-Auto-Delete.
+Audit-Events:
+- `ber.draft_saved` — beim Autosave eines bestehenden oder neuen Entwurfs
+- `ber.submitted` — beim finalen Einreichen an die Bildungsträgerin
+- `ber.edited_after_submit` — bei Änderungen eines bereits eingereichten BER
 
 ---
 
@@ -435,12 +438,15 @@ JSON-Schema-Entwurf in `docs/checker-rules.md` § 4.
 - Potenziell besondere Kategorien nach Art. 9 DSGVO (Gesundheitsdaten, sofern vom Coach unzulässig in den Entwurf aufgenommen — deren Identifikation und Entfernung ist gerade Zweck der Verarbeitung)
 - Potenziell Sozialdaten nach § 67 SGB X im AVGS-Kontext
 
-**Nach Anonymisierung weitergegebene Daten:**
+**Nach Anonymisierung weitergegebene Daten (Azure/Prüfungs-Schritt):**
 - Anonymisierter Berichtstext mit Platzhaltern (`[NAME_1]`, `[ORT_1]`, `[KUNDEN_NR_1]`, …)
 - Platzhalter→Original-Mapping bleibt ausschließlich im Browser der verantwortlichen Stelle
 
-**Metadaten (Neon EU):**
-- Zeitstempel, Coach-ID, Anzahl geflaggter Regelverstöße — **kein Berichtsinhalt**
+**Nach erfolgreichem AMDL-Gate in Neon (EU) persistierte Daten:**
+- BER-Inhalte (`teilnahme`, `ablauf`, `fazit`) — per Design Art.-9-frei, da Submit nur bei bestandener Regelprüfung zulässig
+- Stammdaten-Bezüge (course_id, participant_id, coach_id, submitted_at)
+- Audit-Log-Einträge (`ber.submitted`, `ber.edited_after_submit`, …)
+- Rechtsgrundlage für die Speicherung: **Art. 6 Abs. 1 lit. b DSGVO** (Vertragserfüllung). Art. 9 nicht mehr einschlägig, weil keine besonderen Kategorien mehr verarbeitet werden.
 
 ### 9.3 Rechtsgrundlage
 

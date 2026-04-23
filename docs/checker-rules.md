@@ -109,15 +109,14 @@ Gemappt aus dem Erango-Prompt, für die Results-Page:
     {
       "category": "medizin",
       "severity": "hard_block",
+      "section": "teilnahme",
       "quote": "leidet unter chronischer Depression",
-      "placeholder_ref": "BER_ABSATZ_1",
       "rule": "Diagnosen unzulässig",
       "suggestion": "Der Teilnehmer thematisierte gesundheitliche Einschränkungen, die Auswirkungen auf die aktuelle Belastbarkeit haben."
-    },
-    ...
+    }
   ],
-  "tonality_feedback": "Der Bericht ist in Teilen wertend (z.B. \"Träumer\"). Empfehlung: ressourcenorientiert umformulieren."
+  "tonalityFeedback": "Der Bericht ist in Teilen wertend (z.B. Träumer). Empfehlung: ressourcenorientiert umformulieren."
 }
 ```
 
-Die `placeholder_ref` referenziert die anonymisierte Textstelle. Das Browser-Frontend mapt zurück auf den Original-Text des Coaches.
+Schema entspricht 1:1 der `CheckerResult`/`Violation`-Typen in `src/lib/checker/types.ts`. `section` ordnet das Zitat einem der drei BER-Abschnitte zu (`teilnahme | ablauf | fazit`); eine dedizierte Platzhalter-Referenz ist aktuell nicht im Typ vorgesehen.

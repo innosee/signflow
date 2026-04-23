@@ -466,13 +466,15 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 </div>
 
                 <div className="flex items-center gap-3 text-xs">
-                  <Link
-                    href={`/coach/courses/${course.id}/teilnehmer/${p.id}/bericht`}
-                    className="text-zinc-700 underline-offset-2 hover:underline"
-                    title="Abschlussbericht schreiben / bearbeiten"
-                  >
-                    {ber ? "BER bearbeiten" : "BER schreiben"}
-                  </Link>
+                  {!impersonating && (
+                    <Link
+                      href={`/coach/courses/${course.id}/teilnehmer/${p.id}/bericht`}
+                      className="text-zinc-700 underline-offset-2 hover:underline"
+                      title="Abschlussbericht schreiben / bearbeiten"
+                    >
+                      {ber ? "BER bearbeiten" : "BER schreiben"}
+                    </Link>
+                  )}
                   <Link
                     href={`/coach/courses/${course.id}/print/${p.id}`}
                     className="text-zinc-700 underline-offset-2 hover:underline"

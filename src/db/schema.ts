@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -544,6 +545,19 @@ export const abschlussberichte = pgTable(
     index("abschlussberichte_course_idx").on(t.courseId),
     index("abschlussberichte_coach_idx").on(t.coachId),
     index("abschlussberichte_status_idx").on(t.status),
+    // Integritäts-Anker: BER gibt's nur für tatsächlich im Kurs eingeschriebene
+    // TN. Referenziert die unique (course_id, participant_id) auf course_participants.
+    foreignKey({
+      columns: [t.courseId, t.participantId],
+      foreignColumns: [courseParticipants.courseId, courseParticipants.participantId],
+      name: "abschlussberichte_course_participant_enrollment_fk",
+    }).onDelete("cascade"),
+    // Submit-Invariante: 'submitted' nur mit Timestamp UND bestandener Prüfung.
+    // Verhindert, dass per Bug oder manuellem SQL ein inkonsistenter Zustand entsteht.
+    check(
+      "abschlussberichte_submit_invariants",
+      sql`(${t.status} = 'draft') OR (${t.status} = 'submitted' AND ${t.submittedAt} IS NOT NULL AND ${t.lastCheckPassed} = true)`,
+    ),
   ],
 );
 

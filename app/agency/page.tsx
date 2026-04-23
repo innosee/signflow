@@ -20,6 +20,12 @@ type Props = {
   searchParams: Promise<{ imp_error?: string }>;
 };
 
+const COURSE_STATUS_LABEL: Record<string, string> = {
+  active: "aktiv",
+  completed: "abgeschlossen",
+  archived: "archiviert",
+};
+
 export default async function AgencyDashboard({ searchParams }: Props) {
   await requireAgency();
   const { imp_error } = await searchParams;
@@ -165,7 +171,8 @@ export default async function AgencyDashboard({ searchParams }: Props) {
                   <div className="min-w-0 flex-1 basis-48">
                     <div className="font-medium">{row.courseTitle}</div>
                     <div className="text-xs text-zinc-500">
-                      Coach: {row.coachName} · Kurs-Status: {row.courseStatus}
+                      Coach: {row.coachName} · Kurs-Status:{" "}
+                      {COURSE_STATUS_LABEL[row.courseStatus] ?? row.courseStatus}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs">

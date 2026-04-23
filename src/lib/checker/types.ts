@@ -28,6 +28,20 @@ export type CheckerInput = {
   fazit: string;
 };
 
+/**
+ * Type-Guard für storage-persistierte Werte (localStorage / sessionStorage).
+ * Verhindert, dass manipuliertes oder altformatiges JSON die Form crasht.
+ */
+export function isCheckerInput(value: unknown): value is CheckerInput {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.teilnahme === "string" &&
+    typeof v.ablauf === "string" &&
+    typeof v.fazit === "string"
+  );
+}
+
 export type MustHaveTopic =
   | "profiling"
   | "zielarbeit"

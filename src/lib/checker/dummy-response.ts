@@ -222,9 +222,15 @@ export function generateDummyResult(input: CheckerInput): CheckerResult {
 export function countPseudonymisedEntities(input: CheckerInput): number {
   const combined = [input.teilnahme, input.ablauf, input.fazit].join(" ");
   const patterns = [
-    /\b[A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß]+\b/g,
+    // Namenspaar-Heuristik: zwei großgeschriebene Wörter in Folge, aber nicht
+    // gängige deutsche Artikel/Pronomen/Höflichkeitsformen am Satzanfang.
+    // Das Ergebnis bleibt heuristisch; echte NER kommt mit dem IONOS/GLiNER-Wiring.
+    /\b(?!Der|Die|Das|Den|Dem|Des|Eine?|Einem|Einen|Einer|Eines|Frau|Herr|Herrn|Frau n|Herrn|Seine?|Seiner|Seinem|Seinen|Ihre?|Ihren|Ihrer|Ihrem|Im|Am|Vom|Zum|Zur|Beim)[A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß]+\b/g,
+    // PLZ (5 Ziffern)
     /\b\d{5}\b/g,
+    // Datum (z.B. 01.02.2026)
     /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g,
+    // E-Mail
     /\b[\w.]+@[\w.]+\.\w+\b/g,
   ];
   let count = 0;

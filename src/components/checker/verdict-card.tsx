@@ -1,5 +1,22 @@
 import type { CheckerResult } from "@/lib/checker/types";
 
+function buildRevisionMessage(
+  violationCount: number,
+  openMustHaves: number,
+): string {
+  const parts: string[] = [];
+  if (violationCount === 1) parts.push("1 Regelverstoß");
+  else if (violationCount > 1) parts.push(`${violationCount} Regelverstöße`);
+  if (openMustHaves === 1) parts.push("1 fehlender Pflichtbaustein");
+  else if (openMustHaves > 1)
+    parts.push(`${openMustHaves} fehlende Pflichtbausteine`);
+
+  const joined =
+    parts.length === 2 ? `${parts[0]} und ${parts[1]}` : parts.join("");
+  const verb = violationCount + openMustHaves === 1 ? "wurde" : "wurden";
+  return `Es ${verb} ${joined} gefunden. Schau dir die Details unten an und passe die markierten Stellen an.`;
+}
+
 export function VerdictCard({ result }: { result: CheckerResult }) {
   const isPass = result.status === "pass";
 
@@ -70,7 +87,7 @@ export function VerdictCard({ result }: { result: CheckerResult }) {
           >
             {isPass
               ? "Der Bericht erfüllt die inhaltlichen und tonalen Anforderungen des Bildungsträgers und kann so eingereicht werden."
-              : `${violationCount === 0 ? "Es wurden" : `${violationCount} ${violationCount === 1 ? "Regelverstoß" : "Regelverstöße"} und`} ${openMustHaves} ${openMustHaves === 1 ? "fehlender Pflichtbaustein" : "fehlende Pflichtbausteine"} gefunden. Schau dir die Details unten an und passe die markierten Stellen an.`}
+              : buildRevisionMessage(violationCount, openMustHaves)}
           </p>
         </div>
       </div>

@@ -27,19 +27,22 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const EXPORT_STORAGE_KEY = "signflow:checker-export";
 
+// Aktueller MVP-Stand: Prüfung läuft komplett im Browser, kein Text verlässt
+// das Gerät. Die echte server-seitige Anonymisierung (IONOS-Proxy → Azure)
+// kommt später und ersetzt Step 1/2 durch echte Pipeline-Stufen.
 const INITIAL_STEPS: CheckerStep[] = [
   {
     id: "anon",
-    label: "Anonymisierung",
+    label: "Lokale Vorprüfung",
     description:
-      "Daten werden anonymisiert und für die Validierung vorbereitet.",
+      "Text wird für die Regelprüfung vorbereitet — läuft komplett im Browser.",
     state: "pending",
   },
   {
     id: "validate",
     label: "Regel-Validierung",
     description:
-      "Der anonymisierte Text wird gegen den Regelkatalog des Bildungsträgers geprüft.",
+      "Der Text wird gegen den Regelkatalog des Bildungsträgers geprüft.",
     state: "pending",
   },
   {
@@ -65,7 +68,6 @@ type Props = {
   coachName: string;
   participantName: string;
   kundenNr: string;
-  courseTitle: string;
   avgsNummer: string;
   zeitraum: string;
   gesamtzahlUe: string;
@@ -143,13 +145,13 @@ export function BerEditor({
 
     updateStep("anon", { state: "active" });
     await sleep(1600);
-    const removed = countPseudonymisedEntities(input);
+    const piiHits = countPseudonymisedEntities(input);
     updateStep("anon", {
       state: "success",
       detail:
-        removed > 0
-          ? `${removed} personenbezogene ${removed === 1 ? "Angabe" : "Angaben"} erkannt und durch Platzhalter ersetzt.`
-          : "Keine personenbezogenen Angaben im Freitext erkannt.",
+        piiHits > 0
+          ? `${piiHits} potenziell personenbezogene ${piiHits === 1 ? "Angabe" : "Angaben"} im Freitext markiert. Kein Text wird gesendet — Prüfung läuft lokal.`
+          : "Keine offensichtlichen personenbezogenen Angaben im Freitext gefunden. Prüfung läuft lokal im Browser.",
     });
 
     updateStep("validate", { state: "active" });
@@ -227,11 +229,14 @@ export function BerEditor({
     input.ablauf.trim().length > 0 &&
     input.fazit.trim().length > 0;
 
+  // 60-Sekunden-Buffer filtert Mikro-Autosaves direkt nach dem Submit raus
+  // (z.B. wenn der Submit kurz nach einem Tipp kommt). Gleicher Wert wie
+  // auf der Agency-Seite — nicht auseinanderlaufen lassen.
   const wasEditedAfterSubmit =
     status === "submitted" &&
     submittedAt !== null &&
     savedAt !== null &&
-    savedAt.getTime() > submittedAt.getTime();
+    savedAt.getTime() - submittedAt.getTime() > 60_000;
 
   if (phase === "input") {
     return (
