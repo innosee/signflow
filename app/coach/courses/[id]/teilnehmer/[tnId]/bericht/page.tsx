@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireSigningEnabled } from "@/lib/dal";
+import { getSigningEnabled, requireCoach } from "@/lib/dal";
 import type { Abschlussbericht } from "@/db/schema";
 
 import { BerEditor } from "./ber-editor";
@@ -15,7 +15,12 @@ type Props = {
 };
 
 export default async function BerEditorPage({ params }: Props) {
-  const session = await requireSigningEnabled();
+  const session = await requireCoach();
+  // BER-Editor ist Checker-Funktionalität — für alle Coaches offen. Nur der
+  // „Zurück zum Kurs"-Link ist für Nicht-Signatur-Coaches sinnlos (Kurs-
+  // Detail-Seite ist gated), deshalb navigiert der Back-Link in dem Fall
+  // zurück aufs Checker-Dashboard.
+  const signingEnabled = await getSigningEnabled(session.user.id);
   const { id: courseId, tnId: participantId } = await params;
 
   const [row] = await db
@@ -72,10 +77,10 @@ export default async function BerEditorPage({ params }: Props) {
     <div className="mx-auto w-full max-w-6xl px-6 py-10 space-y-6">
       <div>
         <Link
-          href={`/coach/courses/${courseId}`}
+          href={signingEnabled ? `/coach/courses/${courseId}` : "/coach/checker"}
           className="text-xs text-zinc-500 hover:text-zinc-900"
         >
-          ← zurück zum Kurs {row.course.title}
+          ← {signingEnabled ? `zurück zum Kurs ${row.course.title}` : "zurück zur Berichts-Übersicht"}
         </Link>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           Abschlussbericht für {row.participant.name}
