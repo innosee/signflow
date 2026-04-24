@@ -1,0 +1,22 @@
+anon.signflow.coach {
+	encode zstd gzip
+
+	@options {
+		method OPTIONS
+	}
+	respond @options 204
+
+	reverse_proxy 127.0.0.1:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+	}
+
+	log {
+		output file /var/log/caddy/anon-proxy.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+		level INFO
+	}
+}

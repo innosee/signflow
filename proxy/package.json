@@ -1,0 +1,19 @@
+{
+  "name": "signflow-anon-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pseudonymisierungs-Proxy für den Abschlussbericht-Checker. Läuft isoliert auf IONOS Compute (de/txl). Rohtext verlässt diese VM nicht.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/rate-limit": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
