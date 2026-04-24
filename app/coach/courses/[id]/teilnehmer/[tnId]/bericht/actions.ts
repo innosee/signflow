@@ -6,7 +6,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
-import { assertNotImpersonating, requireCoach } from "@/lib/dal";
+import { isImpersonating, requireCoach } from "@/lib/dal";
 
 export type BerActionState = { error?: string; savedAt?: string } | undefined;
 
@@ -64,7 +64,9 @@ export async function saveBerDraftAction(
   formData: FormData,
 ): Promise<BerActionState> {
   const session = await requireCoach();
-  assertNotImpersonating(session);
+  if (isImpersonating(session)) {
+    return { error: "Nur-Lese-Modus: während Impersonation wird nicht gespeichert." };
+  }
   const coachId = session.user.id;
 
   const courseId = String(formData.get("courseId") ?? "").trim();
@@ -168,7 +170,9 @@ export async function submitBerAction(
   formData: FormData,
 ): Promise<BerActionState> {
   const session = await requireCoach();
-  assertNotImpersonating(session);
+  if (isImpersonating(session)) {
+    return { error: "Nur-Lese-Modus: während Impersonation kannst du nicht einreichen." };
+  }
   const coachId = session.user.id;
 
   const courseId = String(formData.get("courseId") ?? "").trim();

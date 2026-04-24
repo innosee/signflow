@@ -4,7 +4,8 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireBildungstraeger } from "@/lib/dal";
 
-import { impersonateCoach, setCoachSigningEnabled } from "./actions";
+import { BerProgressList } from "./ber-progress-list";
+import { CoachListItem } from "./coach-list-item";
 import { InviteCoachForm } from "./invite-form";
 
 export const dynamic = "force-dynamic";
@@ -14,16 +15,13 @@ const IMP_ERRORS: Record<string, string> = {
   unknown: "Dieser Coach existiert nicht (mehr).",
   banned: "Coach ist gesperrt — Impersonation nicht möglich.",
   api: "Impersonation von Better Auth abgelehnt.",
+  has_courses:
+    "Coach hat noch nicht-archivierte Kurse — diese zuerst abschließen oder archivieren.",
+  delete_failed: "Coach konnte nicht gelöscht werden.",
 };
 
 type Props = {
   searchParams: Promise<{ imp_error?: string }>;
-};
-
-const COURSE_STATUS_LABEL: Record<string, string> = {
-  active: "aktiv",
-  completed: "abgeschlossen",
-  archived: "archiviert",
 };
 
 export default async function BildungstraegerDashboard({ searchParams }: Props) {
@@ -152,64 +150,7 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
             </p>
           </div>
         </div>
-        {berProgress.length === 0 ? (
-          <p className="px-6 py-8 text-center text-sm text-zinc-500">
-            Noch keine Kurse im System.
-          </p>
-        ) : (
-          <ul className="divide-y divide-zinc-200">
-            {berProgress.map((row) => {
-              const missing = row.tnCount - row.submittedCount - row.draftCount;
-              const percent =
-                row.tnCount > 0
-                  ? Math.round((row.submittedCount / row.tnCount) * 100)
-                  : 0;
-              return (
-                <li
-                  key={row.courseId}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3 text-sm"
-                >
-                  <div className="min-w-0 flex-1 basis-48">
-                    <div className="font-medium">{row.courseTitle}</div>
-                    <div className="text-xs text-zinc-500">
-                      Coach: {row.coachName} · Kurs-Status:{" "}
-                      {COURSE_STATUS_LABEL[row.courseStatus] ?? row.courseStatus}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span
-                      className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800"
-                      title="eingereicht"
-                    >
-                      ✓ {row.submittedCount}
-                    </span>
-                    <span
-                      className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800"
-                      title="Entwurf"
-                    >
-                      ✎ {row.draftCount}
-                    </span>
-                    <span
-                      className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-600"
-                      title="noch nicht begonnen"
-                    >
-                      … {missing}
-                    </span>
-                    <span className="ml-1 text-xs text-zinc-500">
-                      ({percent}% eingereicht)
-                    </span>
-                  </div>
-                  <Link
-                    href={`/bildungstraeger/courses/${row.courseId}/berichte`}
-                    className="text-xs text-zinc-700 underline-offset-2 hover:underline"
-                  >
-                    Berichte ansehen →
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <BerProgressList rows={berProgress} />
       </section>
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6">
@@ -233,70 +174,7 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
         ) : (
           <ul className="divide-y divide-black/5">
             {coaches.map((c) => (
-              <li
-                key={c.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"
-              >
-                <div className="min-w-0">
-                  <div className="font-medium">{c.name}</div>
-                  <div className="text-sm text-zinc-600">{c.email}</div>
-                  <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                    {c.emailVerified ? (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-800">
-                        Aktiv
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">
-                        Einladung ausstehend
-                      </span>
-                    )}
-                    {c.banned && (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800">
-                        Deaktiviert
-                      </span>
-                    )}
-                    {c.signingEnabled ? (
-                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800">
-                        Signatur freigeschaltet
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                        Nur Checker
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <form action={setCoachSigningEnabled}>
-                    <input type="hidden" name="coachId" value={c.id} />
-                    <input
-                      type="hidden"
-                      name="enabled"
-                      value={c.signingEnabled ? "false" : "true"}
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                      title={
-                        c.signingEnabled
-                          ? "Signatur-Modul für diesen Coach sperren"
-                          : "Signatur-Modul für diesen Coach freischalten"
-                      }
-                    >
-                      {c.signingEnabled ? "Signatur sperren" : "Signatur freischalten"}
-                    </button>
-                  </form>
-                  <form action={impersonateCoach}>
-                    <input type="hidden" name="userId" value={c.id} />
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                    >
-                      Als Coach anmelden
-                    </button>
-                  </form>
-                </div>
-              </li>
+              <CoachListItem key={c.id} coach={c} />
             ))}
           </ul>
         )}
