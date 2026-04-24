@@ -73,6 +73,13 @@ export const users = pgTable(
     image: text("image"),
     role: userRole("role").notNull().default("coach"),
     signatureUrl: text("signature_url"),
+    /**
+     * Feature-Flag für den Signatur-Flow (Kurse/Sessions/FES/AfA).
+     * Default `false` — ausgerollt nur für Pilot-Coaches (3–4 zum Start).
+     * Der Checker ist davon unabhängig und für alle sichtbar.
+     * Wird vom Bildungsträger per Admin-UI pro Coach gesetzt.
+     */
+    signingEnabled: boolean("signing_enabled").notNull().default(false),
     banned: boolean("banned").notNull().default(false),
     banReason: text("ban_reason"),
     banExpires: timestamp("ban_expires", { withTimezone: true }),

@@ -2,14 +2,14 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireCoach } from "@/lib/dal";
+import { requireSigningEnabled } from "@/lib/dal";
 
 import { SignatureSetup } from "./signature-setup";
 
 export const dynamic = "force-dynamic";
 
 export default async function CoachSignaturePage() {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
 
   const [row] = await db
     .select({ signatureUrl: schema.users.signatureUrl })

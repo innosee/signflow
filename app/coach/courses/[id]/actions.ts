@@ -7,7 +7,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
-import { assertNotImpersonating, requireCoach } from "@/lib/dal";
+import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
 import { sealWithFes } from "@/lib/firma";
 import {
   sendParticipantInvite,
@@ -79,7 +79,7 @@ export async function createSession(
   _prev: SessionFormState,
   formData: FormData,
 ): Promise<SessionFormState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 
@@ -198,7 +198,7 @@ export async function addParticipant(
   _prev: AddParticipantState,
   formData: FormData,
 ): Promise<AddParticipantState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 
@@ -291,7 +291,7 @@ export async function notifyParticipants(
   _prev: NotifyState,
   formData: FormData,
 ): Promise<NotifyState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 
@@ -352,7 +352,7 @@ export async function sendPreviewToParticipants(
   _prev: NotifyState,
   formData: FormData,
 ): Promise<NotifyState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 
@@ -451,7 +451,7 @@ export async function sealCourse(
   _prev: SealState,
   formData: FormData,
 ): Promise<SealState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 
@@ -651,7 +651,7 @@ export async function signSessionAsCoach(
   _prev: SignSessionState,
   formData: FormData,
 ): Promise<SignSessionState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 

@@ -4,7 +4,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireBildungstraeger } from "@/lib/dal";
 
-import { impersonateCoach } from "./actions";
+import { impersonateCoach, setCoachSigningEnabled } from "./actions";
 import { InviteCoachForm } from "./invite-form";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +52,7 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
       email: schema.users.email,
       emailVerified: schema.users.emailVerified,
       banned: schema.users.banned,
+      signingEnabled: schema.users.signingEnabled,
       createdAt: schema.users.createdAt,
     })
     .from(schema.users)
@@ -234,12 +235,12 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
             {coaches.map((c) => (
               <li
                 key={c.id}
-                className="flex items-center justify-between px-6 py-4"
+                className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"
               >
-                <div>
+                <div className="min-w-0">
                   <div className="font-medium">{c.name}</div>
                   <div className="text-sm text-zinc-600">{c.email}</div>
-                  <div className="mt-1 flex gap-2 text-xs">
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs">
                     {c.emailVerified ? (
                       <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-800">
                         Aktiv
@@ -254,17 +255,47 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
                         Deaktiviert
                       </span>
                     )}
+                    {c.signingEnabled ? (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800">
+                        Signatur freigeschaltet
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        Nur Checker
+                      </span>
+                    )}
                   </div>
                 </div>
-                <form action={impersonateCoach}>
-                  <input type="hidden" name="userId" value={c.id} />
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                  >
-                    Als Coach anmelden
-                  </button>
-                </form>
+                <div className="flex items-center gap-2">
+                  <form action={setCoachSigningEnabled}>
+                    <input type="hidden" name="coachId" value={c.id} />
+                    <input
+                      type="hidden"
+                      name="enabled"
+                      value={c.signingEnabled ? "false" : "true"}
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                      title={
+                        c.signingEnabled
+                          ? "Signatur-Modul für diesen Coach sperren"
+                          : "Signatur-Modul für diesen Coach freischalten"
+                      }
+                    >
+                      {c.signingEnabled ? "Signatur sperren" : "Signatur freischalten"}
+                    </button>
+                  </form>
+                  <form action={impersonateCoach}>
+                    <input type="hidden" name="userId" value={c.id} />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                    >
+                      Als Coach anmelden
+                    </button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>
