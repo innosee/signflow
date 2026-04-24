@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { APIError } from "better-auth/api";
 
 import { db, schema } from "@/db";
@@ -174,6 +174,125 @@ export async function setCoachSigningEnabled(formData: FormData): Promise<void> 
     actorType: "bildungstraeger",
     actorId: session.user.id,
     action: enabled ? "coach.signing_enabled.on" : "coach.signing_enabled.off",
+    resourceType: "user",
+    resourceId: coachId,
+  });
+
+  revalidatePath("/bildungstraeger");
+}
+
+/**
+ * Freigabe eines BERs trotz offener soft_flag-Hinweise. Der Bildungsträger
+ * hat die Hinweise gesehen und entschieden, dass sie akzeptabel sind.
+ * Setzt `softFlagsAcknowledgedAt` + `softFlagsAcknowledgedBy` auf der BER-
+ * Zeile und loggt den Vorgang. Blockiert während Impersonation, damit die
+ * Ack rechtlich klar dem Bildungsträger zuzuordnen ist.
+ */
+export async function acknowledgeSoftFlags(
+  formData: FormData,
+): Promise<void> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    redirect("/bildungstraeger?imp_error=invalid");
+  }
+  const berId = String(formData.get("berId") ?? "").trim();
+  if (!berId) return;
+
+  const [existing] = await db
+    .select({
+      id: schema.abschlussberichte.id,
+      alreadyAckAt: schema.abschlussberichte.softFlagsAcknowledgedAt,
+    })
+    .from(schema.abschlussberichte)
+    .where(eq(schema.abschlussberichte.id, berId))
+    .limit(1);
+  if (!existing) return;
+  if (existing.alreadyAckAt) {
+    // Ack ist idempotent — nichts tun, aber revalidate damit der UI-State
+    // konsistent ist, falls es eine Race war.
+    revalidatePath(`/bildungstraeger/abschlussberichte/${berId}`);
+    return;
+  }
+
+  const now = new Date();
+  await db
+    .update(schema.abschlussberichte)
+    .set({
+      softFlagsAcknowledgedAt: now,
+      softFlagsAcknowledgedBy: session.user.id,
+    })
+    .where(eq(schema.abschlussberichte.id, berId));
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: "ber.soft_flags.acknowledged",
+    resourceType: "abschlussbericht",
+    resourceId: berId,
+  });
+
+  revalidatePath(`/bildungstraeger/abschlussberichte/${berId}`);
+  revalidatePath("/bildungstraeger");
+}
+
+/**
+ * Soft-Delete eines Coaches durch den Bildungsträger. Blockiert, wenn der
+ * Coach noch nicht-archivierte Kurse hat — sonst würde der Kurs-Besitz
+ * plötzlich auf eine „gelöschte" User-ID verweisen und die Bildungsträger-
+ * Übersicht kann nicht mehr sauber filtern. Dank des Partial-Unique-Index
+ * auf `email WHERE deleted_at IS NULL` kann dieselbe E-Mail danach wieder
+ * eingeladen werden. Während Impersonation hart blockiert — role-mutierende
+ * Aktionen laufen nie unter Coach-Identität.
+ */
+export async function deleteCoach(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    redirect("/bildungstraeger?imp_error=invalid");
+  }
+
+  const coachId = String(formData.get("coachId") ?? "").trim();
+  if (!coachId) {
+    redirect("/bildungstraeger?imp_error=invalid");
+  }
+
+  const [target] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, coachId),
+        eq(schema.users.role, "coach"),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!target) {
+    redirect("/bildungstraeger?imp_error=unknown");
+  }
+
+  const [activeCourses] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.courses)
+    .where(
+      and(
+        eq(schema.courses.coachId, coachId),
+        isNull(schema.courses.deletedAt),
+        ne(schema.courses.status, "archived"),
+      ),
+    );
+  if ((activeCourses?.count ?? 0) > 0) {
+    redirect("/bildungstraeger?imp_error=has_courses");
+  }
+
+  await db
+    .update(schema.users)
+    .set({ deletedAt: new Date(), banned: true })
+    .where(eq(schema.users.id, coachId));
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: "coach.delete",
     resourceType: "user",
     resourceId: coachId,
   });

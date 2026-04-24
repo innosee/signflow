@@ -5,8 +5,31 @@ import { eq } from "drizzle-orm";
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { requireBildungstraeger } from "@/lib/dal";
+import {
+  VIOLATION_CATEGORY_LABELS,
+  type CheckerResult,
+  type CheckerSection,
+  type Violation,
+} from "@/lib/checker/types";
 
+import { acknowledgeSoftFlags } from "../../actions";
 import { PrintButton } from "./print-toolbar";
+
+const SECTION_LABELS: Record<CheckerSection, string> = {
+  teilnahme: "Teilnahme und Mitarbeit",
+  ablauf: "Ablauf und Inhalte",
+  fazit: "Fazit und Empfehlungen",
+};
+
+function extractSoftFlags(raw: unknown): Violation[] {
+  if (!raw || typeof raw !== "object") return [];
+  const snapshot = raw as Partial<CheckerResult>;
+  if (!Array.isArray(snapshot.violations)) return [];
+  return snapshot.violations.filter(
+    (v): v is Violation =>
+      !!v && typeof v === "object" && "severity" in v && v.severity === "soft_flag",
+  );
+}
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +52,9 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
         submittedAt: schema.abschlussberichte.submittedAt,
         updatedAt: schema.abschlussberichte.updatedAt,
         lastCheckPassed: schema.abschlussberichte.lastCheckPassed,
+        checkSnapshot: schema.abschlussberichte.checkSnapshot,
+        softFlagsAcknowledgedAt:
+          schema.abschlussberichte.softFlagsAcknowledgedAt,
       },
       course: {
         id: schema.courses.id,
@@ -66,6 +92,11 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
   if (!row) notFound();
 
   const { ber, course, participant, coach } = row;
+  const softFlags = extractSoftFlags(ber.checkSnapshot);
+  const softFlagsAcknowledged = !!ber.softFlagsAcknowledgedAt;
+  const ackDate = ber.softFlagsAcknowledgedAt
+    ? new Date(ber.softFlagsAcknowledgedAt)
+    : null;
 
   // Drafts sind bewusst nicht einsehbar — nur eingereichte BERs haben den
   // AMDL-Gate durchlaufen und sind für die Bildungsträgerin freigegeben.
@@ -131,6 +162,74 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {softFlags.length > 0 && (
+        <section
+          className="review-soft-flags"
+          data-print-hide
+          aria-label="Formulierungs-Hinweise des Checkers"
+        >
+          <div className="review-soft-flags-inner">
+            <header className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-amber-900">
+                  Formulierungs-Hinweise ({softFlags.length})
+                </h2>
+                <p className="mt-0.5 text-xs text-amber-800/80">
+                  {softFlagsAcknowledged
+                    ? `Vom Bildungsträger akzeptiert${ackDate ? ` am ${ackDate.toLocaleString("de-DE")}` : ""}.`
+                    : "Der Coach hat diese Hinweise gesehen und den Bericht trotzdem eingereicht. Bitte prüfen und ggf. freigeben."}
+                </p>
+              </div>
+              {!softFlagsAcknowledged && (
+                <form action={acknowledgeSoftFlags}>
+                  <input type="hidden" name="berId" value={ber.id} />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700"
+                  >
+                    Freigeben trotz Hinweisen
+                  </button>
+                </form>
+              )}
+              {softFlagsAcknowledged && (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                  ✓ freigegeben
+                </span>
+              )}
+            </header>
+            <ul className="mt-3 space-y-2">
+              {softFlags.map((v, idx) => (
+                <li
+                  key={`${v.id ?? idx}`}
+                  className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-amber-900">
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium">
+                      {VIOLATION_CATEGORY_LABELS[v.category] ?? v.category}
+                    </span>
+                    <span className="text-amber-800/70">
+                      {SECTION_LABELS[v.section] ?? v.section}
+                    </span>
+                    <span className="text-amber-800/70">· {v.rule}</span>
+                  </div>
+                  <blockquote className="mt-1.5 italic text-zinc-800">
+                    &bdquo;{v.quote}&ldquo;
+                  </blockquote>
+                  {v.suggestion && (
+                    <p className="mt-1 text-zinc-700">
+                      <span className="font-medium text-emerald-800">
+                        Vorschlag:
+                      </span>{" "}
+                      {v.suggestion}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
       <div className="review-canvas">
         <BerDocument
           input={{
@@ -174,6 +273,17 @@ const toolbarCss = `
     margin: 0 auto;
     background: white;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  }
+  .review-soft-flags {
+    max-width: 210mm;
+    margin: 0 auto 6mm;
+    padding: 0 10mm;
+  }
+  .review-soft-flags-inner {
+    border: 1px solid #fcd34d;
+    background: #fffbeb;
+    border-radius: 10px;
+    padding: 14px 16px;
   }
   @media print {
     .review-wrapper {

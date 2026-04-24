@@ -177,6 +177,21 @@ export async function submitBerAction(
   const ablauf = String(formData.get("ablauf") ?? "");
   const fazit = String(formData.get("fazit") ?? "");
   const lastCheckPassed = formData.get("lastCheckPassed") === "true";
+  const checkSnapshotRaw = formData.get("checkSnapshot");
+  // Snapshot ist ein String (JSON) vom Client. Wir validieren beim Parse
+  // grob auf Objekt-Form — Zod-freie Variante, da das Shape stabil ist
+  // und der Client im Zweifel nur sich selbst schadet, nicht dem Server.
+  let checkSnapshot: unknown = null;
+  if (typeof checkSnapshotRaw === "string" && checkSnapshotRaw.length > 0) {
+    try {
+      const parsed = JSON.parse(checkSnapshotRaw);
+      if (parsed && typeof parsed === "object") {
+        checkSnapshot = parsed;
+      }
+    } catch {
+      // Korrupter Snapshot — nicht fatal, wir submitten einfach ohne
+    }
+  }
 
   if (!courseId || !participantId) {
     return { error: "Kurs oder Teilnehmer fehlt." };
@@ -217,6 +232,11 @@ export async function submitBerAction(
         status: "submitted",
         lastCheckPassed: true,
         submittedAt: now,
+        checkSnapshot,
+        // Re-Submit invalidiert eine frühere Ack — der Bildungsträger
+        // soll den neuen Inhalt frisch bewerten.
+        softFlagsAcknowledgedAt: null,
+        softFlagsAcknowledgedBy: null,
       })
       .where(eq(schema.abschlussberichte.id, existing.id));
     berId = existing.id;
@@ -233,6 +253,7 @@ export async function submitBerAction(
         status: "submitted",
         lastCheckPassed: true,
         submittedAt: now,
+        checkSnapshot,
       })
       .returning({ id: schema.abschlussberichte.id });
     berId = created.id;

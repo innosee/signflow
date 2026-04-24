@@ -541,6 +541,26 @@ export const abschlussberichte = pgTable(
      * bestandener Prüfung" als Qualitätssignal.
      */
     lastCheckPassed: boolean("last_check_passed").notNull().default(false),
+    /**
+     * Snapshot des CheckerResult vom letzten Submit. Enthält mustHaves,
+     * violations (inkl. severity) und ggf. tonalityFeedback — damit der
+     * Bildungsträger im Detail-View sieht, welche soft_flags der Coach
+     * „durchgelassen" hat und sie ggf. acknowledgen kann.
+     */
+    checkSnapshot: jsonb("check_snapshot"),
+    /**
+     * Wurde vom Bildungsträger gesetzt, wenn die soft_flags geprüft und
+     * akzeptiert wurden (Freigabe trotz Hinweisen). Null = noch nicht
+     * acknowledged. Wird bei Re-Submit des Coaches auf null zurückgesetzt,
+     * damit ein geänderter Bericht neu geprüft wird.
+     */
+    softFlagsAcknowledgedAt: timestamp("soft_flags_acknowledged_at", {
+      withTimezone: true,
+    }),
+    softFlagsAcknowledgedBy: uuid("soft_flags_acknowledged_by").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
