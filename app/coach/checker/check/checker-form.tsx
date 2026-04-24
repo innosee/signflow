@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   CheckerProgress,
@@ -12,7 +12,7 @@ import { LiveFeedback } from "@/components/checker/live-feedback";
 import { PasteTextButton } from "@/components/checker/paste-text-button";
 import { VerdictCard } from "@/components/checker/verdict-card";
 import { anonymize } from "@/lib/checker/anonymize";
-import { applySuggestion } from "@/lib/checker/apply-suggestion";
+import { locateQuote } from "@/lib/checker/locate-quote";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
@@ -85,12 +85,19 @@ export function CheckerForm() {
   const [result, setResult] = useState<CheckerResult | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
-  const [appliedViolationIds, setAppliedViolationIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [failedViolationIds, setFailedViolationIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const textareaRefs = useRef<Record<CheckerSection, HTMLTextAreaElement | null>>({
+    teilnahme: null,
+    ablauf: null,
+    fazit: null,
+  });
+  // Zielbereich für „Im Text markieren" — wird nach dem Phase-Switch im
+  // useEffect unten auf die textarea angewendet. useState statt Ref, damit
+  // React den Effekt nach dem Render triggert.
+  const [pendingSelection, setPendingSelection] = useState<{
+    section: CheckerSection;
+    start: number;
+    end: number;
+  } | null>(null);
 
   useEffect(() => {
     let parsed: CheckerInput | null = null;
@@ -162,8 +169,6 @@ export function CheckerForm() {
     setPhase("processing");
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
-    setAppliedViolationIds(new Set());
-    setFailedViolationIds(new Set());
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -246,37 +251,44 @@ export function CheckerForm() {
     setPhase("input");
     setSteps(INITIAL_STEPS);
     setResult(null);
-    setAppliedViolationIds(new Set());
-    setFailedViolationIds(new Set());
   }
 
-  function handleApplySuggestion(v: {
-    id: string;
+  function handleLocateViolation(v: {
     section: CheckerSection;
     quote: string;
-    suggestion: string;
-  }) {
-    let replaced = false;
-    setInput((prev) => {
-      const result = applySuggestion(prev[v.section], v.quote, v.suggestion);
-      if (!result.found) return prev;
-      replaced = true;
-      return { ...prev, [v.section]: result.text };
+  }): "found" | "not_found" {
+    const loc = locateQuote(input[v.section], v.quote);
+    if (!loc.found) return "not_found";
+    // Erst zurück in den Edit-Modus, dann wirkt der Selektions-Effekt
+    // (textarea ist sonst gar nicht gemountet).
+    setPhase("input");
+    setPendingSelection({
+      section: v.section,
+      start: loc.start,
+      end: loc.end,
     });
-    if (replaced) {
-      setAppliedViolationIds((prev) => {
-        const next = new Set(prev);
-        next.add(v.id);
-        return next;
-      });
-    } else {
-      setFailedViolationIds((prev) => {
-        const next = new Set(prev);
-        next.add(v.id);
-        return next;
-      });
-    }
+    return "found";
   }
+
+  useEffect(() => {
+    if (!pendingSelection || phase !== "input") return;
+    const el = textareaRefs.current[pendingSelection.section];
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(pendingSelection.start, pendingSelection.end);
+    // scrollIntoView auf textarea selber — zentriert die Stelle im Viewport.
+    // Danach noch manuell auf die Selektion scrollen, damit die markierte
+    // Stelle sichtbar ist (setSelectionRange scrollt nicht automatisch).
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Approximation der Y-Position der Selektion: wir nutzen die Zeilenhöhe
+    // * line-index. Das ist nicht pixel-genau, aber reicht, damit das Auge
+    // des Coaches die Selektion findet.
+    const textBefore = el.value.substring(0, pendingSelection.start);
+    const lineIndex = (textBefore.match(/\n/g) ?? []).length;
+    const approxLineHeight = 22;
+    el.scrollTop = Math.max(0, lineIndex * approxLineHeight - 60);
+    setPendingSelection(null);
+  }, [pendingSelection, phase]);
 
   const canSubmit =
     input.teilnahme.trim().length > 0 &&
@@ -310,6 +322,9 @@ export function CheckerForm() {
               </label>
               <textarea
                 id={`checker-${section.id}`}
+                ref={(el) => {
+                  textareaRefs.current[section.id] = el;
+                }}
                 rows={10}
                 value={input[section.id]}
                 onChange={(e) =>
@@ -397,9 +412,7 @@ export function CheckerForm() {
           {result.status === "needs_revision" && (
             <FeedbackDetails
               result={result}
-              appliedViolationIds={appliedViolationIds}
-              failedViolationIds={failedViolationIds}
-              onApplySuggestion={handleApplySuggestion}
+              onLocateViolation={handleLocateViolation}
             />
           )}
           <div className="flex flex-wrap items-center justify-end gap-3 pt-2">

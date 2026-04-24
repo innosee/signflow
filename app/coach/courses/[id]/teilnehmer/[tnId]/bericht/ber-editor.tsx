@@ -11,7 +11,7 @@ import { FeedbackDetails } from "@/components/checker/feedback-details";
 import { LiveFeedback } from "@/components/checker/live-feedback";
 import { VerdictCard } from "@/components/checker/verdict-card";
 import { anonymize } from "@/lib/checker/anonymize";
-import { applySuggestion } from "@/lib/checker/apply-suggestion";
+import { locateQuote } from "@/lib/checker/locate-quote";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
@@ -112,31 +112,30 @@ export function BerEditor({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, startSaveTransition] = useTransition();
   const [isSubmitting, startSubmitTransition] = useTransition();
-  const [appliedViolationIds, setAppliedViolationIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [failedViolationIds, setFailedViolationIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const textareaRefs = useRef<Record<CheckerSection, HTMLTextAreaElement | null>>({
+    teilnahme: null,
+    ablauf: null,
+    fazit: null,
+  });
+  const [pendingSelection, setPendingSelection] = useState<{
+    section: CheckerSection;
+    start: number;
+    end: number;
+  } | null>(null);
 
-  function handleApplySuggestion(v: {
-    id: string;
+  function handleLocateViolation(v: {
     section: CheckerSection;
     quote: string;
-    suggestion: string;
-  }) {
-    let replaced = false;
-    setInput((prev) => {
-      const result = applySuggestion(prev[v.section], v.quote, v.suggestion);
-      if (!result.found) return prev;
-      replaced = true;
-      return { ...prev, [v.section]: result.text };
+  }): "found" | "not_found" {
+    const loc = locateQuote(input[v.section], v.quote);
+    if (!loc.found) return "not_found";
+    setPhase("input");
+    setPendingSelection({
+      section: v.section,
+      start: loc.start,
+      end: loc.end,
     });
-    if (replaced) {
-      setAppliedViolationIds((prev) => new Set(prev).add(v.id));
-    } else {
-      setFailedViolationIds((prev) => new Set(prev).add(v.id));
-    }
+    return "found";
   }
 
   const hasHydrated = useRef(false);
@@ -160,6 +159,20 @@ export function BerEditor({
     return () => clearTimeout(handle);
   }, [input, courseId, participantId]);
 
+  useEffect(() => {
+    if (!pendingSelection || phase !== "input") return;
+    const el = textareaRefs.current[pendingSelection.section];
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(pendingSelection.start, pendingSelection.end);
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const textBefore = el.value.substring(0, pendingSelection.start);
+    const lineIndex = (textBefore.match(/\n/g) ?? []).length;
+    const approxLineHeight = 22;
+    el.scrollTop = Math.max(0, lineIndex * approxLineHeight - 60);
+    setPendingSelection(null);
+  }, [pendingSelection, phase]);
+
   function updateStep(id: string, patch: Partial<CheckerStep>) {
     setSteps((prev) =>
       prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
@@ -172,8 +185,6 @@ export function BerEditor({
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
     setSubmitError(null);
-    setAppliedViolationIds(new Set());
-    setFailedViolationIds(new Set());
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -258,8 +269,6 @@ export function BerEditor({
     setPhase("input");
     setSteps(INITIAL_STEPS);
     setResult(null);
-    setAppliedViolationIds(new Set());
-    setFailedViolationIds(new Set());
   }
 
   function handleSubmitBer() {
@@ -329,6 +338,9 @@ export function BerEditor({
               </label>
               <textarea
                 id={`ber-${section.id}`}
+                ref={(el) => {
+                  textareaRefs.current[section.id] = el;
+                }}
                 rows={10}
                 value={input[section.id]}
                 onChange={(e) =>
@@ -409,9 +421,7 @@ export function BerEditor({
           {result.status === "needs_revision" && (
             <FeedbackDetails
               result={result}
-              appliedViolationIds={appliedViolationIds}
-              failedViolationIds={failedViolationIds}
-              onApplySuggestion={handleApplySuggestion}
+              onLocateViolation={handleLocateViolation}
             />
           )}
 

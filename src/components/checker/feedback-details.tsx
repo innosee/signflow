@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   MUST_HAVE_LABELS,
   VIOLATION_CATEGORY_LABELS,
@@ -17,22 +19,17 @@ const SECTION_LABELS: Record<CheckerSection, string> = {
 type FeedbackDetailsProps = {
   result: CheckerResult;
   /**
-   * Quick-Apply: wenn gesetzt, bekommt jede Violation einen „Übernehmen"-
-   * Button, der das Zitat 1:1 durch die Umformulierung ersetzt. Parent
-   * (checker-form / ber-editor) verdrahtet das mit setInput.
+   * Wird aufgerufen, wenn der Coach auf „Im Text markieren" klickt. Der
+   * Parent wechselt zurück in den Edit-Modus, fokussiert die textarea
+   * und selektiert den gefundenen Bereich (oder gibt Feedback, dass das
+   * Zitat nicht auffindbar ist).
    */
-  onApplySuggestion?: (violation: Violation) => void;
-  /** Violation-IDs, deren Suggestion bereits übernommen wurde. */
-  appliedViolationIds?: ReadonlySet<string>;
-  /** IDs, bei denen das Zitat nicht (mehr) im Text gefunden wurde. */
-  failedViolationIds?: ReadonlySet<string>;
+  onLocateViolation?: (violation: Violation) => "found" | "not_found";
 };
 
 export function FeedbackDetails({
   result,
-  onApplySuggestion,
-  appliedViolationIds,
-  failedViolationIds,
+  onLocateViolation,
 }: FeedbackDetailsProps) {
   const hasViolations = result.violations.length > 0;
   const openMustHaves = result.mustHaves.filter((m) => !m.covered);
@@ -48,60 +45,19 @@ export function FeedbackDetails({
               Unzulässige Stellen ({result.violations.length})
             </h3>
             <p className="mt-0.5 text-xs text-zinc-500">
-              Diese Formulierungen verstoßen gegen die Vorgaben des
-              Bildungsträgers. Übernimm die Umformulierungs-Vorschläge oder
-              passe sinngemäß an.
+              Kopiere die Umformulierung und springe mit einem Klick zur
+              markierten Stelle — dort einfach mit Cmd+V (Mac) oder Ctrl+V
+              (Windows) überschreiben.
             </p>
           </header>
           <ul className="divide-y divide-zinc-200">
-            {result.violations.map((v) => {
-              const applied = appliedViolationIds?.has(v.id) ?? false;
-              const failed = failedViolationIds?.has(v.id) ?? false;
-              return (
-                <li key={v.id} className="p-5">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-800">
-                      {VIOLATION_CATEGORY_LABELS[v.category]}
-                    </span>
-                    <span className="text-zinc-500">
-                      Abschnitt: {SECTION_LABELS[v.section]}
-                    </span>
-                    <span className="text-zinc-500">· {v.rule}</span>
-                  </div>
-                  <figure className="mt-3 rounded-lg border-l-4 border-rose-300 bg-rose-50/60 px-4 py-3">
-                    <blockquote className="text-sm italic text-zinc-800">
-                      &bdquo;{v.quote}&ldquo;
-                    </blockquote>
-                  </figure>
-                  <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium text-emerald-900">
-                          Umformulierung nach erango-Standard:
-                        </div>
-                        <p className="mt-1 text-sm text-zinc-800">
-                          {v.suggestion}
-                        </p>
-                      </div>
-                      {onApplySuggestion && (
-                        <ApplyButton
-                          applied={applied}
-                          failed={failed}
-                          onClick={() => onApplySuggestion(v)}
-                        />
-                      )}
-                    </div>
-                    {failed && !applied && (
-                      <p className="mt-2 text-xs text-amber-800">
-                        Das exakte Zitat wurde im Text nicht (mehr) gefunden —
-                        bitte manuell ersetzen. Das passiert, wenn der Abschnitt
-                        nach der Prüfung bearbeitet wurde.
-                      </p>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
+            {result.violations.map((v) => (
+              <ViolationCard
+                key={v.id}
+                violation={v}
+                onLocate={onLocateViolation}
+              />
+            ))}
           </ul>
         </section>
       )}
@@ -145,62 +101,142 @@ export function FeedbackDetails({
   );
 }
 
-function ApplyButton({
-  applied,
-  failed,
-  onClick,
+type CardStatus = "idle" | "copied" | "located" | "not_found";
+
+function ViolationCard({
+  violation,
+  onLocate,
 }: {
-  applied: boolean;
-  failed: boolean;
-  onClick: () => void;
+  violation: Violation;
+  onLocate?: (v: Violation) => "found" | "not_found";
 }) {
-  if (applied) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-        Übernommen
-      </span>
-    );
+  const [status, setStatus] = useState<CardStatus>("idle");
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(violation.suggestion);
+      setStatus("copied");
+    } catch {
+      // Clipboard-API kann blockiert sein (z.B. HTTP statt HTTPS, Permission
+      // verweigert). Nutzer hat die Umformulierung vor der Nase — im Zweifel
+      // per Hand markieren und kopieren. Keine Fehlermeldung nötig.
+      setStatus("idle");
+    }
   }
+
+  function handleLocate() {
+    if (!onLocate) return;
+    // Vor dem Springen Umformulierung in die Zwischenablage legen, damit der
+    // Coach im Edit-Modus direkt paste machen kann.
+    void navigator.clipboard.writeText(violation.suggestion).catch(() => {
+      /* ignore — Coach kann immer noch manuell kopieren */
+    });
+    const outcome = onLocate(violation);
+    setStatus(outcome === "found" ? "located" : "not_found");
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:border-amber-300 disabled:bg-amber-50 disabled:text-amber-800"
-      disabled={failed}
-      title={
-        failed
-          ? "Zitat nicht gefunden — bitte manuell ersetzen"
-          : "Zitat durch Umformulierung ersetzen"
-      }
+    <li className="p-5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-800">
+          {VIOLATION_CATEGORY_LABELS[violation.category]}
+        </span>
+        <span className="text-zinc-500">
+          Abschnitt: {SECTION_LABELS[violation.section]}
+        </span>
+        <span className="text-zinc-500">· {violation.rule}</span>
+      </div>
+
+      <figure className="mt-3 rounded-lg border-l-4 border-rose-300 bg-rose-50/60 px-4 py-3">
+        <blockquote className="text-sm italic text-zinc-800">
+          &bdquo;{violation.quote}&ldquo;
+        </blockquote>
+      </figure>
+
+      <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium text-emerald-900">
+              Umformulierung nach erango-Standard:
+            </div>
+            <p className="mt-1 text-sm text-zinc-800">{violation.suggestion}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-emerald-600/40 bg-white px-2 py-1 text-xs font-medium text-emerald-800 transition hover:bg-emerald-50"
+            title="Umformulierung in die Zwischenablage kopieren"
+            aria-label="Umformulierung kopieren"
+          >
+            <CopyIcon />
+            {status === "copied" ? "Kopiert" : "Kopieren"}
+          </button>
+        </div>
+      </div>
+
+      {onLocate && (
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleLocate}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 transition hover:bg-zinc-50"
+          >
+            <LocateIcon />
+            Im Text markieren & kopieren
+          </button>
+          {status === "located" && (
+            <span className="text-xs text-emerald-700">
+              Stelle markiert — jetzt Cmd+V (Mac) oder Ctrl+V (Windows) zum
+              Einfügen.
+            </span>
+          )}
+          {status === "not_found" && (
+            <span className="text-xs text-amber-800">
+              Stelle nicht gefunden — bitte manuell suchen. Die Umformulierung
+              liegt in der Zwischenablage.
+            </span>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
     >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-      {failed ? "nicht übernehmbar" : "Übernehmen"}
-    </button>
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function LocateIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    </svg>
   );
 }
 
