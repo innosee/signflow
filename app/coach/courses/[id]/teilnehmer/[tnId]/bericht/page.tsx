@@ -94,6 +94,12 @@ export default async function BerEditorPage({ params }: Props) {
       </div>
 
       <BerEditor
+        // Key zwingt React zum Remount, wenn der Coach zwischen zwei BERs
+        // wechselt (z.B. aus dem Checker-Dashboard heraus). Ohne Key würde
+        // der client-seitige useState (input/status/phase) vom vorherigen
+        // BER hängen bleiben — Daten eines anderen Teilnehmers wären im
+        // aktuellen Bericht sichtbar.
+        key={`${courseId}:${participantId}`}
         courseId={courseId}
         participantId={participantId}
         coachName={session.user.name}
