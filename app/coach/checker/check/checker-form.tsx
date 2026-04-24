@@ -12,6 +12,7 @@ import { LiveFeedback } from "@/components/checker/live-feedback";
 import { PasteTextButton } from "@/components/checker/paste-text-button";
 import { VerdictCard } from "@/components/checker/verdict-card";
 import { anonymize } from "@/lib/checker/anonymize";
+import { applySuggestion } from "@/lib/checker/apply-suggestion";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
@@ -257,10 +258,10 @@ export function CheckerForm() {
   }) {
     let replaced = false;
     setInput((prev) => {
-      const current = prev[v.section];
-      if (!current.includes(v.quote)) return prev;
+      const result = applySuggestion(prev[v.section], v.quote, v.suggestion);
+      if (!result.found) return prev;
       replaced = true;
-      return { ...prev, [v.section]: current.replace(v.quote, v.suggestion) };
+      return { ...prev, [v.section]: result.text };
     });
     if (replaced) {
       setAppliedViolationIds((prev) => {
