@@ -18,6 +18,7 @@ import {
   CHECKER_SECTIONS,
   type CheckerInput,
   type CheckerResult,
+  type CheckerSection,
 } from "@/lib/checker/types";
 import type { Abschlussbericht } from "@/db/schema";
 
@@ -110,6 +111,32 @@ export function BerEditor({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, startSaveTransition] = useTransition();
   const [isSubmitting, startSubmitTransition] = useTransition();
+  const [appliedViolationIds, setAppliedViolationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [failedViolationIds, setFailedViolationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  function handleApplySuggestion(v: {
+    id: string;
+    section: CheckerSection;
+    quote: string;
+    suggestion: string;
+  }) {
+    let replaced = false;
+    setInput((prev) => {
+      const current = prev[v.section];
+      if (!current.includes(v.quote)) return prev;
+      replaced = true;
+      return { ...prev, [v.section]: current.replace(v.quote, v.suggestion) };
+    });
+    if (replaced) {
+      setAppliedViolationIds((prev) => new Set(prev).add(v.id));
+    } else {
+      setFailedViolationIds((prev) => new Set(prev).add(v.id));
+    }
+  }
 
   const hasHydrated = useRef(false);
   useEffect(() => {
@@ -144,6 +171,8 @@ export function BerEditor({
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
     setSubmitError(null);
+    setAppliedViolationIds(new Set());
+    setFailedViolationIds(new Set());
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -228,6 +257,8 @@ export function BerEditor({
     setPhase("input");
     setSteps(INITIAL_STEPS);
     setResult(null);
+    setAppliedViolationIds(new Set());
+    setFailedViolationIds(new Set());
   }
 
   function handleSubmitBer() {
@@ -375,7 +406,12 @@ export function BerEditor({
         <>
           <VerdictCard result={result} />
           {result.status === "needs_revision" && (
-            <FeedbackDetails result={result} />
+            <FeedbackDetails
+              result={result}
+              appliedViolationIds={appliedViolationIds}
+              failedViolationIds={failedViolationIds}
+              onApplySuggestion={handleApplySuggestion}
+            />
           )}
 
           {submitError && (
