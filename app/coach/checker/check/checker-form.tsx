@@ -11,10 +11,10 @@ import { FeedbackDetails } from "@/components/checker/feedback-details";
 import { LiveFeedback } from "@/components/checker/live-feedback";
 import { PasteTextButton } from "@/components/checker/paste-text-button";
 import { VerdictCard } from "@/components/checker/verdict-card";
-import {
-  countPseudonymisedEntities,
-  generateDummyResult,
-} from "@/lib/checker/dummy-response";
+import { anonymize } from "@/lib/checker/anonymize";
+import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
+import { reverseMap } from "@/lib/checker/reverse-map";
+import { runCheck } from "@/lib/checker/run-check";
 import {
   CHECKER_SECTIONS,
   isCheckerInput,
@@ -36,22 +36,24 @@ function hasAnyContent(input: CheckerInput): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Aktueller MVP-Stand: Prüfung läuft komplett im Browser, kein Text verlässt
-// das Gerät. Die echte server-seitige Anonymisierung (IONOS-Proxy → Azure)
-// kommt später und ersetzt Step 1/2 durch echte Pipeline-Stufen.
+// Pipeline:
+//   1. Anonymisierung im IONOS-Proxy (Frankfurt) — ersetzt Namen/Orte/Daten
+//      durch Platzhalter. Browser ruft direkt auf, Vercel sieht keinen Rohtext.
+//   2. Azure OpenAI EU (Sweden Central) prüft den anonymen Text.
+//   3. Browser mappt Placeholder im Feedback wieder auf Originale.
 const INITIAL_STEPS: CheckerStep[] = [
   {
     id: "anon",
-    label: "Lokale Vorprüfung",
+    label: "Anonymisierung (IONOS Frankfurt)",
     description:
-      "Text wird für die Regelprüfung vorbereitet — läuft komplett im Browser.",
+      "Personenbezogene Daten werden durch Platzhalter ersetzt — direkt aus dem Browser zum Proxy in Frankfurt.",
     state: "pending",
   },
   {
     id: "validate",
-    label: "Regel-Validierung",
+    label: "Regel-Validierung (Azure EU)",
     description:
-      "Der Text wird gegen den Regelkatalog des Bildungsträgers geprüft.",
+      "Der anonymisierte Text wird gegen den Regelkatalog geprüft — Azure OpenAI in Sweden Central.",
     state: "pending",
   },
   {
@@ -154,36 +156,71 @@ export function CheckerForm() {
     setResult(null);
 
     updateStep("anon", { state: "active" });
-    await sleep(1800);
-    const piiHits = countPseudonymisedEntities(input);
-    updateStep("anon", {
-      state: "success",
-      detail:
-        piiHits > 0
-          ? `${piiHits} potenziell personenbezogene ${piiHits === 1 ? "Angabe" : "Angaben"} im Freitext markiert. Kein Text wird gesendet — Prüfung läuft lokal.`
-          : "Keine offensichtlichen personenbezogenen Angaben im Freitext gefunden. Prüfung läuft lokal im Browser.",
-    });
+    let anonResult: Awaited<ReturnType<typeof anonymize>>;
+    try {
+      anonResult = await anonymize(input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      updateStep("anon", { state: "error", detail: message });
+      updateStep("verdict", {
+        state: "error",
+        detail: "Anonymisierung fehlgeschlagen — Prüfung abgebrochen.",
+      });
+      setPhase("done");
+      return;
+    }
+    if (anonResult.bypassed) {
+      const piiHits = countPseudonymisedEntities(input);
+      updateStep("anon", {
+        state: "success",
+        detail:
+          piiHits > 0
+            ? `IONOS-Proxy nicht konfiguriert — ${piiHits} potenziell personenbezogene Angaben im Klartext an Azure gesendet.`
+            : "IONOS-Proxy nicht konfiguriert — Klartext an Azure gesendet (kein PII erkannt).",
+      });
+    } else {
+      const n = anonResult.entities.length;
+      updateStep("anon", {
+        state: "success",
+        detail:
+          n > 0
+            ? `${n} ${n === 1 ? "Entität" : "Entitäten"} pseudonymisiert (Namen, Orte, Daten, …).`
+            : "Keine personenbezogenen Angaben gefunden — anonymisierter Text ist identisch zum Original.",
+      });
+    }
 
     updateStep("validate", { state: "active" });
-    await sleep(2400);
-    const dummyResult = generateDummyResult(input);
+    let azureResult: CheckerResult;
+    try {
+      azureResult = await runCheck(anonResult.anonymized);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      updateStep("validate", { state: "error", detail: message });
+      updateStep("verdict", {
+        state: "error",
+        detail: "Prüfung konnte nicht durchgeführt werden.",
+      });
+      setPhase("done");
+      return;
+    }
+    const mappedResult = reverseMap(anonResult.entities, azureResult);
     updateStep("validate", {
       state: "success",
-      detail: `${dummyResult.violations.length} ${dummyResult.violations.length === 1 ? "Regelverstoß" : "Regelverstöße"} · ${dummyResult.mustHaves.filter((m) => m.covered).length}/${dummyResult.mustHaves.length} Pflichtbausteine abgedeckt.`,
+      detail: `${mappedResult.violations.length} ${mappedResult.violations.length === 1 ? "Regelverstoß" : "Regelverstöße"} · ${mappedResult.mustHaves.filter((m) => m.covered).length}/${mappedResult.mustHaves.length} Pflichtbausteine abgedeckt.`,
     });
 
     updateStep("feedback", { state: "active" });
-    await sleep(1400);
+    await sleep(300);
     updateStep("feedback", {
       state: "success",
       detail:
-        dummyResult.violations.length > 0
-          ? `${dummyResult.violations.length} Umformulierungs-Vorschläge bereit.`
+        mappedResult.violations.length > 0
+          ? `${mappedResult.violations.length} Umformulierungs-Vorschläge bereit.`
           : "Keine Umformulierungen nötig.",
     });
 
-    await sleep(400);
-    const passed = dummyResult.status === "pass";
+    await sleep(200);
+    const passed = mappedResult.status === "pass";
     updateStep("verdict", {
       state: passed ? "success" : "error",
       detail: passed
@@ -191,7 +228,7 @@ export function CheckerForm() {
         : "Bericht muss überarbeitet werden — siehe Feedback unten.",
     });
 
-    setResult(dummyResult);
+    setResult(mappedResult);
     setPhase("done");
   }
 

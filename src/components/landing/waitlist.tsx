@@ -1,14 +1,29 @@
 "use client";
 
+import Script from "next/script";
+import { useEffect, useRef } from "react";
 import { useActionState } from "react";
 
 import { submitWaitlist, type WaitlistState } from "@/lib/waitlist-action";
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export function LandingWaitlist() {
   const [state, action, pending] = useActionState<WaitlistState, FormData>(
     submitWaitlist,
     undefined,
   );
+
+  const timestampRef = useRef<HTMLInputElement>(null);
+
+  // Honeypot + Min-Time-Check brauchen einen client-gesetzten Timestamp.
+  // Per useEffect, damit SSR/CSR keine Hydration-Mismatch auf Date.now()
+  // hat. Bots ohne JS bekommen kein Feld → Server-Check verwirft sie.
+  useEffect(() => {
+    if (timestampRef.current) {
+      timestampRef.current.value = String(Date.now());
+    }
+  }, [state]);
 
   return (
     <section
@@ -59,6 +74,14 @@ export function LandingWaitlist() {
             action={action}
             className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8"
           >
+            <HoneypotField />
+            <input
+              ref={timestampRef}
+              type="hidden"
+              name="rendered_at"
+              defaultValue=""
+            />
+
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 name="name"
@@ -101,6 +124,17 @@ export function LandingWaitlist() {
               />
             </label>
 
+            {TURNSTILE_SITE_KEY && (
+              <div className="mt-4">
+                <div
+                  className="cf-turnstile"
+                  data-sitekey={TURNSTILE_SITE_KEY}
+                  data-theme="light"
+                  data-size="flexible"
+                />
+              </div>
+            )}
+
             {state?.error && (
               <p role="alert" className="mt-3 text-sm text-red-700">
                 {state.error}
@@ -123,7 +157,49 @@ export function LandingWaitlist() {
           </form>
         )}
       </div>
+
+      {TURNSTILE_SITE_KEY && (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+          strategy="afterInteractive"
+          async
+          defer
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * Honigtopf: für echte User unsichtbar (off-screen, aria-hidden, tabIndex=-1,
+ * autoComplete=off). Bots, die alle Felder stumpf ausfüllen, schreiben hier
+ * rein → Server-Action verwirft die Submission. `display:none` würde von
+ * smarteren Bots erkannt; deshalb visuell weggesetzt statt versteckt.
+ */
+function HoneypotField() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        left: "-10000px",
+        top: "auto",
+        width: "1px",
+        height: "1px",
+        overflow: "hidden",
+      }}
+    >
+      <label>
+        Website (bitte leer lassen)
+        <input
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          defaultValue=""
+        />
+      </label>
+    </div>
   );
 }
 

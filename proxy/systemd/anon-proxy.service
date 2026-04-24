@@ -1,0 +1,23 @@
+[Unit]
+Description=Signflow Anonymisierungs-Proxy (Fastify + GLiNER + IONOS AI Hub)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=signflow
+WorkingDirectory=/home/signflow/app
+EnvironmentFile=/home/signflow/app/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/signflow/app
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

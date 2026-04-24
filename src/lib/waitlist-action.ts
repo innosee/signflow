@@ -1,5 +1,6 @@
 "use server";
 
+import { runBotChecks } from "@/lib/bot-protection";
 import { sendEmail } from "@/lib/email";
 
 export type WaitlistState =
@@ -33,6 +34,12 @@ export async function submitWaitlist(
   _prev: WaitlistState,
   formData: FormData,
 ): Promise<WaitlistState> {
+  const botCheck = await runBotChecks(formData);
+  if (!botCheck.ok) {
+    console.warn("waitlist bot-check rejected:", botCheck.reason);
+    return { error: botCheck.userMessage };
+  }
+
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const company = String(formData.get("company") ?? "").trim();

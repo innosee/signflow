@@ -34,8 +34,9 @@ export function LandingFooter() {
         </FooterGroup>
 
         <FooterGroup title="Rechtliches">
-          <a href="mailto:info@innosee.de">Impressum</a>
-          <a href="mailto:info@innosee.de">Datenschutz</a>
+          <Link href="/impressum">Impressum</Link>
+          <Link href="/datenschutz">Datenschutz</Link>
+          <Link href="/cookies">Cookie-Hinweis</Link>
           <a href="mailto:info@innosee.de">AVV anfragen</a>
         </FooterGroup>
       </div>
