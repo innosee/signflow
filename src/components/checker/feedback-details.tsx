@@ -1,8 +1,11 @@
+"use client";
+
 import {
   MUST_HAVE_LABELS,
   VIOLATION_CATEGORY_LABELS,
   type CheckerResult,
   type CheckerSection,
+  type Violation,
 } from "@/lib/checker/types";
 
 const SECTION_LABELS: Record<CheckerSection, string> = {
@@ -11,7 +14,26 @@ const SECTION_LABELS: Record<CheckerSection, string> = {
   fazit: "Fazit und Empfehlungen",
 };
 
-export function FeedbackDetails({ result }: { result: CheckerResult }) {
+type FeedbackDetailsProps = {
+  result: CheckerResult;
+  /**
+   * Quick-Apply: wenn gesetzt, bekommt jede Violation einen „Übernehmen"-
+   * Button, der das Zitat 1:1 durch die Umformulierung ersetzt. Parent
+   * (checker-form / ber-editor) verdrahtet das mit setInput.
+   */
+  onApplySuggestion?: (violation: Violation) => void;
+  /** Violation-IDs, deren Suggestion bereits übernommen wurde. */
+  appliedViolationIds?: ReadonlySet<string>;
+  /** IDs, bei denen das Zitat nicht (mehr) im Text gefunden wurde. */
+  failedViolationIds?: ReadonlySet<string>;
+};
+
+export function FeedbackDetails({
+  result,
+  onApplySuggestion,
+  appliedViolationIds,
+  failedViolationIds,
+}: FeedbackDetailsProps) {
   const hasViolations = result.violations.length > 0;
   const openMustHaves = result.mustHaves.filter((m) => !m.covered);
 
@@ -32,30 +54,54 @@ export function FeedbackDetails({ result }: { result: CheckerResult }) {
             </p>
           </header>
           <ul className="divide-y divide-zinc-200">
-            {result.violations.map((v) => (
-              <li key={v.id} className="p-5">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-800">
-                    {VIOLATION_CATEGORY_LABELS[v.category]}
-                  </span>
-                  <span className="text-zinc-500">
-                    Abschnitt: {SECTION_LABELS[v.section]}
-                  </span>
-                  <span className="text-zinc-500">· {v.rule}</span>
-                </div>
-                <figure className="mt-3 rounded-lg border-l-4 border-rose-300 bg-rose-50/60 px-4 py-3">
-                  <blockquote className="text-sm italic text-zinc-800">
-                    &bdquo;{v.quote}&ldquo;
-                  </blockquote>
-                </figure>
-                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-                  <div className="text-xs font-medium text-emerald-900">
-                    Umformulierung nach erango-Standard:
+            {result.violations.map((v) => {
+              const applied = appliedViolationIds?.has(v.id) ?? false;
+              const failed = failedViolationIds?.has(v.id) ?? false;
+              return (
+                <li key={v.id} className="p-5">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-800">
+                      {VIOLATION_CATEGORY_LABELS[v.category]}
+                    </span>
+                    <span className="text-zinc-500">
+                      Abschnitt: {SECTION_LABELS[v.section]}
+                    </span>
+                    <span className="text-zinc-500">· {v.rule}</span>
                   </div>
-                  <p className="mt-1 text-sm text-zinc-800">{v.suggestion}</p>
-                </div>
-              </li>
-            ))}
+                  <figure className="mt-3 rounded-lg border-l-4 border-rose-300 bg-rose-50/60 px-4 py-3">
+                    <blockquote className="text-sm italic text-zinc-800">
+                      &bdquo;{v.quote}&ldquo;
+                    </blockquote>
+                  </figure>
+                  <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-medium text-emerald-900">
+                          Umformulierung nach erango-Standard:
+                        </div>
+                        <p className="mt-1 text-sm text-zinc-800">
+                          {v.suggestion}
+                        </p>
+                      </div>
+                      {onApplySuggestion && (
+                        <ApplyButton
+                          applied={applied}
+                          failed={failed}
+                          onClick={() => onApplySuggestion(v)}
+                        />
+                      )}
+                    </div>
+                    {failed && !applied && (
+                      <p className="mt-2 text-xs text-amber-800">
+                        Das exakte Zitat wurde im Text nicht (mehr) gefunden —
+                        bitte manuell ersetzen. Das passiert, wenn der Abschnitt
+                        nach der Prüfung bearbeitet wurde.
+                      </p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -96,6 +142,65 @@ export function FeedbackDetails({ result }: { result: CheckerResult }) {
         </section>
       )}
     </div>
+  );
+}
+
+function ApplyButton({
+  applied,
+  failed,
+  onClick,
+}: {
+  applied: boolean;
+  failed: boolean;
+  onClick: () => void;
+}) {
+  if (applied) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+        Übernommen
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:border-amber-300 disabled:bg-amber-50 disabled:text-amber-800"
+      disabled={failed}
+      title={
+        failed
+          ? "Zitat nicht gefunden — bitte manuell ersetzen"
+          : "Zitat durch Umformulierung ersetzen"
+      }
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+      {failed ? "nicht übernehmbar" : "Übernehmen"}
+    </button>
   );
 }
 

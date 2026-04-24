@@ -20,6 +20,7 @@ import {
   isCheckerInput,
   type CheckerInput,
   type CheckerResult,
+  type CheckerSection,
 } from "@/lib/checker/types";
 
 const EXPORT_STORAGE_KEY = "signflow:checker-export";
@@ -83,6 +84,12 @@ export function CheckerForm() {
   const [result, setResult] = useState<CheckerResult | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [appliedViolationIds, setAppliedViolationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [failedViolationIds, setFailedViolationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     let parsed: CheckerInput | null = null;
@@ -154,6 +161,8 @@ export function CheckerForm() {
     setPhase("processing");
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
+    setAppliedViolationIds(new Set());
+    setFailedViolationIds(new Set());
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -236,6 +245,36 @@ export function CheckerForm() {
     setPhase("input");
     setSteps(INITIAL_STEPS);
     setResult(null);
+    setAppliedViolationIds(new Set());
+    setFailedViolationIds(new Set());
+  }
+
+  function handleApplySuggestion(v: {
+    id: string;
+    section: CheckerSection;
+    quote: string;
+    suggestion: string;
+  }) {
+    let replaced = false;
+    setInput((prev) => {
+      const current = prev[v.section];
+      if (!current.includes(v.quote)) return prev;
+      replaced = true;
+      return { ...prev, [v.section]: current.replace(v.quote, v.suggestion) };
+    });
+    if (replaced) {
+      setAppliedViolationIds((prev) => {
+        const next = new Set(prev);
+        next.add(v.id);
+        return next;
+      });
+    } else {
+      setFailedViolationIds((prev) => {
+        const next = new Set(prev);
+        next.add(v.id);
+        return next;
+      });
+    }
   }
 
   const canSubmit =
@@ -355,7 +394,12 @@ export function CheckerForm() {
         <>
           <VerdictCard result={result} />
           {result.status === "needs_revision" && (
-            <FeedbackDetails result={result} />
+            <FeedbackDetails
+              result={result}
+              appliedViolationIds={appliedViolationIds}
+              failedViolationIds={failedViolationIds}
+              onApplySuggestion={handleApplySuggestion}
+            />
           )}
           <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
             <button
