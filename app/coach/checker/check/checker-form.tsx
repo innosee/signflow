@@ -13,6 +13,7 @@ import { PasteTextButton } from "@/components/checker/paste-text-button";
 import { VerdictCard } from "@/components/checker/verdict-card";
 import { anonymize } from "@/lib/checker/anonymize";
 import { locateQuote } from "@/lib/checker/locate-quote";
+import { inputsEqual } from "@/lib/checker/snapshot";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
@@ -83,6 +84,11 @@ export function CheckerForm() {
   const [input, setInput] = useState<CheckerInput>(EMPTY_INPUT);
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
   const [result, setResult] = useState<CheckerResult | null>(null);
+  // Input-Snapshot des letzten Checks — kein erneuter Azure-Call wenn
+  // der Coach ohne Text-Änderungen nochmal „Prüfen" klickt.
+  const [lastCheckedInput, setLastCheckedInput] = useState<CheckerInput | null>(
+    null,
+  );
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const textareaRefs = useRef<Record<CheckerSection, HTMLTextAreaElement | null>>({
@@ -166,6 +172,14 @@ export function CheckerForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Short-circuit: gleicher Input wie beim letzten Check → gecachtes
+    // Ergebnis zeigen, kein neuer Azure-Call. Spart Tokens bei Doppel-Klick
+    // oder „Weiter bearbeiten" → „Prüfen" ohne Text-Änderung.
+    if (result && lastCheckedInput && inputsEqual(input, lastCheckedInput)) {
+      setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "success" })));
+      setPhase("done");
+      return;
+    }
     setPhase("processing");
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
@@ -244,6 +258,7 @@ export function CheckerForm() {
     });
 
     setResult(mappedResult);
+    setLastCheckedInput({ ...input });
     setPhase("done");
   }
 

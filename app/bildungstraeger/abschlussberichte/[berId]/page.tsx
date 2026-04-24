@@ -5,11 +5,10 @@ import { eq } from "drizzle-orm";
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { requireBildungstraeger } from "@/lib/dal";
+import { readSoftFlags } from "@/lib/checker/snapshot";
 import {
   VIOLATION_CATEGORY_LABELS,
-  type CheckerResult,
   type CheckerSection,
-  type Violation,
 } from "@/lib/checker/types";
 
 import { acknowledgeSoftFlags } from "../../actions";
@@ -20,16 +19,6 @@ const SECTION_LABELS: Record<CheckerSection, string> = {
   ablauf: "Ablauf und Inhalte",
   fazit: "Fazit und Empfehlungen",
 };
-
-function extractSoftFlags(raw: unknown): Violation[] {
-  if (!raw || typeof raw !== "object") return [];
-  const snapshot = raw as Partial<CheckerResult>;
-  if (!Array.isArray(snapshot.violations)) return [];
-  return snapshot.violations.filter(
-    (v): v is Violation =>
-      !!v && typeof v === "object" && "severity" in v && v.severity === "soft_flag",
-  );
-}
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +81,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
   if (!row) notFound();
 
   const { ber, course, participant, coach } = row;
-  const softFlags = extractSoftFlags(ber.checkSnapshot);
+  const softFlags = readSoftFlags(ber.checkSnapshot);
   const softFlagsAcknowledged = !!ber.softFlagsAcknowledgedAt;
   const ackDate = ber.softFlagsAcknowledgedAt
     ? new Date(ber.softFlagsAcknowledgedAt)

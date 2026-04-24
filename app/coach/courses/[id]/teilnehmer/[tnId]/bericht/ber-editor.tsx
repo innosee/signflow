@@ -16,6 +16,12 @@ import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
 import {
+  buildSnapshot,
+  inputsEqual,
+  readSnapshotInput,
+  readSnapshotResult,
+} from "@/lib/checker/snapshot";
+import {
   CHECKER_SECTIONS,
   type CheckerInput,
   type CheckerResult,
@@ -112,7 +118,15 @@ export function BerEditor({
 
   const [phase, setPhase] = useState<Phase>("input");
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
-  const [result, setResult] = useState<CheckerResult | null>(null);
+  // Cache des letzten Checks: gleicher Input → kein erneuter Azure-Call.
+  // Preseed aus dem persistierten Snapshot, wenn er v2 ist und der Input
+  // zu den gespeicherten Textfeldern passt (beim ersten Mount).
+  const [lastCheckedInput, setLastCheckedInput] = useState<CheckerInput | null>(
+    () => readSnapshotInput(initialBer?.checkSnapshot),
+  );
+  const [result, setResult] = useState<CheckerResult | null>(() =>
+    readSnapshotResult(initialBer?.checkSnapshot),
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, startSaveTransition] = useTransition();
   const [isSubmitting, startSubmitTransition] = useTransition();
@@ -188,6 +202,15 @@ export function BerEditor({
 
   async function handleRunCheck(e: React.FormEvent) {
     e.preventDefault();
+    // Short-circuit: wenn der Input seit dem letzten Check unverändert ist,
+    // sparen wir uns den Azure-Token und zeigen das gecachte Ergebnis.
+    // Reset wird ausschließlich im ersten Branch überschrieben, Nachfrage
+    // mit „Erneut prüfen" wäre über einen separaten Button denkbar (TODO).
+    if (result && lastCheckedInput && inputsEqual(input, lastCheckedInput)) {
+      setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "success" })));
+      setPhase("done");
+      return;
+    }
     setPhase("processing");
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
@@ -269,6 +292,11 @@ export function BerEditor({
     });
 
     setResult(mapped);
+    // Input-Snapshot merken, damit ein erneutes „Prüfen" ohne Änderungen
+    // keinen weiteren Azure-Call verursacht. Wichtig: Kopie, nicht Referenz,
+    // damit spätere Edits des Live-Inputs den Cache nicht aus Versehen
+    // invalidieren (State-Vergleich per inputsEqual wertebasiert).
+    setLastCheckedInput({ ...input });
     setPhase("done");
   }
 
@@ -288,11 +316,11 @@ export function BerEditor({
     fd.append("ablauf", input.ablauf);
     fd.append("fazit", input.fazit);
     fd.append("lastCheckPassed", "true");
-    // Snapshot des letzten Check-Ergebnisses mitsenden — der Bildungsträger
-    // sieht dann im Detail-View, welche soft_flags der Coach „durchgelassen"
-    // hat, und kann sie acknowledgen.
+    // Snapshot v2 = { v: 2, input, result } — mit eingebettetem Input,
+    // damit wir beim nächsten Öffnen des BER (und unverändertem Text)
+    // nicht noch einen Azure-Call verbraten.
     if (result) {
-      fd.append("checkSnapshot", JSON.stringify(result));
+      fd.append("checkSnapshot", JSON.stringify(buildSnapshot(input, result)));
     }
     startSubmitTransition(async () => {
       const res = await submitBerAction(undefined, fd);
