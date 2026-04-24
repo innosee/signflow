@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,3 +43,11 @@ next-env.d.ts
 
 # claude code local state
 .claude/
+
+# editor local state
+.vscode/
+
+# proxy build artefakte (werden auf VM gebaut)
+/proxy/node_modules/
+/proxy/python/.venv/
+/proxy/.env
