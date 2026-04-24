@@ -31,27 +31,50 @@ export function FeedbackDetails({
   result,
   onLocateViolation,
 }: FeedbackDetailsProps) {
-  const hasViolations = result.violations.length > 0;
+  const hardBlocks = result.violations.filter((v) => v.severity === "hard_block");
+  const softFlags = result.violations.filter((v) => v.severity === "soft_flag");
   const openMustHaves = result.mustHaves.filter((m) => !m.covered);
 
   return (
     <div className="space-y-6">
       <MustHaveChecklist mustHaves={result.mustHaves} />
 
-      {hasViolations && (
-        <section className="rounded-xl border border-zinc-300 bg-white">
-          <header className="border-b border-zinc-200 px-5 py-4">
-            <h3 className="text-sm font-semibold text-zinc-900">
-              Unzulässige Stellen ({result.violations.length})
+      {hardBlocks.length > 0 && (
+        <section className="rounded-xl border border-rose-300 bg-white">
+          <header className="border-b border-rose-200 bg-rose-50/60 px-5 py-4">
+            <h3 className="text-sm font-semibold text-rose-900">
+              Muss korrigiert werden ({hardBlocks.length})
             </h3>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Kopiere die Umformulierung und springe mit einem Klick zur
-              markierten Stelle — dort einfach mit Cmd+V (Mac) oder Ctrl+V
-              (Windows) überschreiben.
+            <p className="mt-0.5 text-xs text-rose-800/80">
+              Diese Formulierungen sind Ablehnungsgründe. Bitte vor dem
+              Einreichen ersetzen.
             </p>
           </header>
           <ul className="divide-y divide-zinc-200">
-            {result.violations.map((v) => (
+            {hardBlocks.map((v) => (
+              <ViolationCard
+                key={v.id}
+                violation={v}
+                onLocate={onLocateViolation}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {softFlags.length > 0 && (
+        <section className="rounded-xl border border-amber-300 bg-white">
+          <header className="border-b border-amber-200 bg-amber-50/60 px-5 py-4">
+            <h3 className="text-sm font-semibold text-amber-900">
+              Hinweise zur Formulierung ({softFlags.length})
+            </h3>
+            <p className="mt-0.5 text-xs text-amber-800/80">
+              Kein Blocker — der Bildungsträger sieht diese Hinweise und kann
+              entscheiden, ob eine Umformulierung nötig ist.
+            </p>
+          </header>
+          <ul className="divide-y divide-zinc-200">
+            {softFlags.map((v) => (
               <ViolationCard
                 key={v.id}
                 violation={v}
@@ -111,6 +134,13 @@ function ViolationCard({
   onLocate?: (v: Violation) => "found" | "not_found";
 }) {
   const [status, setStatus] = useState<CardStatus>("idle");
+  const isSoft = violation.severity === "soft_flag";
+  const badgeClass = isSoft
+    ? "rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-900"
+    : "rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-800";
+  const quoteClass = isSoft
+    ? "mt-3 rounded-lg border-l-4 border-amber-300 bg-amber-50/60 px-4 py-3"
+    : "mt-3 rounded-lg border-l-4 border-rose-300 bg-rose-50/60 px-4 py-3";
 
   async function handleCopy() {
     try {
@@ -138,16 +168,21 @@ function ViolationCard({
   return (
     <li className="p-5">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-800">
+        <span className={badgeClass}>
           {VIOLATION_CATEGORY_LABELS[violation.category]}
         </span>
+        {isSoft && (
+          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+            Hinweis
+          </span>
+        )}
         <span className="text-zinc-500">
           Abschnitt: {SECTION_LABELS[violation.section]}
         </span>
         <span className="text-zinc-500">· {violation.rule}</span>
       </div>
 
-      <figure className="mt-3 rounded-lg border-l-4 border-rose-300 bg-rose-50/60 px-4 py-3">
+      <figure className={quoteClass}>
         <blockquote className="text-sm italic text-zinc-800">
           &bdquo;{violation.quote}&ldquo;
         </blockquote>
