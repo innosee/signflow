@@ -29,7 +29,9 @@ export type AuditAction =
   | "ber.submitted"
   | "ber.edited_after_submit"
   | "coach.signing_enabled.on"
-  | "coach.signing_enabled.off";
+  | "coach.signing_enabled.off"
+  | "coach.delete"
+  | "ber.soft_flags.acknowledged";
 
 export type AuditActorType =
   | "bildungstraeger"

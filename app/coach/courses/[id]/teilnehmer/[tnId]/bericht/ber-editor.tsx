@@ -281,6 +281,12 @@ export function BerEditor({
     fd.append("ablauf", input.ablauf);
     fd.append("fazit", input.fazit);
     fd.append("lastCheckPassed", "true");
+    // Snapshot des letzten Check-Ergebnisses mitsenden — der Bildungsträger
+    // sieht dann im Detail-View, welche soft_flags der Coach „durchgelassen"
+    // hat, und kann sie acknowledgen.
+    if (result) {
+      fd.append("checkSnapshot", JSON.stringify(result));
+    }
     startSubmitTransition(async () => {
       const res = await submitBerAction(undefined, fd);
       if (res?.error) {
