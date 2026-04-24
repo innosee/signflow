@@ -1,11 +1,10 @@
 anon.signflow.coach {
 	encode zstd gzip
 
-	@options {
-		method OPTIONS
-	}
-	respond @options 204
-
+	# OPTIONS (CORS-Preflight) NICHT hier beantworten — sonst fehlen die
+	# CORS-Header und der Browser blockt die nachfolgende POST. Stattdessen
+	# an Fastify durchreichen, das per @fastify/cors die richtigen
+	# Access-Control-*-Header setzt.
 	reverse_proxy 127.0.0.1:3000 {
 		header_up Host {host}
 		header_up X-Real-IP {remote_host}
