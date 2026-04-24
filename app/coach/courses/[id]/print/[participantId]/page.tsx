@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { Stundennachweis } from "@/components/stundennachweis";
 import { db, schema } from "@/db";
-import { requireCoach } from "@/lib/dal";
+import { requireSigningEnabled } from "@/lib/dal";
 import { loadStundennachweisSheet } from "@/lib/sheet-data";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ type Props = {
 };
 
 export default async function PrintSheetPage({ params }: Props) {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   const { id: courseId, participantId } = await params;
 
   // Ownership-Gate BEVOR wir das Sheet laden — sonst könnte ein Coach die

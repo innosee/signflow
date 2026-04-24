@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { isImpersonating, requireCoach } from "@/lib/dal";
+import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -25,7 +25,7 @@ const BEDARFSTRAEGER_LABEL = {
 } as const;
 
 export default async function CourseDetailPage({ params, searchParams }: Props) {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   const impersonating = isImpersonating(session);
   const { id } = await params;
   const { reused } = await searchParams;

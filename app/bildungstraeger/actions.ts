@@ -129,6 +129,58 @@ export async function stopImpersonating(): Promise<void> {
   redirect("/bildungstraeger");
 }
 
+/**
+ * Per-Coach-Toggle für den `signing_enabled`-Flag. Standardmäßig sehen
+ * Coaches nach dem Go-Live nur den Checker — der Bildungsträger schaltet
+ * ausgewählte Pilot-Coaches frei (siehe ROADMAP.md → Rollout-Infrastruktur).
+ *
+ * Während Impersonation blockiert: sonst könnte ein Bildungsträger unter
+ * Coach-Identität sich selbst den Flag setzen und die Beweiskette ist
+ * sauberer, wenn role-mutierende Aktionen immer direkt laufen.
+ */
+export async function setCoachSigningEnabled(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    redirect("/bildungstraeger?imp_error=invalid");
+  }
+
+  const coachId = String(formData.get("coachId") ?? "").trim();
+  const enabled = String(formData.get("enabled") ?? "") === "true";
+  if (!coachId) {
+    redirect("/bildungstraeger?imp_error=invalid");
+  }
+
+  const [target] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, coachId),
+        eq(schema.users.role, "coach"),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!target) {
+    redirect("/bildungstraeger?imp_error=unknown");
+  }
+
+  await db
+    .update(schema.users)
+    .set({ signingEnabled: enabled })
+    .where(eq(schema.users.id, coachId));
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: enabled ? "coach.signing_enabled.on" : "coach.signing_enabled.off",
+    resourceType: "user",
+    resourceId: coachId,
+  });
+
+  revalidatePath("/bildungstraeger");
+}
+
 export type SubmitAfaState =
   | { error?: string; submitted?: boolean }
   | undefined;

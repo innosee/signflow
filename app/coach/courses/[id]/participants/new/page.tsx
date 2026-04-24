@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { assertNotImpersonating, requireCoach } from "@/lib/dal";
+import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
 
 import { ParticipantForm } from "./participant-form";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ id: string }> };
 
 export default async function NewParticipantPage({ params }: Props) {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const { id } = await params;
 

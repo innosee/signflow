@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { assertNotImpersonating, requireCoach } from "@/lib/dal";
+import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
 
 export type CourseFormState =
   | { error?: string; info?: string }
@@ -45,7 +45,7 @@ export async function createCourse(
   _prev: CourseFormState,
   formData: FormData,
 ): Promise<CourseFormState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 

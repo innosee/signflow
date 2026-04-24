@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { isImpersonating, requireCoach } from "@/lib/dal";
+import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,12 @@ const STATUS_BADGE: Record<string, string> = {
 export default async function CoachDashboard() {
   const session = await requireCoach();
   const impersonating = isImpersonating(session);
+
+  // Coaches ohne Signatur-Flag landen beim Einloggen direkt im Checker.
+  // Kein „leeres Kurse-Dashboard" zeigen — das würde verwirren und legt
+  // UI-Pfade frei, die nicht funktionieren.
+  const signingEnabled = await getSigningEnabled(session.user.id);
+  if (!signingEnabled) redirect("/coach/checker");
 
   const [me] = await db
     .select({ signatureUrl: schema.users.signatureUrl })

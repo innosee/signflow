@@ -6,7 +6,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
-import { assertNotImpersonating, requireCoach } from "@/lib/dal";
+import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
 
 export type BerActionState = { error?: string; savedAt?: string } | undefined;
 
@@ -63,7 +63,7 @@ export async function saveBerDraftAction(
   _prev: BerActionState,
   formData: FormData,
 ): Promise<BerActionState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 
@@ -167,7 +167,7 @@ export async function submitBerAction(
   _prev: BerActionState,
   formData: FormData,
 ): Promise<BerActionState> {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
 

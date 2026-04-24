@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireCoach } from "@/lib/dal";
+import { requireSigningEnabled } from "@/lib/dal";
 import type { Abschlussbericht } from "@/db/schema";
 
 import { BerEditor } from "./ber-editor";
@@ -15,7 +15,7 @@ type Props = {
 };
 
 export default async function BerEditorPage({ params }: Props) {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   const { id: courseId, tnId: participantId } = await params;
 
   const [row] = await db

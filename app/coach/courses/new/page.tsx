@@ -1,14 +1,14 @@
 import { asc, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireCoach } from "@/lib/dal";
+import { requireSigningEnabled } from "@/lib/dal";
 
 import { CourseForm } from "./course-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewCoursePage() {
-  await requireCoach();
+  await requireSigningEnabled();
 
   const bedarfstraeger = await db
     .select({

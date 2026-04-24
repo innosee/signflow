@@ -27,7 +27,9 @@ export type AuditAction =
   | "checker.report_submitted"
   | "ber.draft_saved"
   | "ber.submitted"
-  | "ber.edited_after_submit";
+  | "ber.edited_after_submit"
+  | "coach.signing_enabled.on"
+  | "coach.signing_enabled.off";
 
 export type AuditActorType =
   | "bildungstraeger"
@@ -48,7 +50,8 @@ export type AuditEntry = {
     | "session"
     | "final_document"
     | "checker_run"
-    | "abschlussbericht";
+    | "abschlussbericht"
+    | "user";
   resourceId: string;
   metadata?: Record<string, unknown> | null;
   ipAddress?: string | null;

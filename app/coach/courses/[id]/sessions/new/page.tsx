@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { assertNotImpersonating, requireCoach } from "@/lib/dal";
+import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
 
 import { SessionForm } from "./session-form";
 
@@ -13,7 +13,7 @@ type Props = {
 };
 
 export default async function NewSessionPage({ params }: Props) {
-  const session = await requireCoach();
+  const session = await requireSigningEnabled();
   // Session-Anlage ist ein schreibender Vorgang → Bildungsträger darf das während
   // Impersonation nicht auslösen (siehe CLAUDE.md → Auth & Berechtigungen).
   assertNotImpersonating(session);

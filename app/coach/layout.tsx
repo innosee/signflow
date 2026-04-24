@@ -1,5 +1,5 @@
 import { AppHeader } from "@/components/app-header";
-import { isImpersonating, requireCoach } from "@/lib/dal";
+import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
 
 import { stopImpersonating } from "../bildungstraeger/actions";
 import { logoutAction } from "../login/actions";
@@ -12,6 +12,17 @@ export default async function CoachLayout({
   children: React.ReactNode;
 }) {
   const session = await requireCoach();
+  const signingEnabled = await getSigningEnabled(session.user.id);
+
+  // Checker ist für alle Coaches sichtbar. „Kurse" (Signatur-Flow) nur
+  // für Pilot-Coaches mit `signing_enabled`, sonst führt der Link ins Leere
+  // (Layout redirected).
+  const navLinks = signingEnabled
+    ? [
+        { href: "/coach", label: "Kurse" },
+        { href: "/coach/checker", label: "Berichts-Checker" },
+      ]
+    : [{ href: "/coach/checker", label: "Berichts-Checker" }];
 
   return (
     <>
@@ -19,11 +30,8 @@ export default async function CoachLayout({
           ausgeblendet — der gehört in Browser-Chrome, nicht ins AfA-Blatt. */}
       <div className="print:hidden">
         <AppHeader
-          brandHref="/coach"
-          navLinks={[
-            { href: "/coach", label: "Kurse" },
-            { href: "/coach/checker", label: "Berichts-Checker" },
-          ]}
+          brandHref={signingEnabled ? "/coach" : "/coach/checker"}
+          navLinks={navLinks}
           userName={session.user.name}
           userEmail={session.user.email}
           impersonating={isImpersonating(session)}
