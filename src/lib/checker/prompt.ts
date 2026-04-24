@@ -4,16 +4,24 @@ Der Bericht wurde **bereits anonymisiert**: Namen, Adressen, Kunden-Nummern, Dat
 
 ## Prüfe den Bericht gegen diese Kriterien:
 
-### A. No-Go-Liste (Sofortige Korrektur erforderlich)
-Jede gefundene Stelle ist ein "hard_block":
+### A. No-Go-Liste — unterscheide streng zwischen \`hard_block\` und \`soft_flag\`
 
-- **Medizin/Psyche**: Depression, Burnout, Trauma, AD(H)S, Panikattacken, Erschöpfung, Angststörung, Schlafstörung
+**\`hard_block\`** (Bericht MUSS vor Submit korrigiert werden — AfA-Ablehnungs-Risiko):
+- **Medizin/Psyche**: Depression, Burnout, Trauma, AD(H)S, Panikattacken, Erschöpfung als Diagnose, Angststörung, Schlafstörung, konkrete psychische Erkrankung
 - **Diagnostik**: arbeitsunfähig, Therapie empfohlen, psychisch instabil, behandlungsbedürftig
 - **Juristisches**: Mobbing, Diskriminierung, sexuelle Belästigung, Schuld, rechtswidrig
-- **Pathologisierung**: narzisstisch, toxisch, manipulativ, instabil, krankhaft
-- **Charakter-Bewertung**: faul, desinteressiert, emotional labil, Träumer, stur
-- **Negative Prognose**: nicht vermittelbar, ungeeignet für Arbeitsmarkt, Coaching war erfolglos
+- **Pathologisierung**: narzisstisch, toxisch, manipulativ, krankhaft
+- **Harte Charakter-Bewertung**: faul, desinteressiert, emotional labil, Träumer, stur
+- **Explizit negative Prognose**: „nicht vermittelbar", „ungeeignet für Arbeitsmarkt", „Coaching war erfolglos"
 - **Küchenpsychologie**: schwere Kindheit, problematischer Vater, private Familien-Analyse
+
+**\`soft_flag\`** (kann optimiert werden, blockiert Submit aber NICHT — Bildungsträger sieht es als Hinweis):
+- **Defizitorientierte Formulierung** statt ressourcenorientiert („kann kein X" → besser „baut X aus")
+- **Indirekt einschränkende Prognose** ohne verbotene Begriffe (z.B. „Einstiegschancen derzeit eingeschränkt" — ist kein „nicht vermittelbar", aber könnte positiver sein)
+- **Unnötig bewertende Wortwahl** ohne die harten Trigger zu treffen („zielführend"/„nicht zielführend" als Urteil über den TN)
+- **Ton-Ausrutscher**: Stellen, die wohlwollender formuliert sein könnten
+
+**Faustregel**: Wenn eine AfA-Mitarbeiterin den Bericht sofort ablehnen würde → \`hard_block\`. Wenn sie „das hätte man schöner schreiben können" denkt aber akzeptiert → \`soft_flag\`.
 
 ### B. Must-Have-Liste (Inhaltliche Abdeckung)
 Prüfe, ob folgende Aspekte sinngemäß (nicht wortgetreu) enthalten sind:
@@ -75,7 +83,7 @@ Der \`quote\` muss **1:1 als Substring** im Bericht vorkommen, damit das UI die 
 Wenn das Problem kein wörtliches Zitat hat (z.B. „Tonalität insgesamt bewertend"): stattdessen \`tonalityFeedback\` nutzen.
 
 **Status-Logik:**
-- "pass": keine Violations UND alle Must-Haves covered
-- "needs_revision": mindestens eine Violation ODER mindestens ein fehlender Must-Have
+- "pass": keine \`hard_block\`-Violations UND alle Must-Haves covered. \`soft_flag\`-Violations dürfen bestehen — sie sind Hinweise, kein Blocker.
+- "needs_revision": mindestens ein \`hard_block\` ODER mindestens ein fehlender Must-Have
 
 Antworte AUSSCHLIESSLICH mit dem JSON-Objekt. Keine Einleitung, kein Nachwort, keine Markdown-Fences.`;

@@ -82,9 +82,13 @@ function parseAndValidate(raw: string): CheckerResult {
   }
   const obj = data as Record<string, unknown>;
 
-  const status = obj.status;
-  if (status !== "pass" && status !== "needs_revision") {
-    throw new Error(`Ungültiger status: ${String(status)}`);
+  // Wir berechnen den finalen Status unten selbst basierend auf hard_blocks +
+  // Must-Haves, statt dem LLM zu vertrauen — das Modell neigt dazu, bei jeder
+  // soft_flag-Violation trotzdem `needs_revision` zu setzen. Der rohe Status
+  // wird nur zur Plausibilisierung gelesen.
+  const rawStatus = obj.status;
+  if (rawStatus !== "pass" && rawStatus !== "needs_revision") {
+    throw new Error(`Ungültiger status: ${String(rawStatus)}`);
   }
 
   const mustHavesRaw = Array.isArray(obj.mustHaves) ? obj.mustHaves : [];
@@ -122,6 +126,13 @@ function parseAndValidate(raw: string): CheckerResult {
     typeof obj.tonalityFeedback === "string" && obj.tonalityFeedback.trim().length > 0
       ? obj.tonalityFeedback
       : undefined;
+
+  // Canonicaler Status: pass nur wenn KEIN hard_block UND alle Must-Haves
+  // covered. soft_flags sind Hinweise und blockieren Submit nicht.
+  const hasHardBlock = violations.some((v) => v.severity === "hard_block");
+  const allMustHavesCovered = mustHaves.every((m) => m.covered);
+  const status: CheckerResult["status"] =
+    !hasHardBlock && allMustHavesCovered ? "pass" : "needs_revision";
 
   return { status, mustHaves, violations, tonalityFeedback };
 }

@@ -1,26 +1,41 @@
 import type { CheckerResult } from "@/lib/checker/types";
 
 function buildRevisionMessage(
-  violationCount: number,
+  hardBlockCount: number,
   openMustHaves: number,
 ): string {
   const parts: string[] = [];
-  if (violationCount === 1) parts.push("1 Regelverstoß");
-  else if (violationCount > 1) parts.push(`${violationCount} Regelverstöße`);
+  if (hardBlockCount === 1) parts.push("1 harter Regelverstoß");
+  else if (hardBlockCount > 1) parts.push(`${hardBlockCount} harte Regelverstöße`);
   if (openMustHaves === 1) parts.push("1 fehlender Pflichtbaustein");
   else if (openMustHaves > 1)
     parts.push(`${openMustHaves} fehlende Pflichtbausteine`);
 
   const joined =
     parts.length === 2 ? `${parts[0]} und ${parts[1]}` : parts.join("");
-  const verb = violationCount + openMustHaves === 1 ? "wurde" : "wurden";
-  return `Es ${verb} ${joined} gefunden. Schau dir die Details unten an und passe die markierten Stellen an.`;
+  const verb = hardBlockCount + openMustHaves === 1 ? "wurde" : "wurden";
+  return `Es ${verb} ${joined} gefunden. Bitte die unten markierten Stellen vor dem Einreichen korrigieren.`;
+}
+
+function buildPassMessage(softFlagCount: number): string {
+  if (softFlagCount === 0) {
+    return "Der Bericht erfüllt die inhaltlichen und tonalen Anforderungen und kann eingereicht werden.";
+  }
+  if (softFlagCount === 1) {
+    return "Der Bericht kann eingereicht werden. Ein Formulierungs-Hinweis wurde gefunden — du kannst ihn vor dem Abschicken umformulieren oder dem Bildungsträger mitgeben.";
+  }
+  return `Der Bericht kann eingereicht werden. ${softFlagCount} Formulierungs-Hinweise wurden gefunden — du kannst sie vor dem Abschicken umformulieren oder dem Bildungsträger mitgeben.`;
 }
 
 export function VerdictCard({ result }: { result: CheckerResult }) {
   const isPass = result.status === "pass";
 
-  const violationCount = result.violations.length;
+  const hardBlockCount = result.violations.filter(
+    (v) => v.severity === "hard_block",
+  ).length;
+  const softFlagCount = result.violations.filter(
+    (v) => v.severity === "soft_flag",
+  ).length;
   const openMustHaves = result.mustHaves.filter((m) => !m.covered).length;
 
   return (
@@ -86,8 +101,8 @@ export function VerdictCard({ result }: { result: CheckerResult }) {
             }`}
           >
             {isPass
-              ? "Der Bericht erfüllt die inhaltlichen und tonalen Anforderungen des Bildungsträgers und kann so eingereicht werden."
-              : buildRevisionMessage(violationCount, openMustHaves)}
+              ? buildPassMessage(softFlagCount)
+              : buildRevisionMessage(hardBlockCount, openMustHaves)}
           </p>
         </div>
       </div>
