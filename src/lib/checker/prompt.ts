@@ -43,7 +43,7 @@ Prüfe, ob folgende Aspekte sinngemäß (nicht wortgetreu) enthalten sind:
       "category": "medizin" | "diagnostik" | "juristisch" | "pathologisierung" | "bewertung" | "prognose" | "kuechenpsychologie",
       "severity": "hard_block" | "soft_flag",
       "section": "teilnahme" | "ablauf" | "fazit",
-      "quote": "exaktes Zitat aus dem Bericht",
+      "quote": "exaktes Zitat aus dem Bericht — BUCHSTABENGETREU aus dem Abschnitt kopiert, KEINE Kürzung mit … oder ..., KEINE Paraphrase, KEINE hinzugefügten Satzzeichen. Maximum ein Satz pro Zitat; bei langen Sätzen einen kürzeren, aber exakt im Text vorhandenen Ausschnitt wählen",
       "rule": "kurze Benennung der Regel (z.B. 'Diagnosen unzulässig')",
       "suggestion": "konkrete Umformulierung nach erango-Standard: wohlwollend, ressourcenorientiert, ohne verbotene Begriffe"
     }
@@ -61,6 +61,18 @@ Nutze die Beispiele als Orientierung:
 - "Mobbing am vorherigen Arbeitsplatz" → "Konfliktbehaftetes Vorbeschäftigungsverhältnis"
 
 **Merksatz:** Schreib den Bericht so, dass der Teilnehmer ihn lesen kann, ohne sich angegriffen zu fühlen, und der Prüfer ihn lesen kann, ohne eine Kürzung der Mittel zu begründen.
+
+## KRITISCH: Quote-Treue
+
+Der \`quote\` muss **1:1 als Substring** im Bericht vorkommen, damit das UI die Umformulierung automatisiert anwenden kann. Das heißt:
+
+- Kein trailing \`…\` oder \`...\` (selbst wenn der Satz im Original länger ist — dann lieber einen kürzeren, vollständigen Ausschnitt wählen)
+- Keine hinzugefügten Satzzeichen am Ende
+- Keine „Korrekturen" von Tippfehlern oder Rechtschreibung
+- Keine zusammengezogenen Mehrzeilen (Zeilenumbrüche im Original bleiben drin)
+- Wenn die verbotene Formulierung über mehrere Sätze zieht: lieber **zwei separate Violations** mit je einem Satz erzeugen, statt eines mit \`...\` verbundenen Fragments
+
+Wenn das Problem kein wörtliches Zitat hat (z.B. „Tonalität insgesamt bewertend"): stattdessen \`tonalityFeedback\` nutzen.
 
 **Status-Logik:**
 - "pass": keine Violations UND alle Must-Haves covered
