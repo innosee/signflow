@@ -76,6 +76,8 @@ type Props = {
   zeitraum: string;
   gesamtzahlUe: string;
   initialBer: Abschlussbericht | null;
+  impersonating: boolean;
+  stopImpersonationAction: () => Promise<void>;
 };
 
 export function BerEditor({
@@ -88,6 +90,8 @@ export function BerEditor({
   zeitraum,
   gesamtzahlUe,
   initialBer,
+  impersonating,
+  stopImpersonationAction,
 }: Props) {
   const router = useRouter();
 
@@ -144,6 +148,9 @@ export function BerEditor({
       hasHydrated.current = true;
       return;
     }
+    // Während Impersonation wird nicht gespeichert — der Bildungsträger sieht
+    // den Bericht nur zu Support-Zwecken. Inline-Banner oben erklärt das.
+    if (impersonating) return;
     const handle = setTimeout(() => {
       const fd = new FormData();
       fd.append("courseId", courseId);
@@ -157,7 +164,7 @@ export function BerEditor({
       });
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [input, courseId, participantId]);
+  }, [input, courseId, participantId, impersonating]);
 
   useEffect(() => {
     if (!pendingSelection || phase !== "input") return;
@@ -328,6 +335,11 @@ export function BerEditor({
     return (
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
         <form onSubmit={handleRunCheck} className="space-y-6">
+          {impersonating && (
+            <ImpersonationReadOnlyBanner
+              stopImpersonationAction={stopImpersonationAction}
+            />
+          )}
           <StatusBanner
             status={status}
             submittedAt={submittedAt}
@@ -419,6 +431,11 @@ export function BerEditor({
 
   return (
     <div className="space-y-6">
+      {impersonating && (
+        <ImpersonationReadOnlyBanner
+          stopImpersonationAction={stopImpersonationAction}
+        />
+      )}
       <CheckerProgress steps={steps} />
 
       {phase === "done" && result && (
@@ -462,8 +479,13 @@ export function BerEditor({
                   <button
                     type="button"
                     onClick={handleSubmitBer}
-                    disabled={isSubmitting}
-                    className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-wait disabled:bg-zinc-600"
+                    disabled={isSubmitting || impersonating}
+                    title={
+                      impersonating
+                        ? "Im Support-Modus deaktiviert — Bildungsträger kann keine TN-Berichte einreichen."
+                        : undefined
+                    }
+                    className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
                   >
                     {isSubmitting
                       ? "Reiche ein …"
@@ -475,6 +497,36 @@ export function BerEditor({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ImpersonationReadOnlyBanner({
+  stopImpersonationAction,
+}: {
+  stopImpersonationAction: () => Promise<void>;
+}) {
+  return (
+    <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-medium">Nur-Lese-Modus (Support)</p>
+          <p className="mt-1 text-xs">
+            Du bist als Bildungsträger in die Coach-Sicht gewechselt.
+            Änderungen am Bericht werden <strong>nicht gespeichert</strong>,
+            Einreichen ist deaktiviert — Coaches müssen eigene Unterschrift/
+            Einreichung selbst vornehmen.
+          </p>
+        </div>
+        <form action={stopImpersonationAction}>
+          <button
+            type="submit"
+            className="shrink-0 rounded-lg border border-amber-600 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+          >
+            Support-Modus verlassen →
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

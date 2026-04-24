@@ -5,19 +5,9 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
 
+import { CoachCourseList } from "./course-list";
+
 export const dynamic = "force-dynamic";
-
-const STATUS_LABELS: Record<string, string> = {
-  active: "aktiv",
-  completed: "abgeschlossen",
-  archived: "archiviert",
-};
-
-const STATUS_BADGE: Record<string, string> = {
-  active: "bg-green-100 text-green-800",
-  completed: "bg-zinc-200 text-zinc-700",
-  archived: "bg-zinc-100 text-zinc-500",
-};
 
 export default async function CoachDashboard() {
   const session = await requireCoach();
@@ -94,40 +84,7 @@ export default async function CoachDashboard() {
           )}
         </div>
 
-        {courses.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-zinc-500">
-            Noch keine Kurse. Lege deinen ersten Kurs an, um loszulegen.
-          </p>
-        ) : (
-          <ul className="divide-y divide-zinc-200">
-            {courses.map((c) => (
-              <li key={c.id} className="px-6 py-4">
-                <Link
-                  href={`/coach/courses/${c.id}`}
-                  className="flex items-start justify-between gap-4 hover:opacity-80"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{c.title}</span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs ${STATUS_BADGE[c.status] ?? ""}`}
-                      >
-                        {STATUS_LABELS[c.status] ?? c.status}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-500">
-                      AVGS {c.avgsNummer} · {c.startDate} bis {c.endDate} ·{" "}
-                      {c.anzahlBewilligteUe} UE bewilligt
-                    </div>
-                  </div>
-                  <span aria-hidden className="text-zinc-400">
-                    →
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+        <CoachCourseList courses={courses} />
       </section>
     </div>
   );

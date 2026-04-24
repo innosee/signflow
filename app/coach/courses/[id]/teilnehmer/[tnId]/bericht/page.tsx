@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { getSigningEnabled, requireCoach } from "@/lib/dal";
+import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
 import type { Abschlussbericht } from "@/db/schema";
 
+import { stopImpersonating } from "../../../../../../bildungstraeger/actions";
 import { BerEditor } from "./ber-editor";
 
 export const dynamic = "force-dynamic";
@@ -102,6 +103,8 @@ export default async function BerEditorPage({ params }: Props) {
         zeitraum={`${row.course.startDate} – ${row.course.endDate}`}
         gesamtzahlUe={String(row.course.anzahlBewilligteUe)}
         initialBer={initialBer}
+        impersonating={isImpersonating(session)}
+        stopImpersonationAction={stopImpersonating}
       />
     </div>
   );
