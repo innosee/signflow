@@ -25,7 +25,11 @@ import {
 } from "@/lib/checker/types";
 
 const EXPORT_STORAGE_KEY = "signflow:checker-export";
-const DRAFT_STORAGE_KEY = "signflow:checker-draft";
+// Legacy unscoped key — wird beim Mount gelöscht, damit Reste aus älteren
+// Sessions auf demselben Browser nicht in fremde Coach-Konten leaken.
+const LEGACY_DRAFT_STORAGE_KEY = "signflow:checker-draft";
+const draftStorageKey = (userId: string) =>
+  `signflow:checker-draft:${userId}`;
 const DRAFT_DEBOUNCE_MS = 800;
 
 function hasAnyContent(input: CheckerInput): boolean {
@@ -77,8 +81,9 @@ const EMPTY_INPUT: CheckerInput = { teilnahme: "", ablauf: "", fazit: "" };
 
 type Phase = "input" | "processing" | "done";
 
-export function CheckerForm() {
+export function CheckerForm({ userId }: { userId: string }) {
   const router = useRouter();
+  const draftKey = draftStorageKey(userId);
   const [phase, setPhase] = useState<Phase>("input");
   const [input, setInput] = useState<CheckerInput>(EMPTY_INPUT);
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
@@ -105,9 +110,16 @@ export function CheckerForm() {
   } | null>(null);
 
   useEffect(() => {
+    // Legacy unscoped Key löschen — Reste aus Sessions vor dem User-Scoping
+    // dürfen nicht in fremde Coach-Konten leaken.
+    try {
+      localStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
+    } catch {
+      /* noop */
+    }
     let parsed: CheckerInput | null = null;
     try {
-      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      const raw = localStorage.getItem(draftKey);
       if (raw) {
         const maybe: unknown = JSON.parse(raw);
         if (isCheckerInput(maybe)) parsed = maybe;
@@ -120,17 +132,17 @@ export function CheckerForm() {
       setInput(parsed);
     }
     setDraftLoaded(true);
-  }, []);
+  }, [draftKey]);
 
   useEffect(() => {
     if (!draftLoaded) return;
     const handle = setTimeout(() => {
       try {
         if (hasAnyContent(input)) {
-          localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(input));
+          localStorage.setItem(draftKey, JSON.stringify(input));
           setSavedAt(new Date());
         } else {
-          localStorage.removeItem(DRAFT_STORAGE_KEY);
+          localStorage.removeItem(draftKey);
           setSavedAt(null);
         }
       } catch {
@@ -138,7 +150,7 @@ export function CheckerForm() {
       }
     }, DRAFT_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [input, draftLoaded]);
+  }, [input, draftLoaded, draftKey]);
 
   function handleExportPdf() {
     try {
@@ -155,7 +167,7 @@ export function CheckerForm() {
     );
     if (!confirmed) return;
     try {
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      localStorage.removeItem(draftKey);
     } catch {
       /* noop */
     }

@@ -7,7 +7,7 @@ import { CheckerForm } from "./checker-form";
 export const dynamic = "force-dynamic";
 
 export default async function CheckerCheckPage() {
-  await requireCoach();
+  const session = await requireCoach();
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
@@ -28,7 +28,7 @@ export default async function CheckerCheckPage() {
         </p>
       </div>
 
-      <CheckerForm />
+      <CheckerForm userId={session.user.id} />
     </div>
   );
 }
