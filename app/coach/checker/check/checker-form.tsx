@@ -9,7 +9,6 @@ import {
 } from "@/components/checker/checker-progress";
 import { FeedbackDetails } from "@/components/checker/feedback-details";
 import { LiveFeedback } from "@/components/checker/live-feedback";
-import { PasteTextButton } from "@/components/checker/paste-text-button";
 import { VerdictCard } from "@/components/checker/verdict-card";
 import { anonymize } from "@/lib/checker/anonymize";
 import { locateQuote } from "@/lib/checker/locate-quote";
@@ -358,22 +357,6 @@ export function CheckerForm() {
               />
             </div>
           ))}
-
-          <details className="group rounded-xl border border-zinc-200 bg-zinc-50/40">
-            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-medium text-zinc-700 hover:text-zinc-900">
-              <span className="inline-flex items-center gap-2">
-                <span aria-hidden className="transition group-open:rotate-90">
-                  ▸
-                </span>
-                Hast du schon einen fertigen Bericht? Text einmalig einfügen
-              </span>
-            </summary>
-            <div className="border-t border-zinc-200 px-5 py-4">
-              <PasteTextButton
-                onExtracted={(extracted) => setInput(extracted)}
-              />
-            </div>
-          </details>
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="min-w-0 text-xs text-zinc-500">
