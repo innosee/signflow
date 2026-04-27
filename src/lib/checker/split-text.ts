@@ -6,9 +6,9 @@ type HeaderPattern = {
 };
 
 const HEADERS: HeaderPattern[] = [
-  { id: "teilnahme", pattern: /Teilnahme\s+und\s+Mitarbeit[^:\n]{0,120}:/i },
-  { id: "ablauf", pattern: /Ablauf,?\s*Inhalte[^:\n]{0,120}:/i },
-  { id: "fazit", pattern: /Fazit\s*,[^:\n]{0,120}:/i },
+  { id: "teilnahme", pattern: /Teilnahme\s+und\s+Mitarbeit[^:\n]{0,120}[:\n]/i },
+  { id: "ablauf", pattern: /Ablauf,?\s*Inhalte[^:\n]{0,120}[:\n]/i },
+  { id: "fazit", pattern: /Fazit[^:\n]{0,120}[:\n]/i },
 ];
 
 const NOISE_PATTERNS: RegExp[] = [

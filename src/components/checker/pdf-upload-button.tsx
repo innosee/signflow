@@ -10,7 +10,13 @@ const MAX_PDF_BYTES = 15 * 1024 * 1024;
 type Status =
   | { state: "idle" }
   | { state: "loading"; fileName: string }
-  | { state: "success"; fileName: string; sectionsFound: number; chars: number }
+  | {
+      state: "success";
+      fileName: string;
+      sectionsFound: number;
+      chars: number;
+      rawText: string;
+    }
   | { state: "error"; message: string };
 
 async function extractPdfText(file: File): Promise<string> {
@@ -23,17 +29,35 @@ async function extractPdfText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const doc = await pdfjs.getDocument({ data: buffer }).promise;
 
-  let fullText = "";
+  // Wir tracken die Y-Koordinate jedes Textitems, um Zeilenumbrüche aus dem
+  // PDF-Layout abzuleiten. Ohne Newlines kollabiert „Teilnahme und Mitarbeit:"
+  // mit dem Folgetext in eine Zeile und unsere Heading-Regex schlägt fehl.
+  // Y-Diff > 2 PDF-Punkte = neue Zeile.
+  const pages: string[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ");
-    fullText += pageText + "\n\n";
+    let lastY: number | null = null;
+    let lineParts: string[] = [];
+    const lines: string[] = [];
+    for (const item of content.items) {
+      if (!("str" in item)) continue;
+      const y = (item.transform as number[])[5];
+      const s = item.str;
+      if (lastY !== null && Math.abs(y - lastY) > 2) {
+        if (lineParts.length > 0) {
+          lines.push(lineParts.join(" ").trim());
+          lineParts = [];
+        }
+      }
+      if (s.length > 0) lineParts.push(s);
+      lastY = y;
+    }
+    if (lineParts.length > 0) lines.push(lineParts.join(" ").trim());
+    pages.push(lines.filter((l) => l.length > 0).join("\n"));
   }
 
-  return fullText.trim();
+  return pages.join("\n\n").trim();
 }
 
 export function PdfUploadButton({
@@ -51,20 +75,14 @@ export function PdfUploadButton({
     if (warnBeforeOverwrite && !warnBeforeOverwrite()) return;
 
     if (file.size > MAX_PDF_BYTES) {
-      setStatus({
-        state: "error",
-        message: "PDF zu groß (max 15 MB).",
-      });
+      setStatus({ state: "error", message: "PDF zu groß (max 15 MB)." });
       return;
     }
     const isPdf =
       file.type === "application/pdf" ||
       file.name.toLowerCase().endsWith(".pdf");
     if (!isPdf) {
-      setStatus({
-        state: "error",
-        message: "Bitte eine PDF-Datei auswählen.",
-      });
+      setStatus({ state: "error", message: "Bitte eine PDF-Datei auswählen." });
       return;
     }
 
@@ -80,25 +98,34 @@ export function PdfUploadButton({
         });
         return;
       }
+
       const result = splitReport(text);
-      const sectionsFound = [
+      let sectionsFound = [
         result.teilnahme,
         result.ablauf,
         result.fazit,
       ].filter((s) => s.trim().length > 0).length;
+
+      // Safety net: wenn splitReport gar nichts zuordnen konnte, den
+      // kompletten extrahierten Text in das erste Feld dumpen — dann hat
+      // der Coach wenigstens etwas zum manuellen Aufteilen statt drei leerer
+      // Felder. Besser sichtbar als wortlos verschluckt.
+      if (sectionsFound === 0) {
+        result.teilnahme = text;
+        sectionsFound = 0;
+      }
+
       onExtracted(result);
       setStatus({
         state: "success",
         fileName: file.name,
         sectionsFound,
         chars: text.length,
+        rawText: text,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setStatus({
-        state: "error",
-        message: `Konnte PDF nicht lesen: ${message}`,
-      });
+      setStatus({ state: "error", message: `Konnte PDF nicht lesen: ${message}` });
     }
   }
 
@@ -167,13 +194,39 @@ export function PdfUploadButton({
             </span>
           )}
           {status.state === "success" && (
-            <span className="text-emerald-700">
-              ✓ {status.fileName} eingelesen — {status.sectionsFound}/3
-              Abschnitte automatisch zugeordnet ({status.chars.toLocaleString(
-                "de-DE",
-              )}{" "}
-              Zeichen). Bitte unten gegenlesen.
-            </span>
+            <div className="space-y-2">
+              {status.sectionsFound === 3 && (
+                <p className="text-emerald-700">
+                  ✓ {status.fileName} eingelesen — alle 3 Abschnitte erkannt (
+                  {status.chars.toLocaleString("de-DE")} Zeichen). Bitte unten
+                  gegenlesen.
+                </p>
+              )}
+              {status.sectionsFound > 0 && status.sectionsFound < 3 && (
+                <p className="text-amber-700">
+                  ⚠ {status.fileName} eingelesen — nur {status.sectionsFound}/3
+                  Abschnitte automatisch erkannt (
+                  {status.chars.toLocaleString("de-DE")} Zeichen). Bitte unten
+                  gegenlesen und ggf. manuell verschieben.
+                </p>
+              )}
+              {status.sectionsFound === 0 && (
+                <p className="text-amber-700">
+                  ⚠ {status.fileName} eingelesen — keine Abschnitts-Überschriften
+                  erkannt. Der gesamte Text wurde ins erste Feld unten
+                  übernommen, bitte manuell auf die drei Felder verteilen (
+                  {status.chars.toLocaleString("de-DE")} Zeichen).
+                </p>
+              )}
+              <details className="text-zinc-500">
+                <summary className="cursor-pointer hover:text-zinc-700">
+                  Extrahierten Roh-Text anzeigen
+                </summary>
+                <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-[11px] leading-snug text-zinc-700">
+                  {status.rawText}
+                </pre>
+              </details>
+            </div>
           )}
           {status.state === "error" && (
             <span className="text-amber-700">{status.message}</span>
