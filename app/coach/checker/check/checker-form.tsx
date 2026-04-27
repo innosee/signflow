@@ -190,7 +190,12 @@ export function CheckerForm() {
       anonResult = await anonymize(input);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      updateStep("anon", { state: "error", detail: message });
+      updateStep("anon", {
+        state: "error",
+        detail: message,
+        actionHref: "/coach/checker/diagnose",
+        actionLabel: "Verbindung prüfen",
+      });
       updateStep("verdict", {
         state: "error",
         detail: "Anonymisierung fehlgeschlagen — Prüfung abgebrochen.",

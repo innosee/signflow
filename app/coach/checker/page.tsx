@@ -81,6 +81,24 @@ export default async function CheckerDashboard() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10 space-y-8">
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-amber-900">
+            Funktioniert die Verbindung?
+          </div>
+          <p className="mt-0.5 text-xs text-amber-800">
+            Bei Problemen mit Anonymisierung oder Check zuerst hier prüfen —
+            5 Sekunden, direkt aus deinem Browser nach Frankfurt.
+          </p>
+        </div>
+        <Link
+          href="/coach/checker/diagnose"
+          className="shrink-0 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+        >
+          Verbindung prüfen
+        </Link>
+      </section>
+
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">
           Abschlussbericht-Checker
