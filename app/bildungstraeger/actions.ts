@@ -37,18 +37,57 @@ export async function inviteCoach(
 
   const h = await headers();
 
+  // Wenn dieselbe E-Mail schon mal als Coach existierte und soft-gelöscht
+  // wurde, bleibt die `users`-Zeile in der DB stehen (mit `deletedAt`).
+  // Better Auth's createUser checkt nur die E-Mail ohne unseren
+  // deletedAt-Filter und schmeißt deshalb „User already exists" — obwohl
+  // der Partial-Unique-Index ein Re-Insert technisch erlauben würde.
+  // Statt zu re-inserten beleben wir die alte Zeile wieder: deletedAt +
+  // banned werden zurückgesetzt, der Name aktualisiert. Audit-History
+  // (gleiche user_id) bleibt erhalten. Better Auth's reset-flow setzt
+  // dann das Passwort.
+  const [existing] = await db
+    .select({
+      id: schema.users.id,
+      deletedAt: schema.users.deletedAt,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.email, email))
+    .limit(1);
+
   let createdUserId: string | null = null;
-  try {
-    const result = await auth.api.createUser({
-      body: { email, name, password: placeholderPassword, role: "coach" },
-      headers: h,
-    });
-    createdUserId = result.user?.id ?? null;
-  } catch (err) {
-    if (err instanceof APIError) {
-      return { error: `Einladung fehlgeschlagen: ${err.message}` };
+  if (existing && existing.deletedAt) {
+    // Resurrect-Pfad
+    await db
+      .update(schema.users)
+      .set({
+        deletedAt: null,
+        banned: false,
+        banReason: null,
+        banExpires: null,
+        emailVerified: false, // Einladung ausstehend bis Coach das Passwort setzt
+        name,
+        role: "coach",
+        signingEnabled: false,
+      })
+      .where(eq(schema.users.id, existing.id));
+    createdUserId = existing.id;
+  } else if (existing && !existing.deletedAt) {
+    // Aktive Zeile — wirklich Duplikat
+    return { error: "Einladung fehlgeschlagen: Diese E-Mail-Adresse ist bereits registriert." };
+  } else {
+    try {
+      const result = await auth.api.createUser({
+        body: { email, name, password: placeholderPassword, role: "coach" },
+        headers: h,
+      });
+      createdUserId = result.user?.id ?? null;
+    } catch (err) {
+      if (err instanceof APIError) {
+        return { error: `Einladung fehlgeschlagen: ${err.message}` };
+      }
+      throw err;
     }
-    throw err;
   }
 
   try {
@@ -57,12 +96,15 @@ export async function inviteCoach(
       headers: h,
     });
   } catch (err) {
-    // Mail-Versand fehlgeschlagen → neu angelegten User wieder aufräumen,
-    // sonst bleibt ein Coach mit zufälligem Passwort ohne Setz-Möglichkeit
-    // zurück und die E-Mail-Adresse ist für eine Wiedereinladung blockiert.
+    // Mail-Versand fehlgeschlagen → den gerade angelegten/wiederbelebten
+    // User soft-deleten, damit (a) keine aktive Zeile mit zufälligem
+    // Passwort existiert und (b) die E-Mail-Adresse für eine erneute
+    // Einladung wieder frei ist (Partial-Unique-Index auf email WHERE
+    // deletedAt IS NULL).
     if (createdUserId) {
       await db
-        .delete(schema.users)
+        .update(schema.users)
+        .set({ deletedAt: new Date(), banned: true })
         .where(eq(schema.users.id, createdUserId))
         .catch(() => {
           // Cleanup best-effort — in der Fehlermeldung steht, dass die
