@@ -28,6 +28,7 @@ export function LoginForm() {
           <span className="text-sm font-medium text-zinc-800">Passwort</span>
           <Link
             href="/forgot-password"
+            tabIndex={-1}
             className="text-xs text-zinc-600 underline underline-offset-2 hover:text-black"
           >
             Passwort vergessen?
