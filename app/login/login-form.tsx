@@ -12,7 +12,25 @@ export function LoginForm() {
   );
 
   return (
-    <form action={action} className="space-y-4">
+    <form
+      action={action}
+      onKeyDown={(e) => {
+        // Explizites Enter→Submit auf Inputs. Native Browser-Submission ist
+        // im Zusammenspiel mit 1Password/Autofill nicht zuverlässig — der
+        // Keystroke wird gelegentlich vom Password-Manager geschluckt, der
+        // Submit feuert nicht. preventDefault + requestSubmit() umgeht das,
+        // ohne native Form-Action zu duplizieren.
+        if (
+          e.key === "Enter" &&
+          !e.shiftKey &&
+          e.target instanceof HTMLInputElement
+        ) {
+          e.preventDefault();
+          e.currentTarget.requestSubmit();
+        }
+      }}
+      className="space-y-4"
+    >
       <label className="block space-y-1.5">
         <span className="text-sm font-medium text-zinc-800">E-Mail</span>
         <input
@@ -28,7 +46,6 @@ export function LoginForm() {
           <span className="text-sm font-medium text-zinc-800">Passwort</span>
           <Link
             href="/forgot-password"
-            tabIndex={-1}
             className="text-xs text-zinc-600 underline underline-offset-2 hover:text-black"
           >
             Passwort vergessen?
