@@ -10,6 +10,7 @@ import {
 import { FeedbackDetails } from "@/components/checker/feedback-details";
 import { LiveFeedback } from "@/components/checker/live-feedback";
 import { PasteTextButton } from "@/components/checker/paste-text-button";
+import { PdfUploadButton } from "@/components/checker/pdf-upload-button";
 import { VerdictCard } from "@/components/checker/verdict-card";
 import { anonymize } from "@/lib/checker/anonymize";
 import { locateQuote } from "@/lib/checker/locate-quote";
@@ -332,6 +333,18 @@ export function CheckerForm() {
             </p>
           </div>
 
+          <PdfUploadButton
+            onExtracted={(extracted) => setInput(extracted)}
+            warnBeforeOverwrite={
+              hasAnyContent(input)
+                ? () =>
+                    window.confirm(
+                      "Du hast bereits Text in den Feldern. Soll der Inhalt aus dem PDF die bestehenden Eingaben überschreiben?",
+                    )
+                : undefined
+            }
+          />
+
           {CHECKER_SECTIONS.map((section) => (
             <div key={section.id} className="space-y-2">
               <label
@@ -365,7 +378,7 @@ export function CheckerForm() {
                 <span aria-hidden className="transition group-open:rotate-90">
                   ▸
                 </span>
-                Hast du schon einen fertigen Bericht? Text einmalig einfügen
+                PDF-Upload klappt nicht? Text manuell einfügen
               </span>
             </summary>
             <div className="border-t border-zinc-200 px-5 py-4">
