@@ -21,8 +21,12 @@ export default async function CoachLayout({
     ? [
         { href: "/coach", label: "Kurse" },
         { href: "/coach/checker", label: "Berichts-Checker" },
+        { href: "/coach/checker/check", label: "Ad-hoc-Check" },
       ]
-    : [{ href: "/coach/checker", label: "Berichts-Checker" }];
+    : [
+        { href: "/coach/checker", label: "Berichts-Checker" },
+        { href: "/coach/checker/check", label: "Ad-hoc-Check" },
+      ];
 
   return (
     <>

@@ -1,6 +1,13 @@
+import Link from "next/link";
+
 import { CheckerSpinner } from "./checker-spinner";
 
-export type StepState = "pending" | "active" | "success" | "error";
+export type StepState =
+  | "pending"
+  | "active"
+  | "success"
+  | "error"
+  | "skipped";
 
 export type CheckerStep = {
   id: string;
@@ -8,6 +15,8 @@ export type CheckerStep = {
   description: string;
   state: StepState;
   detail?: string;
+  actionHref?: string;
+  actionLabel?: string;
 };
 
 export function CheckerProgress({ steps }: { steps: CheckerStep[] }) {
@@ -36,12 +45,18 @@ function CheckerProgressItem({
         ? "border-zinc-900 bg-white shadow-[0_0_0_4px_rgba(0,0,0,0.04)]"
         : step.state === "success"
           ? "border-emerald-400/60 bg-emerald-50/50"
-          : "border-rose-400/60 bg-rose-50/50";
+          : step.state === "skipped"
+            ? "border-zinc-200 bg-zinc-50/60 opacity-70"
+            : "border-rose-400/60 bg-rose-50/50";
 
   const titleTone =
-    step.state === "pending" ? "text-zinc-500" : "text-zinc-900";
+    step.state === "pending" || step.state === "skipped"
+      ? "text-zinc-500"
+      : "text-zinc-900";
   const descTone =
-    step.state === "pending" ? "text-zinc-400" : "text-zinc-600";
+    step.state === "pending" || step.state === "skipped"
+      ? "text-zinc-400"
+      : "text-zinc-600";
 
   return (
     <div
@@ -54,11 +69,25 @@ function CheckerProgressItem({
         {step.detail && (
           <div
             className={`mt-2 text-xs font-medium ${
-              step.state === "error" ? "text-rose-700" : "text-zinc-700"
+              step.state === "error"
+                ? "text-rose-700"
+                : step.state === "skipped"
+                  ? "text-zinc-500"
+                  : "text-zinc-700"
             }`}
           >
             {step.detail}
           </div>
+        )}
+        {step.actionHref && step.actionLabel && (
+          <Link
+            href={step.actionHref}
+            className={`mt-2 inline-block text-xs font-semibold underline underline-offset-2 hover:no-underline ${
+              step.state === "error" ? "text-rose-800" : "text-zinc-900"
+            }`}
+          >
+            {step.actionLabel} →
+          </Link>
         )}
       </div>
     </div>
@@ -108,6 +137,24 @@ function StepIcon({ state, number }: { state: StepState; number: number }) {
         >
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </div>
+    );
+  }
+  if (state === "skipped") {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-zinc-300 text-zinc-400">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
       </div>
     );

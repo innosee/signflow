@@ -81,6 +81,48 @@ export default async function CheckerDashboard() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10 space-y-8">
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-amber-900">
+            Funktioniert die Verbindung?
+          </div>
+          <p className="mt-0.5 text-xs text-amber-800">
+            Bei Problemen mit Anonymisierung oder Check zuerst hier prüfen —
+            5 Sekunden, direkt aus deinem Browser nach Frankfurt.
+          </p>
+        </div>
+        <Link
+          href="/coach/checker/diagnose"
+          className="shrink-0 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+        >
+          Verbindung prüfen
+        </Link>
+      </section>
+
+      <section className="rounded-xl border border-zinc-900 bg-zinc-900 p-6 text-white shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-2xl">
+            <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Schnellzugriff
+            </div>
+            <h2 className="mt-1 text-xl font-semibold tracking-tight">
+              Ad-hoc-Check — Bericht aus Word kurz prüfen
+            </h2>
+            <p className="mt-2 text-sm text-zinc-300">
+              Du hast einen Bericht-Entwurf in Word und willst nur schnell
+              wissen, ob die AMDL-Regeln passen? Direkt im Browser prüfen,
+              keine Persistenz, kein Speichern nötig.
+            </p>
+          </div>
+          <Link
+            href="/coach/checker/check"
+            className="shrink-0 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
+          >
+            Ad-hoc-Check öffnen →
+          </Link>
+        </div>
+      </section>
+
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">
           Abschlussbericht-Checker
@@ -131,22 +173,6 @@ export default async function CheckerDashboard() {
         emptyMessage="Noch keine eingereichten Berichte."
       />
 
-      <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 text-sm">
-        <h2 className="text-sm font-semibold text-zinc-900">
-          Quick-Check ohne Speichern
-        </h2>
-        <p className="mt-1 text-xs text-zinc-600">
-          Du willst einen Bericht-Entwurf aus Word nur kurz prüfen, ohne ihn
-          im System abzulegen? Nutze den Ad-hoc-Check — keine Persistenz,
-          nur Feedback im Browser.
-        </p>
-        <Link
-          href="/coach/checker/check"
-          className="mt-3 inline-block rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
-        >
-          Ad-hoc-Check öffnen →
-        </Link>
-      </section>
     </div>
   );
 }
