@@ -28,7 +28,7 @@ export default async function CheckerCheckPage() {
         </p>
       </div>
 
-      <CheckerForm userId={session.user.id} />
+      <CheckerForm userId={session.user.id} coachName={session.user.name} />
     </div>
   );
 }

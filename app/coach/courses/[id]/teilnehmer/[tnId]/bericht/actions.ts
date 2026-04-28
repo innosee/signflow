@@ -213,6 +213,37 @@ export async function submitBerAction(
   const ctx = await requireOwnedTnContext(courseId, participantId, coachId);
   if (!ctx) return { error: "Kurs/Teilnehmer nicht gefunden." };
 
+  // Snapshot-Daten für die Bildungsträger-Liste (Suche, PDF-Filename).
+  // Ein einzelner Join genügt — wenn der Coach hier ankommt, ist
+  // requireOwnedTnContext schon durch und Course/Participant existieren.
+  const [snapshotData] = await db
+    .select({
+      participantName: schema.participants.name,
+      participantKundenNr: schema.participants.kundenNr,
+      courseAvgs: schema.courses.avgsNummer,
+      courseStart: schema.courses.startDate,
+      courseEnd: schema.courses.endDate,
+      courseUe: schema.courses.anzahlBewilligteUe,
+      coachName: schema.users.name,
+    })
+    .from(schema.participants)
+    .innerJoin(
+      schema.courses,
+      eq(schema.courses.id, courseId),
+    )
+    .innerJoin(schema.users, eq(schema.users.id, coachId))
+    .where(eq(schema.participants.id, participantId))
+    .limit(1);
+
+  const tnName = snapshotData?.participantName ?? "";
+  const spaceIdx = tnName.indexOf(" ");
+  const tnVornameSnapshot = spaceIdx < 0 ? tnName : tnName.slice(0, spaceIdx);
+  const tnNachnameSnapshot = spaceIdx < 0 ? "" : tnName.slice(spaceIdx + 1);
+  const tnZeitraumSnapshot =
+    snapshotData?.courseStart && snapshotData?.courseEnd
+      ? `${new Date(snapshotData.courseStart).toLocaleDateString("de-DE")} — ${new Date(snapshotData.courseEnd).toLocaleDateString("de-DE")}`
+      : "";
+
   const now = new Date();
   const [existing] = await db
     .select({ id: schema.abschlussberichte.id })
@@ -224,6 +255,20 @@ export async function submitBerAction(
       ),
     )
     .limit(1);
+
+  const snapshotPatch = {
+    tnVorname: tnVornameSnapshot,
+    tnNachname: tnNachnameSnapshot,
+    tnKundenNr: snapshotData?.participantKundenNr ?? "",
+    tnAvgsNummer: snapshotData?.courseAvgs ?? "",
+    tnZeitraum: tnZeitraumSnapshot,
+    tnUe:
+      snapshotData?.courseUe !== undefined &&
+      snapshotData?.courseUe !== null
+        ? String(snapshotData.courseUe)
+        : "",
+    coachNameSnapshot: snapshotData?.coachName ?? "",
+  };
 
   let berId: string;
   if (existing) {
@@ -237,6 +282,7 @@ export async function submitBerAction(
         lastCheckPassed: true,
         submittedAt: now,
         checkSnapshot,
+        ...snapshotPatch,
         // Re-Submit invalidiert eine frühere Ack — der Bildungsträger
         // soll den neuen Inhalt frisch bewerten.
         softFlagsAcknowledgedAt: null,
@@ -258,6 +304,7 @@ export async function submitBerAction(
         lastCheckPassed: true,
         submittedAt: now,
         checkSnapshot,
+        ...snapshotPatch,
       })
       .returning({ id: schema.abschlussberichte.id });
     berId = created.id;

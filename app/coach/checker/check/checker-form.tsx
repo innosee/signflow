@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { AdhocSubmitForm } from "@/components/checker/adhoc-submit-form";
 import {
   CheckerProgress,
   type CheckerStep,
@@ -83,10 +84,24 @@ const INITIAL_STEPS: CheckerStep[] = [
 
 const EMPTY_INPUT: CheckerInput = { teilnahme: "", ablauf: "", fazit: "" };
 
-export function CheckerForm({ userId }: { userId: string }) {
+export function CheckerForm({
+  userId,
+  coachName,
+}: {
+  userId: string;
+  coachName: string;
+}) {
   const router = useRouter();
   const draftKey = draftStorageKey(userId);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Submit-Flow zum Bildungsträger:
+  //   "idle"      → Standard-Anzeige, keine Form sichtbar
+  //   "form"      → AdhocSubmitForm wird zwischen Editor und Footer gerendert
+  //   "submitted" → BER ist persistiert, Erfolgs-Banner wird angezeigt
+  const [submitMode, setSubmitMode] = useState<"idle" | "form" | "submitted">(
+    "idle",
+  );
+  const [submittedBerId, setSubmittedBerId] = useState<string | null>(null);
   const [input, setInput] = useState<CheckerInput>(EMPTY_INPUT);
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
   const [result, setResult] = useState<CheckerResult | null>(null);
@@ -194,6 +209,8 @@ export function CheckerForm({ userId }: { userId: string }) {
     setLastCheckedInput(null);
     setAcceptedIds(new Set());
     setAppliedFingerprints(new Set());
+    setSubmitMode("idle");
+    setSubmittedBerId(null);
   }
 
   function updateStep(id: string, patch: Partial<CheckerStep>) {
@@ -214,6 +231,10 @@ export function CheckerForm({ userId }: { userId: string }) {
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
     setAcceptedIds(new Set());
+    // Re-Check soll nicht den Erfolgs-Banner stehen lassen, sonst denkt
+    // der Coach er hätte den neuen Bericht schon eingereicht.
+    setSubmitMode("idle");
+    setSubmittedBerId(null);
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -426,6 +447,33 @@ export function CheckerForm({ userId }: { userId: string }) {
           </div>
         ))}
 
+        {submitMode === "form" && result && (
+          <AdhocSubmitForm
+            input={input}
+            result={result}
+            coachName={coachName}
+            onSubmitted={(berId) => {
+              setSubmittedBerId(berId);
+              setSubmitMode("submitted");
+            }}
+            onCancel={() => setSubmitMode("idle")}
+          />
+        )}
+
+        {submitMode === "submitted" && submittedBerId && (
+          <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-5 text-sm text-emerald-900">
+            <p className="font-semibold">
+              ✓ Bericht eingereicht.
+            </p>
+            <p className="mt-1 text-xs text-emerald-800">
+              Der Bildungsträger findet den Bericht in seiner Übersicht und
+              kann ihn von dort herunterladen oder weiterleiten. Du kannst
+              jetzt einen neuen Bericht schreiben — nutze dafür „Entwurf
+              verwerfen&ldquo;.
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="min-w-0 text-xs text-zinc-500">
             <p>Finale Prüfung dauert ca. 6 Sekunden.</p>
@@ -457,14 +505,23 @@ export function CheckerForm({ userId }: { userId: string }) {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {showExport && (
-              <button
-                type="button"
-                onClick={handleExportPdf}
-                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
-              >
-                Als Erango-PDF exportieren →
-              </button>
+            {showExport && submitMode === "idle" && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleExportPdf}
+                  className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+                >
+                  Als PDF exportieren
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubmitMode("form")}
+                  className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
+                >
+                  An Bildungsträger einreichen →
+                </button>
+              </>
             )}
             <button
               type="submit"

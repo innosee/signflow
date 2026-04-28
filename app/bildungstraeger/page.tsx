@@ -117,6 +117,25 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
         </div>
       )}
 
+      <section className="rounded-xl border border-zinc-900 bg-zinc-900 p-6 text-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold">Eingereichte Abschlussberichte</h2>
+            <p className="mt-1 text-sm text-zinc-300">
+              Flache Liste aller von Coaches an dich übergebenen Berichte —
+              mit Suche und PDF-Download. Kurs-gebunden und Schnell-Check
+              zusammen.
+            </p>
+          </div>
+          <Link
+            href="/bildungstraeger/abschlussberichte"
+            className="shrink-0 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
+          >
+            Liste öffnen →
+          </Link>
+        </div>
+      </section>
+
       <section className="rounded-xl border border-zinc-300 bg-white p-6">
         <div className="flex items-center justify-between gap-4">
           <div>
