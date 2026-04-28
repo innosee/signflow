@@ -56,28 +56,41 @@ export async function submitAdhocBerAction(
     };
   }
 
-  const [row] = await db
-    .insert(schema.abschlussberichte)
-    .values({
-      courseId: null,
-      participantId: null,
-      coachId: session.user.id,
-      teilnahme: data.input.teilnahme,
-      ablauf: data.input.ablauf,
-      fazit: data.input.fazit,
-      tnVorname,
-      tnNachname,
-      tnKundenNr: data.tnKundenNr.trim(),
-      tnAvgsNummer: data.tnAvgsNummer.trim(),
-      tnZeitraum: data.tnZeitraum.trim(),
-      tnUe: data.tnUe.trim(),
-      coachNameSnapshot: session.user.name,
-      status: "submitted",
-      lastCheckPassed: true,
-      checkSnapshot: { v: 2, input: data.input, result: data.result },
-      submittedAt: new Date(),
-    })
-    .returning({ id: schema.abschlussberichte.id });
+  let row: { id: string };
+  try {
+    [row] = await db
+      .insert(schema.abschlussberichte)
+      .values({
+        courseId: null,
+        participantId: null,
+        coachId: session.user.id,
+        teilnahme: data.input.teilnahme,
+        ablauf: data.input.ablauf,
+        fazit: data.input.fazit,
+        tnVorname,
+        tnNachname,
+        tnKundenNr: data.tnKundenNr.trim(),
+        tnAvgsNummer: data.tnAvgsNummer.trim(),
+        tnZeitraum: data.tnZeitraum.trim(),
+        tnUe: data.tnUe.trim(),
+        coachNameSnapshot: session.user.name,
+        status: "submitted",
+        lastCheckPassed: true,
+        checkSnapshot: { v: 2, input: data.input, result: data.result },
+        submittedAt: new Date(),
+      })
+      .returning({ id: schema.abschlussberichte.id });
+  } catch (err) {
+    // Sichtbare Server-Logs für DB-Constraint-Violations o.ä. Vorher war der
+    // Fehler nur als generischer 500 sichtbar; der Coach klickte „Einreichen"
+    // und der Bericht verschwand stumm. Der Stack-Trace im console.error
+    // hilft beim Diagnostizieren (Constraint-Name, fehlende Spalte, …).
+    console.error("submitAdhocBerAction insert failed:", err);
+    return {
+      ok: false,
+      error: `DB-Insert fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   // Bildungsträger-Liste invalidieren, damit der neue Bericht sofort
   // erscheint, ohne dass die Seite hart neu geladen werden muss.

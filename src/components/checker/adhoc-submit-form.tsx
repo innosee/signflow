@@ -62,12 +62,24 @@ export function AdhocSubmitForm({
     }
     const payload: AdhocBerInput = { ...form, input, result };
     startTransition(async () => {
-      const res = await submitAdhocBerAction(payload);
-      if (!res.ok) {
-        setError(res.error);
-        return;
+      try {
+        const res = await submitAdhocBerAction(payload);
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        onSubmitted(res.berId);
+      } catch (err) {
+        // Server-Action hat geworfen statt strukturierten Fehler zurückgegeben
+        // (z.B. Auth-Redirect, DB-Constraint-Violation, schema-Drift im Dev).
+        // Ohne Catch hier wäre der Fehler stumm — Coach klickt „Einreichen"
+        // und sieht nichts; der Bericht ist weg.
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Schnell-Check submit failed:", err);
+        setError(
+          `Einreichen fehlgeschlagen: ${msg}. Bitte versuche es erneut, oder lade die Seite neu (Cmd+Shift+R).`,
+        );
       }
-      onSubmitted(res.berId);
     });
   }
 
