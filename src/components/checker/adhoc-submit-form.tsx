@@ -50,8 +50,7 @@ export function AdhocSubmitForm({
     if (error) setError(null);
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     if (form.tnVorname.trim().length === 0) {
       setError("Vorname ist Pflicht.");
       return;
@@ -70,10 +69,6 @@ export function AdhocSubmitForm({
         }
         onSubmitted(res.berId);
       } catch (err) {
-        // Server-Action hat geworfen statt strukturierten Fehler zurückgegeben
-        // (z.B. Auth-Redirect, DB-Constraint-Violation, schema-Drift im Dev).
-        // Ohne Catch hier wäre der Fehler stumm — Coach klickt „Einreichen"
-        // und sieht nichts; der Bericht ist weg.
         const msg = err instanceof Error ? err.message : String(err);
         console.error("Schnell-Check submit failed:", err);
         setError(
@@ -83,11 +78,22 @@ export function AdhocSubmitForm({
     });
   }
 
+  // Wir verwenden bewusst `<div>` statt `<form>` — dieser Submit-Block sitzt
+  // INNERHALB der äußeren Checker-Form, und HTML verbietet verschachtelte
+  // <form>-Tags (führt sonst zum Hydration-Error und Submit-Events werden
+  // stumm geschluckt). Submit läuft über Button-Click + Enter-Handler je
+  // Input. Enter darf NICHT zur äußeren Form bubblen, sonst würde stattdessen
+  // „Erneut prüfen" feuern.
+  function handleEnterKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSubmit();
+    }
+  }
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-xl border border-zinc-300 bg-zinc-50/40 p-5"
-    >
+    <div className="rounded-xl border border-zinc-300 bg-zinc-50/40 p-5">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-zinc-900">
           An Bildungsträger einreichen
@@ -104,6 +110,7 @@ export function AdhocSubmitForm({
           label="Vorname *"
           value={form.tnVorname}
           onChange={(v) => update("tnVorname", v)}
+          onKeyDown={handleEnterKey}
           autoComplete="off"
           autoFocus
         />
@@ -111,12 +118,14 @@ export function AdhocSubmitForm({
           label="Nachname *"
           value={form.tnNachname}
           onChange={(v) => update("tnNachname", v)}
+          onKeyDown={handleEnterKey}
           autoComplete="off"
         />
         <Field
           label="Kunden-Nr."
           value={form.tnKundenNr}
           onChange={(v) => update("tnKundenNr", v)}
+          onKeyDown={handleEnterKey}
           placeholder="z.B. 160B29588"
           autoComplete="off"
         />
@@ -124,12 +133,14 @@ export function AdhocSubmitForm({
           label="AVGS-Nummer"
           value={form.tnAvgsNummer}
           onChange={(v) => update("tnAvgsNummer", v)}
+          onKeyDown={handleEnterKey}
           autoComplete="off"
         />
         <Field
           label="Zeitraum"
           value={form.tnZeitraum}
           onChange={(v) => update("tnZeitraum", v)}
+          onKeyDown={handleEnterKey}
           placeholder="z.B. 03.03.2026 — 26.04.2026"
           autoComplete="off"
         />
@@ -137,6 +148,7 @@ export function AdhocSubmitForm({
           label="Gesamt UE"
           value={form.tnUe}
           onChange={(v) => update("tnUe", v)}
+          onKeyDown={handleEnterKey}
           placeholder="z.B. 72"
           autoComplete="off"
         />
@@ -158,14 +170,15 @@ export function AdhocSubmitForm({
           Abbrechen
         </button>
         <button
-          type="submit"
+          type="button"
+          onClick={handleSubmit}
           disabled={isPending}
           className="rounded-lg bg-black px-5 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
         >
           {isPending ? "Reiche ein …" : "Bericht einreichen →"}
         </button>
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -173,6 +186,7 @@ function Field({
   label,
   value,
   onChange,
+  onKeyDown,
   placeholder,
   autoComplete,
   autoFocus,
@@ -180,6 +194,7 @@ function Field({
   label: string;
   value: string;
   onChange: (v: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   placeholder?: string;
   autoComplete?: string;
   autoFocus?: boolean;
@@ -191,6 +206,7 @@ function Field({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         autoComplete={autoComplete}
         autoFocus={autoFocus}
