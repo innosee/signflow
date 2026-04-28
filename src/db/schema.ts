@@ -522,18 +522,39 @@ export const abschlussberichte = pgTable(
   "abschlussberichte",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    courseId: uuid("course_id")
-      .notNull()
-      .references(() => courses.id, { onDelete: "cascade" }),
-    participantId: uuid("participant_id")
-      .notNull()
-      .references(() => participants.id, { onDelete: "restrict" }),
+    /**
+     * Nullable seit Ad-hoc-Submission via Schnell-Check: Coach reicht einen
+     * Bericht ein, ohne dass TN als persistente Stammdaten existieren. Bei
+     * Kurs-gebundenen BERs (BER-Editor-Pfad) sind beide gesetzt; bei
+     * Ad-hoc-BERs sind beide null und die TN-Daten stehen in den
+     * `tn_*`-Snapshot-Spalten.
+     */
+    courseId: uuid("course_id").references(() => courses.id, {
+      onDelete: "cascade",
+    }),
+    participantId: uuid("participant_id").references(() => participants.id, {
+      onDelete: "restrict",
+    }),
     coachId: uuid("coach_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     teilnahme: text("teilnahme").notNull().default(""),
     ablauf: text("ablauf").notNull().default(""),
     fazit: text("fazit").notNull().default(""),
+    /**
+     * Snapshot der TN-Stammdaten zum Zeitpunkt des Submits. Wird sowohl bei
+     * Kurs-gebundenen als auch bei Ad-hoc-BERs gefüllt — gibt der Bildungs-
+     * träger-Liste eine einheitliche Datenquelle, ermöglicht Suche per
+     * `tn_nachname`/`tn_kunden_nr` ohne Joins, und sorgt für stabile
+     * PDF-Dateinamen, auch wenn Stammdaten später geändert werden.
+     */
+    tnVorname: text("tn_vorname").notNull().default(""),
+    tnNachname: text("tn_nachname").notNull().default(""),
+    tnKundenNr: text("tn_kunden_nr").notNull().default(""),
+    tnAvgsNummer: text("tn_avgs_nummer").notNull().default(""),
+    tnZeitraum: text("tn_zeitraum").notNull().default(""),
+    tnUe: text("tn_ue").notNull().default(""),
+    coachNameSnapshot: text("coach_name_snapshot").notNull().default(""),
     status: berStatus("status").notNull().default("draft"),
     /**
      * Hat die letzte finale Prüfung (nicht nur Live-Regex) bestanden?
@@ -571,6 +592,9 @@ export const abschlussberichte = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
+    // Unique nur für Kurs-gebundene BERs. Postgres NULL-Semantik in Unique-
+    // Indexen erlaubt mehrere Ad-hoc-Rows mit beiden Spalten = NULL — genau
+    // was wir wollen, jeder Schnell-Check-Submit ist ein eigener Eintrag.
     uniqueIndex("abschlussberichte_course_participant_uq").on(
       t.courseId,
       t.participantId,
@@ -578,18 +602,34 @@ export const abschlussberichte = pgTable(
     index("abschlussberichte_course_idx").on(t.courseId),
     index("abschlussberichte_coach_idx").on(t.coachId),
     index("abschlussberichte_status_idx").on(t.status),
-    // Integritäts-Anker: BER gibt's nur für tatsächlich im Kurs eingeschriebene
-    // TN. Referenziert die unique (course_id, participant_id) auf course_participants.
+    // Suche-Indizes für die Bildungsträger-Liste (TN-Name, Kd-Nr).
+    index("abschlussberichte_tn_nachname_idx").on(t.tnNachname),
+    index("abschlussberichte_tn_kunden_nr_idx").on(t.tnKundenNr),
+    // Integritäts-Anker für Kurs-gebundene BERs: muss eine echte Enrollment-
+    // Zeile geben. NULL-tolerant: bei Ad-hoc-Rows sind courseId/participantId
+    // null, dann wird der FK von Postgres übersprungen (NULL ≠ NULL).
     foreignKey({
       columns: [t.courseId, t.participantId],
       foreignColumns: [courseParticipants.courseId, courseParticipants.participantId],
       name: "abschlussberichte_course_participant_enrollment_fk",
     }).onDelete("cascade"),
     // Submit-Invariante: 'submitted' nur mit Timestamp UND bestandener Prüfung.
-    // Verhindert, dass per Bug oder manuellem SQL ein inkonsistenter Zustand entsteht.
     check(
       "abschlussberichte_submit_invariants",
       sql`(${t.status} = 'draft') OR (${t.status} = 'submitted' AND ${t.submittedAt} IS NOT NULL AND ${t.lastCheckPassed} = true)`,
+    ),
+    // Kurs-gebunden vs. Ad-hoc: entweder beide FKs gesetzt oder beide null.
+    // Verhindert halb-konsistente Rows mit nur courseId oder nur participantId.
+    check(
+      "abschlussberichte_course_participant_paired",
+      sql`(${t.courseId} IS NULL AND ${t.participantId} IS NULL) OR (${t.courseId} IS NOT NULL AND ${t.participantId} IS NOT NULL)`,
+    ),
+    // Ad-hoc-BERs müssen TN-Snapshot-Daten haben — sonst kein PDF/keine
+    // Suche möglich. Bei Kurs-gebundenen Rows wird der Snapshot beim Submit
+    // ebenfalls befüllt (Application-Code, nicht Constraint).
+    check(
+      "abschlussberichte_adhoc_requires_tn_snapshot",
+      sql`(${t.courseId} IS NOT NULL) OR (length(trim(${t.tnVorname})) > 0 AND length(trim(${t.tnNachname})) > 0)`,
     ),
   ],
 );

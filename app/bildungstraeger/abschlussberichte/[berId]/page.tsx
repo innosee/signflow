@@ -44,6 +44,16 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
         checkSnapshot: schema.abschlussberichte.checkSnapshot,
         softFlagsAcknowledgedAt:
           schema.abschlussberichte.softFlagsAcknowledgedAt,
+        // Snapshot-Spalten — für Ad-hoc-BERs ist das die einzige Quelle
+        // der TN-Daten (course/participant sind null). Auch für Kurs-
+        // gebundene Rows nach Backfill verfügbar.
+        tnVorname: schema.abschlussberichte.tnVorname,
+        tnNachname: schema.abschlussberichte.tnNachname,
+        tnKundenNr: schema.abschlussberichte.tnKundenNr,
+        tnAvgsNummer: schema.abschlussberichte.tnAvgsNummer,
+        tnZeitraum: schema.abschlussberichte.tnZeitraum,
+        tnUe: schema.abschlussberichte.tnUe,
+        coachNameSnapshot: schema.abschlussberichte.coachNameSnapshot,
       },
       course: {
         id: schema.courses.id,
@@ -66,11 +76,13 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
       },
     })
     .from(schema.abschlussberichte)
-    .innerJoin(
+    // leftJoin statt innerJoin: Ad-hoc-BERs haben courseId/participantId
+    // null und würden sonst gar nicht erst in der Ergebnismenge landen.
+    .leftJoin(
       schema.courses,
       eq(schema.courses.id, schema.abschlussberichte.courseId),
     )
-    .innerJoin(
+    .leftJoin(
       schema.participants,
       eq(schema.participants.id, schema.abschlussberichte.participantId),
     )
@@ -97,25 +109,62 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
     updatedAt &&
     updatedAt.getTime() - submittedAt.getTime() > 60_000;
 
+  // Display-Werte mit Fallback: bei Ad-hoc-BERs gibt es kein course/
+  // participant — wir nutzen die denormalisierten Snapshot-Spalten.
+  const isAdhoc = course === null;
+  const tnDisplayName =
+    [ber.tnVorname, ber.tnNachname].filter(Boolean).join(" ").trim() ||
+    participant?.name ||
+    "—";
+  const tnKundenNr = ber.tnKundenNr || participant?.kundenNr || "";
+  const courseTitle = course?.title ?? "Schnell-Check (ad-hoc)";
+  const backHref = course
+    ? `/bildungstraeger/courses/${course.id}/berichte`
+    : `/bildungstraeger/abschlussberichte`;
+  const backLabel = course
+    ? "← zurück zur Kurs-Übersicht"
+    : "← zurück zur Berichts-Liste";
+  const zeitraumDisplay =
+    ber.tnZeitraum ||
+    (course?.startDate && course?.endDate
+      ? `${course.startDate} – ${course.endDate}`
+      : "");
+  const ueDisplay =
+    ber.tnUe ||
+    (course?.anzahlBewilligteUe !== undefined &&
+    course?.anzahlBewilligteUe !== null
+      ? String(course.anzahlBewilligteUe)
+      : "");
+  const avgsDisplay = ber.tnAvgsNummer || course?.avgsNummer || "";
+
   return (
     <div className="review-wrapper">
       <div className="review-toolbar" data-print-hide>
         <div className="min-w-0">
           <Link
-            href={`/bildungstraeger/courses/${course.id}/berichte`}
+            href={backHref}
             className="text-xs text-zinc-500 hover:text-zinc-900"
           >
-            ← zurück zur Kurs-Übersicht
+            {backLabel}
           </Link>
           <h1 className="mt-1 truncate text-lg font-semibold">
-            BER · {participant.name}
+            BER · {tnDisplayName}
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
-            <span>{course.title}</span>
+            <span>{courseTitle}</span>
+            {isAdhoc && (
+              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-600">
+                Schnell-Check
+              </span>
+            )}
             <span>·</span>
             <span>Coach: {coach.name}</span>
-            <span>·</span>
-            <span>Kd-Nr. {participant.kundenNr}</span>
+            {tnKundenNr && (
+              <>
+                <span>·</span>
+                <span>Kd-Nr. {tnKundenNr}</span>
+              </>
+            )}
             {ber.status === "submitted" ? (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
                 ✓ eingereicht
@@ -227,12 +276,12 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
             fazit: ber.fazit,
           }}
           meta={{
-            avgsMassnahme: course.title,
-            teilnehmerName: participant.name,
-            kundenNr: participant.kundenNr,
-            zeitraum: `${course.startDate} – ${course.endDate}`,
+            avgsMassnahme: avgsDisplay || courseTitle,
+            teilnehmerName: tnDisplayName,
+            kundenNr: tnKundenNr,
+            zeitraum: zeitraumDisplay,
             coachName: coach.name,
-            gesamtzahlUe: String(course.anzahlBewilligteUe),
+            gesamtzahlUe: ueDisplay,
           }}
         />
       </div>
