@@ -76,13 +76,13 @@ const CHECKER_STEPS: Array<{ num: string; title: string; body: string }> = [
   },
   {
     num: "05",
-    title: "Verbesserungen lesen",
-    body: 'Pro Regelverstoß: das problematische Zitat + eine Umformulierung im erango-Standard. Du kannst „Im Text markieren" für eine Stelle, oder den schwarzen Banner oben für „Alle Umformulierungen einbinden" — letzteres macht alle Ersetzungen in einem Rutsch.',
+    title: "Verstöße in der Sidebar abarbeiten",
+    body: 'Rechts erscheint pro Verstoß eine Karte mit Zitat + Umformulierungs-Vorschlag. Du arbeitest dich von oben durch: „Im Text übernehmen" tauscht die Stelle direkt im Editor links aus, „Im Text markieren" springt zur Stelle und legt den Vorschlag in die Zwischenablage. Wenn du etwas manuell anders gelöst hast, einfach abhaken.',
   },
   {
     num: "06",
     title: "Erneut prüfen",
-    body: 'Nach dem Einbinden landest du wieder im Edit-Modus mit grünem Banner. Lies einmal kurz drüber, dann „Bericht final prüfen". Stellen, die das Modell trotz übernommener Verbesserung nochmal anmäkelt, bekommen einen grauen Badge „schon übernommen" — meist ignorierbar.',
+    body: 'Wenn alle Karten abgehakt oder übernommen sind, oben rechts „Erneut prüfen". Stellen, die das Modell trotz übernommener Verbesserung nochmal anmäkelt, bekommen einen grauen Badge „schon übernommen" — meist ignorierbar (LLM-Rauschen, kein echter Verstoß).',
   },
   {
     num: "07",
