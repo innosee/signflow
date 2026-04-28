@@ -106,7 +106,7 @@ export default async function CheckerDashboard() {
               Schnellzugriff
             </div>
             <h2 className="mt-1 text-xl font-semibold tracking-tight">
-              Ad-hoc-Check — Bericht aus Word kurz prüfen
+              Schnell-Check
             </h2>
             <p className="mt-2 text-sm text-zinc-300">
               Du hast einen Bericht-Entwurf in Word und willst nur schnell
@@ -118,7 +118,7 @@ export default async function CheckerDashboard() {
             href="/coach/checker/check"
             className="shrink-0 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
           >
-            Ad-hoc-Check öffnen →
+            Schnell-Check öffnen →
           </Link>
         </div>
       </section>

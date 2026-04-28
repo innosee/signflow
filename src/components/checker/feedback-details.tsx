@@ -25,18 +25,33 @@ type FeedbackDetailsProps = {
    * Zitat nicht auffindbar ist).
    */
   onLocateViolation?: (violation: Violation) => "found" | "not_found";
+  /**
+   * Wendet alle Umformulierungs-Vorschläge auf einmal an (Quote → Suggestion
+   * pro Violation) und springt zurück in den Edit-Modus, damit der Coach
+   * den Bericht abnickt und „Bericht final prüfen" klickt.
+   */
+  onApplyAllSuggestions?: () => void;
 };
 
 export function FeedbackDetails({
   result,
   onLocateViolation,
+  onApplyAllSuggestions,
 }: FeedbackDetailsProps) {
   const hardBlocks = result.violations.filter((v) => v.severity === "hard_block");
   const softFlags = result.violations.filter((v) => v.severity === "soft_flag");
   const openMustHaves = result.mustHaves.filter((m) => !m.covered);
+  const totalViolations = result.violations.length;
 
   return (
     <div className="space-y-6">
+      {totalViolations > 0 && onApplyAllSuggestions && (
+        <ApplyAllBanner
+          count={totalViolations}
+          onApply={onApplyAllSuggestions}
+        />
+      )}
+
       <MustHaveChecklist mustHaves={result.mustHaves} />
 
       {hardBlocks.length > 0 && (
@@ -176,6 +191,14 @@ function ViolationCard({
             Hinweis
           </span>
         )}
+        {violation.previouslyAddressed && (
+          <span
+            className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-700"
+            title="Diese Stelle sitzt auf einer Umformulierung, die du in dieser Session schon übernommen hast — das Modell mäkelt trotzdem nochmal. Kann meist ignoriert werden."
+          >
+            schon übernommen
+          </span>
+        )}
         <span className="text-zinc-500">
           Abschnitt: {SECTION_LABELS[violation.section]}
         </span>
@@ -272,6 +295,37 @@ function LocateIcon() {
       <circle cx="12" cy="12" r="3" />
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
     </svg>
+  );
+}
+
+function ApplyAllBanner({
+  count,
+  onApply,
+}: {
+  count: number;
+  onApply: () => void;
+}) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-zinc-900 px-5 py-4 text-white shadow-sm">
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold">
+          Alle Umformulierungen auf einmal übernehmen?
+        </h3>
+        <p className="mt-0.5 text-xs text-zinc-300">
+          Spart Dir das Kopieren — die {count}{" "}
+          {count === 1 ? "Umformulierung wird" : "Umformulierungen werden"}{" "}
+          direkt in den Bericht eingefügt. Danach kannst Du nochmal final
+          prüfen.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onApply}
+        className="shrink-0 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-100"
+      >
+        Alle {count} einbinden →
+      </button>
+    </section>
   );
 }
 

@@ -142,7 +142,12 @@ export async function runAzureCheck(input: CheckerInput): Promise<CheckerResult>
 
   const completion = await c.chat.completions.create({
     model: d,
-    temperature: 0.1,
+    // Determinismus: temperature 0 + fester seed. Azure garantiert keinen
+    // 100%-bit-stabilen Output (Top-P, Server-Batching), reduziert Drift
+    // zwischen Re-Checks aber spürbar — wichtig nach „Alle Verbesserungen
+    // einbinden", damit der Coach nicht bei jedem Klick neue Cosmetics sieht.
+    temperature: 0,
+    seed: 42,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: CHECKER_SYSTEM_PROMPT },

@@ -21,15 +21,16 @@ export function LandingFooter() {
         </div>
 
         <FooterGroup title="Produkt">
-          <a href="#workflow">Workflow</a>
-          <a href="#features">Features</a>
-          <a href="#pricing">Preise</a>
-          <a href="#faq">FAQ</a>
+          <Link href="/#workflow">Workflow</Link>
+          <Link href="/#features">Features</Link>
+          <Link href="/anleitung">Anleitung</Link>
+          <Link href="/#pricing">Preise</Link>
+          <Link href="/#faq">FAQ</Link>
         </FooterGroup>
 
         <FooterGroup title="Konto">
           <Link href="/login">Anmelden</Link>
-          <a href="#waitlist">Warteliste</a>
+          <Link href="/#waitlist">Warteliste</Link>
           <a href="mailto:info@innosee.de">Kontakt</a>
         </FooterGroup>
 

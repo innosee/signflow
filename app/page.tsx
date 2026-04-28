@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { LandingCheckerTeaser } from "@/components/landing/checker-teaser";
 import { LandingFaq } from "@/components/landing/faq";
 import { LandingFeatures } from "@/components/landing/features";
 import { LandingFooter } from "@/components/landing/footer";
@@ -36,6 +37,7 @@ export default async function Home() {
       <main className="flex-1">
         <LandingHero />
         <LandingHowItWorks />
+        <LandingCheckerTeaser />
         <LandingFeatures />
         <LandingPricing />
         <LandingFaq />
