@@ -81,9 +81,21 @@ export async function GET(
   try {
     pdf = await renderPdfFromUrl(printUrl, cookieList);
   } catch (err) {
+    // Häufigste Ursache lokal: kein PUPPETEER_EXECUTABLE_PATH gesetzt, der
+    // Fallback @sparticuz/chromium ist Linux-only und scheitert auf macOS.
+    // Auf Vercel klappt's, weil dort Linux + Chromium-Layer vorhanden sind.
+    // Server-Log zeigt den vollen Stack — Response surfacet die Message,
+    // damit Coaches/BTs nicht raten müssen.
     console.error("BER PDF generation failed:", err);
+    const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "PDF-Erzeugung fehlgeschlagen." },
+      {
+        error: "PDF-Erzeugung fehlgeschlagen.",
+        detail: msg,
+        hint: process.env.NODE_ENV === "production"
+          ? undefined
+          : "Lokal: setze PUPPETEER_EXECUTABLE_PATH auf System-Chrome (z.B. /Applications/Google Chrome.app/Contents/MacOS/Google Chrome) in .env.local.",
+      },
       { status: 500 },
     );
   }
