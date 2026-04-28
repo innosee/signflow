@@ -23,6 +23,7 @@ import { runCheck } from "@/lib/checker/run-check";
 import {
   CHECKER_SECTIONS,
   isCheckerInput,
+  isCheckerResult,
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
@@ -35,6 +36,12 @@ const EXPORT_STORAGE_KEY = "signflow:checker-export";
 const LEGACY_DRAFT_STORAGE_KEY = "signflow:checker-draft";
 const draftStorageKey = (userId: string) =>
   `signflow:checker-draft:${userId}`;
+// Result + lastCheckedInput werden mitpersistiert, damit nach Navigation
+// (PDF-Export-Page) oder Refresh die „Als PDF / An BT einreichen"-Buttons
+// nicht verloren gehen — der Coach soll nicht erneut Tokens verbrennen
+// müssen, nur weil er kurz die Seite gewechselt hat.
+const resultStorageKey = (userId: string) =>
+  `signflow:checker-result:${userId}`;
 const DRAFT_DEBOUNCE_MS = 800;
 
 function hasAnyContent(input: CheckerInput): boolean {
@@ -93,6 +100,7 @@ export function CheckerForm({
 }) {
   const router = useRouter();
   const draftKey = draftStorageKey(userId);
+  const resultKey = resultStorageKey(userId);
   const [isProcessing, setIsProcessing] = useState(false);
   // Submit-Flow zum Bildungsträger:
   //   "idle"      → Standard-Anzeige, keine Form sichtbar
@@ -163,8 +171,52 @@ export function CheckerForm({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage ist External State, per Design nur client-seitig lesbar; einmaliges Sync beim Mount
       setInput(parsed);
     }
+
+    // Letztes Check-Ergebnis wiederherstellen — Buttons („Als PDF",
+    // „An BT einreichen") sollen nach Navigation oder Refresh weiter
+    // verfügbar sein, ohne erneuten Azure-Call.
+    try {
+      const raw = localStorage.getItem(resultKey);
+      if (raw) {
+        const maybe: unknown = JSON.parse(raw);
+        if (
+          maybe &&
+          typeof maybe === "object" &&
+          isCheckerResult((maybe as { result?: unknown }).result) &&
+          isCheckerInput(
+            (maybe as { lastCheckedInput?: unknown }).lastCheckedInput,
+          )
+        ) {
+          const payload = maybe as {
+            result: CheckerResult;
+            lastCheckedInput: CheckerInput;
+          };
+          setResult(payload.result);
+          setLastCheckedInput(payload.lastCheckedInput);
+        }
+      }
+    } catch {
+      // corrupted — ignore
+    }
+
     setDraftLoaded(true);
-  }, [draftKey]);
+  }, [draftKey, resultKey]);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    try {
+      if (result && lastCheckedInput) {
+        localStorage.setItem(
+          resultKey,
+          JSON.stringify({ result, lastCheckedInput }),
+        );
+      } else {
+        localStorage.removeItem(resultKey);
+      }
+    } catch {
+      // quota / blocked — silent fall-back, Result bleibt nur in-memory
+    }
+  }, [result, lastCheckedInput, draftLoaded, resultKey]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -399,10 +451,16 @@ export function CheckerForm({
     : result
       ? inputUnchangedSinceCheck
         ? "Schon geprüft"
-        : "Erneut prüfen"
+        : "Bericht erneut prüfen"
       : "Bericht prüfen";
+  // Export-Buttons bleiben sichtbar, sobald einmal erfolgreich geprüft —
+  // auch wenn der Coach danach noch Text editiert. Bei verändertem Text
+  // werden sie disabled (siehe `inputUnchangedSinceCheck`), damit kein
+  // ungeprüfter Stand exportiert oder eingereicht wird.
   const showExport =
-    result?.status === "pass" && !isProcessing;
+    result?.status === "pass" && !isProcessing && submitMode !== "form";
+  const showResetButton = hasAnyContent(input) || !!result;
+  const exportDisabled = !inputUnchangedSinceCheck;
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
@@ -467,9 +525,8 @@ export function CheckerForm({
             </p>
             <p className="mt-1 text-xs text-emerald-800">
               Der Bildungsträger findet den Bericht in seiner Übersicht und
-              kann ihn von dort herunterladen oder weiterleiten. Du kannst
-              jetzt einen neuen Bericht schreiben — nutze dafür „Entwurf
-              verwerfen&ldquo;.
+              kann ihn von dort herunterladen oder weiterleiten. Für einen
+              weiteren Bericht klick auf „Neuer Bericht&ldquo;.
             </p>
           </div>
         )}
@@ -488,14 +545,7 @@ export function CheckerForm({
                   minute: "2-digit",
                   second: "2-digit",
                 })}
-                ).{" "}
-                <button
-                  type="button"
-                  onClick={handleDiscardDraft}
-                  className="underline decoration-dotted underline-offset-2 hover:text-zinc-700"
-                >
-                  Entwurf verwerfen
-                </button>
+                ).
               </p>
             ) : (
               <p className="mt-1 text-zinc-400">
@@ -503,21 +553,48 @@ export function CheckerForm({
                 schreibst — Refresh ist ungefährlich.
               </p>
             )}
+            {result && !inputUnchangedSinceCheck && (
+              <p className="mt-1 text-amber-700">
+                Text wurde nach der letzten Prüfung geändert — bitte erneut
+                prüfen, bevor du exportierst oder einreichst.
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {showExport && submitMode === "idle" && (
+            {showResetButton && (
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+              >
+                Neuer Bericht
+              </button>
+            )}
+            {showExport && (
               <>
                 <button
                   type="button"
                   onClick={handleExportPdf}
-                  className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+                  disabled={exportDisabled}
+                  title={
+                    exportDisabled
+                      ? "Text wurde geändert — bitte erneut prüfen."
+                      : undefined
+                  }
+                  className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-50 disabled:text-zinc-400"
                 >
                   Als PDF exportieren
                 </button>
                 <button
                   type="button"
                   onClick={() => setSubmitMode("form")}
-                  className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
+                  disabled={exportDisabled}
+                  title={
+                    exportDisabled
+                      ? "Text wurde geändert — bitte erneut prüfen."
+                      : undefined
+                  }
+                  className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
                 >
                   An Bildungsträger einreichen →
                 </button>

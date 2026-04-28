@@ -107,3 +107,22 @@ export type CheckerResult = {
   violations: Violation[];
   tonalityFeedback?: string;
 };
+
+/**
+ * Type-Guard für storage-persistierte CheckerResult-Werte. Schützt vor
+ * altformatigen oder manuell manipulierten localStorage-Einträgen.
+ */
+export function isCheckerResult(value: unknown): value is CheckerResult {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (v.status !== "pass" && v.status !== "needs_revision") return false;
+  if (!Array.isArray(v.mustHaves)) return false;
+  if (!Array.isArray(v.violations)) return false;
+  if (
+    v.tonalityFeedback !== undefined &&
+    typeof v.tonalityFeedback !== "string"
+  ) {
+    return false;
+  }
+  return true;
+}
