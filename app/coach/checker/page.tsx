@@ -114,12 +114,22 @@ export default async function CheckerDashboard() {
               keine Persistenz, kein Speichern nötig.
             </p>
           </div>
-          <Link
-            href="/coach/checker/check"
-            className="shrink-0 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
-          >
-            Schnell-Check öffnen →
-          </Link>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Link
+              href="/anleitung/schnellcheck"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-100 transition hover:border-zinc-500 hover:text-white"
+            >
+              Anleitung ↗
+            </Link>
+            <Link
+              href="/coach/checker/check"
+              className="rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
+            >
+              Schnell-Check öffnen →
+            </Link>
+          </div>
         </div>
       </section>
 

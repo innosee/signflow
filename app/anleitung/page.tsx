@@ -230,6 +230,23 @@ function CheckerSection() {
           title="Abschlussbericht-Checker"
           intro="Der Checker liest deine BER, anonymisiert sie in Frankfurt, prüft sie gegen den erango-/AMDL-Regelkatalog und schlägt konkrete Umformulierungen vor — automatisch übernehmbar."
         />
+        <Link
+          href="/anleitung/schnellcheck"
+          className="group mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50/60 px-5 py-4 transition hover:border-emerald-500"
+        >
+          <div className="min-w-0">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700">
+              Mini-Anleitung · DE / UK
+            </span>
+            <p className="mt-1 text-sm font-medium text-zinc-900">
+              Schnellcheck Schritt für Schritt — vom Coach-Klick bis zum PDF
+              beim Bildungsträger.
+            </p>
+          </div>
+          <span className="shrink-0 text-sm text-emerald-800 group-hover:text-emerald-950">
+            Anleitung öffnen →
+          </span>
+        </Link>
         <StepList steps={CHECKER_STEPS} />
 
         <div className="mt-10 rounded-xl border border-zinc-300 bg-white p-6">
