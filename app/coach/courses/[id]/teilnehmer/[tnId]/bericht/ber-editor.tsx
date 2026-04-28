@@ -7,12 +7,15 @@ import {
   CheckerProgress,
   type CheckerStep,
 } from "@/components/checker/checker-progress";
-import { FeedbackDetails } from "@/components/checker/feedback-details";
 import { LiveFeedback } from "@/components/checker/live-feedback";
-import { VerdictCard } from "@/components/checker/verdict-card";
+import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
+import {
+  fingerprintApplied,
+  markPreviouslyAddressed,
+} from "@/lib/checker/previously-addressed";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
 import {
@@ -26,6 +29,7 @@ import {
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
+  type Violation,
 } from "@/lib/checker/types";
 import type { Abschlussbericht } from "@/db/schema";
 
@@ -69,8 +73,6 @@ const INITIAL_STEPS: CheckerStep[] = [
     state: "pending",
   },
 ];
-
-type Phase = "input" | "processing" | "done";
 
 type Props = {
   courseId: string;
@@ -116,8 +118,15 @@ export function BerEditor({
     initialBer?.updatedAt ? new Date(initialBer.updatedAt) : null,
   );
 
-  const [phase, setPhase] = useState<Phase>("input");
+  const [isProcessing, setIsProcessing] = useState(false);
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
+  // Stepwise-Review-State analog zum Schnell-Check: acceptedIds = pro Check
+  // neu (Coach hakt Verstöße manuell oder durch Apply ab); appliedFingerprints
+  // überleben den Check und markieren beim Re-Check „schon übernommen"-Stellen.
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(() => new Set());
+  const [appliedFingerprints, setAppliedFingerprints] = useState<Set<string>>(
+    () => new Set(),
+  );
   // Cache des letzten Checks: gleicher Input → kein erneuter Azure-Call.
   // Preseed aus dem persistierten Snapshot, wenn er v2 ist und der Input
   // zu den gespeicherten Textfeldern passt (beim ersten Mount).
@@ -141,19 +150,47 @@ export function BerEditor({
     end: number;
   } | null>(null);
 
-  function handleLocateViolation(v: {
-    section: CheckerSection;
-    quote: string;
-  }): "found" | "not_found" {
+  function handleLocateViolation(v: Violation): "found" | "not_found" {
     const loc = locateQuote(input[v.section], v.quote);
     if (!loc.found) return "not_found";
-    setPhase("input");
+    void navigator.clipboard.writeText(v.suggestion).catch(() => {
+      /* ignore — Coach kann immer noch manuell kopieren */
+    });
     setPendingSelection({
       section: v.section,
       start: loc.start,
       end: loc.end,
     });
     return "found";
+  }
+
+  function handleApplySuggestion(v: Violation): "applied" | "not_found" {
+    const text = input[v.section];
+    const loc = locateQuote(text, v.quote);
+    if (!loc.found) return "not_found";
+    const nextText =
+      text.slice(0, loc.start) + v.suggestion + text.slice(loc.end);
+    setInput((prev) => ({ ...prev, [v.section]: nextText }));
+    setAcceptedIds((prev) => {
+      const out = new Set(prev);
+      out.add(v.id);
+      return out;
+    });
+    setAppliedFingerprints((prev) => {
+      const out = new Set(prev);
+      out.add(fingerprintApplied(v.section, v.suggestion));
+      return out;
+    });
+    return "applied";
+  }
+
+  function handleToggleAccepted(violationId: string) {
+    setAcceptedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(violationId)) next.delete(violationId);
+      else next.add(violationId);
+      return next;
+    });
   }
 
   const hasHydrated = useRef(false);
@@ -181,7 +218,7 @@ export function BerEditor({
   }, [input, courseId, participantId, impersonating]);
 
   useEffect(() => {
-    if (!pendingSelection || phase !== "input") return;
+    if (!pendingSelection) return;
     const el = textareaRefs.current[pendingSelection.section];
     if (!el) return;
     el.focus();
@@ -192,7 +229,7 @@ export function BerEditor({
     const approxLineHeight = 22;
     el.scrollTop = Math.max(0, lineIndex * approxLineHeight - 60);
     setPendingSelection(null);
-  }, [pendingSelection, phase]);
+  }, [pendingSelection]);
 
   function updateStep(id: string, patch: Partial<CheckerStep>) {
     setSteps((prev) =>
@@ -202,19 +239,16 @@ export function BerEditor({
 
   async function handleRunCheck(e: React.FormEvent) {
     e.preventDefault();
-    // Short-circuit: wenn der Input seit dem letzten Check unverändert ist,
-    // sparen wir uns den Azure-Token und zeigen das gecachte Ergebnis.
-    // Reset wird ausschließlich im ersten Branch überschrieben, Nachfrage
-    // mit „Erneut prüfen" wäre über einen separaten Button denkbar (TODO).
+    // Short-circuit: gleicher Input wie beim letzten Check → kein neuer
+    // Azure-Call. Sidebar-Result und Steps bleiben sichtbar.
     if (result && lastCheckedInput && inputsEqual(input, lastCheckedInput)) {
-      setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "success" })));
-      setPhase("done");
       return;
     }
-    setPhase("processing");
+    setIsProcessing(true);
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
     setSubmitError(null);
+    setAcceptedIds(new Set());
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -222,13 +256,18 @@ export function BerEditor({
       anonResult = await anonymize(input);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      updateStep("anon", { state: "error", detail: message });
+      updateStep("anon", {
+        state: "error",
+        detail: message,
+        actionHref: "/coach/checker/diagnose",
+        actionLabel: "Verbindung prüfen",
+      });
       updateStep("verdict", {
         state: "error",
         detail: "Anonymisierung fehlgeschlagen — Prüfung abgebrochen.",
       });
       setSubmitError(message);
-      setPhase("done");
+      setIsProcessing(false);
       return;
     }
     if (anonResult.bypassed) {
@@ -263,10 +302,11 @@ export function BerEditor({
         detail: "Prüfung konnte nicht durchgeführt werden.",
       });
       setSubmitError(message);
-      setPhase("done");
+      setIsProcessing(false);
       return;
     }
-    const mapped = reverseMap(anonResult.entities, r);
+    const reverseMapped = reverseMap(anonResult.entities, r);
+    const mapped = markPreviouslyAddressed(reverseMapped, appliedFingerprints);
     updateStep("validate", {
       state: "success",
       detail: `${mapped.violations.length} ${mapped.violations.length === 1 ? "Regelverstoß" : "Regelverstöße"} · ${mapped.mustHaves.filter((m) => m.covered).length}/${mapped.mustHaves.length} Pflichtbausteine abgedeckt.`,
@@ -288,7 +328,7 @@ export function BerEditor({
       state: passed ? "success" : "error",
       detail: passed
         ? "Der Bericht kann so an den Bildungsträger eingereicht werden."
-        : "Bericht muss überarbeitet werden — siehe Feedback unten.",
+        : "Bericht muss überarbeitet werden — siehe Sidebar rechts.",
     });
 
     setResult(mapped);
@@ -297,13 +337,7 @@ export function BerEditor({
     // damit spätere Edits des Live-Inputs den Cache nicht aus Versehen
     // invalidieren (State-Vergleich per inputsEqual wertebasiert).
     setLastCheckedInput({ ...input });
-    setPhase("done");
-  }
-
-  function handleBackToEdit() {
-    setPhase("input");
-    setSteps(INITIAL_STEPS);
-    setResult(null);
+    setIsProcessing(false);
   }
 
   function handleSubmitBer() {
@@ -359,172 +393,168 @@ export function BerEditor({
     savedAt !== null &&
     savedAt.getTime() - submittedAt.getTime() > 60_000;
 
-  if (phase === "input") {
-    return (
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
-        <form onSubmit={handleRunCheck} className="space-y-6">
-          {impersonating && (
-            <ImpersonationReadOnlyBanner
-              stopImpersonationAction={stopImpersonationAction}
-            />
-          )}
-          <StatusBanner
-            status={status}
-            submittedAt={submittedAt}
-            wasEditedAfterSubmit={wasEditedAfterSubmit}
-          />
-
-          {CHECKER_SECTIONS.map((section) => (
-            <div key={section.id} className="space-y-2">
-              <label
-                htmlFor={`ber-${section.id}`}
-                className="block text-sm font-medium text-zinc-900"
-              >
-                {section.label}
-              </label>
-              <textarea
-                id={`ber-${section.id}`}
-                ref={(el) => {
-                  textareaRefs.current[section.id] = el;
-                }}
-                rows={10}
-                value={input[section.id]}
-                onChange={(e) =>
-                  setInput((prev) => ({
-                    ...prev,
-                    [section.id]: e.target.value,
-                  }))
-                }
-                placeholder={section.placeholder}
-                className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
-              />
-            </div>
-          ))}
-
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="min-w-0 text-xs text-zinc-500">
-              <p>
-                Finale Prüfung läuft lokal + anonymisiert — dauert ca. 6
-                Sekunden.
-              </p>
-              <p className="mt-1">
-                {isSaving ? (
-                  <span className="text-zinc-600">Speichert …</span>
-                ) : savedAt ? (
-                  <>
-                    <span aria-hidden className="text-emerald-600">
-                      ●
-                    </span>{" "}
-                    Entwurf gespeichert um{" "}
-                    {savedAt.toLocaleTimeString("de-DE", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
-                  </>
-                ) : (
-                  <span className="text-zinc-400">
-                    Autosave läuft, sobald du anfängst zu schreiben.
-                  </span>
-                )}
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
-            >
-              Bericht final prüfen
-            </button>
-          </div>
-        </form>
-
-        <div>
-          <LiveFeedback input={input} />
-          <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 text-xs text-zinc-600">
-            <div className="font-medium text-zinc-900">Kontext</div>
-            <div className="mt-1">
-              Teilnehmer: <span className="text-zinc-900">{participantName}</span>
-            </div>
-            <div>Kunden-Nr.: {kundenNr}</div>
-            <div>AVGS: {avgsNummer}</div>
-            <div>Zeitraum: {zeitraum}</div>
-            <div>Gesamt UE: {gesamtzahlUe}</div>
-            <div className="mt-1">Coach: {coachName}</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const inputUnchangedSinceCheck =
+    !!result && !!lastCheckedInput && inputsEqual(input, lastCheckedInput);
+  const passed = result?.status === "pass" && !isProcessing;
+  const checkLabel = isProcessing
+    ? "Prüfung läuft…"
+    : result
+      ? inputUnchangedSinceCheck
+        ? "Schon geprüft"
+        : "Erneut prüfen"
+      : "Bericht final prüfen";
 
   return (
-    <div className="space-y-6">
-      {impersonating && (
-        <ImpersonationReadOnlyBanner
-          stopImpersonationAction={stopImpersonationAction}
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
+      <form onSubmit={handleRunCheck} className="space-y-6">
+        {impersonating && (
+          <ImpersonationReadOnlyBanner
+            stopImpersonationAction={stopImpersonationAction}
+          />
+        )}
+        <StatusBanner
+          status={status}
+          submittedAt={submittedAt}
+          wasEditedAfterSubmit={wasEditedAfterSubmit}
         />
-      )}
-      <CheckerProgress steps={steps} />
 
-      {phase === "done" && result && (
-        <>
-          <VerdictCard result={result} />
-          {result.status === "needs_revision" && (
-            <FeedbackDetails
-              result={result}
-              onLocateViolation={handleLocateViolation}
-            />
-          )}
-
-          {submitError && (
-            <div className="rounded-xl border border-rose-300 bg-rose-50 px-5 py-3 text-sm text-rose-800">
-              {submitError}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleBackToEdit}
-              className="rounded-lg border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
+        {CHECKER_SECTIONS.map((section) => (
+          <div key={section.id} className="space-y-2">
+            <label
+              htmlFor={`ber-${section.id}`}
+              className="block text-sm font-medium text-zinc-900"
             >
-              Weiter bearbeiten
-            </button>
-            {result.status === "pass" && (
-              <>
+              {section.label}
+            </label>
+            <textarea
+              id={`ber-${section.id}`}
+              ref={(el) => {
+                textareaRefs.current[section.id] = el;
+              }}
+              rows={10}
+              value={input[section.id]}
+              onChange={(e) =>
+                setInput((prev) => ({
+                  ...prev,
+                  [section.id]: e.target.value,
+                }))
+              }
+              placeholder={section.placeholder}
+              className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
+            />
+          </div>
+        ))}
+
+        {submitError && (
+          <div className="rounded-xl border border-rose-300 bg-rose-50 px-5 py-3 text-sm text-rose-800">
+            {submitError}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="min-w-0 text-xs text-zinc-500">
+            <p>
+              Finale Prüfung läuft lokal + anonymisiert — dauert ca. 6
+              Sekunden.
+            </p>
+            <p className="mt-1">
+              {isSaving ? (
+                <span className="text-zinc-600">Speichert …</span>
+              ) : savedAt ? (
+                <>
+                  <span aria-hidden className="text-emerald-600">
+                    ●
+                  </span>{" "}
+                  Entwurf gespeichert um{" "}
+                  {savedAt.toLocaleTimeString("de-DE", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </>
+              ) : (
+                <span className="text-zinc-400">
+                  Autosave läuft, sobald du anfängst zu schreiben.
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {passed && (
+              <button
+                type="button"
+                onClick={handleExportPdf}
+                className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+              >
+                Als Erango-PDF exportieren
+              </button>
+            )}
+            {passed &&
+              (status === "submitted" ? (
+                <div className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white">
+                  ✓ Bereits eingereicht
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={handleExportPdf}
-                  className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+                  onClick={handleSubmitBer}
+                  disabled={isSubmitting || impersonating}
+                  title={
+                    impersonating
+                      ? "Im Support-Modus deaktiviert — Bildungsträger kann keine TN-Berichte einreichen."
+                      : undefined
+                  }
+                  className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
                 >
-                  Als Erango-PDF exportieren
+                  {isSubmitting
+                    ? "Reiche ein …"
+                    : "An Bildungsträger einreichen →"}
                 </button>
-                {status === "submitted" ? (
-                  <div className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white">
-                    ✓ Bereits eingereicht
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmitBer}
-                    disabled={isSubmitting || impersonating}
-                    title={
-                      impersonating
-                        ? "Im Support-Modus deaktiviert — Bildungsträger kann keine TN-Berichte einreichen."
-                        : undefined
-                    }
-                    className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
-                  >
-                    {isSubmitting
-                      ? "Reiche ein …"
-                      : "An Bildungsträger einreichen →"}
-                  </button>
-                )}
-              </>
-            )}
+              ))}
+            <button
+              type="submit"
+              disabled={
+                !canSubmit || isProcessing || inputUnchangedSinceCheck
+              }
+              className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              {checkLabel}
+            </button>
           </div>
-        </>
-      )}
+        </div>
+      </form>
+
+      <div>
+        {isProcessing ? (
+          <div className="sticky top-4">
+            <CheckerProgress steps={steps} />
+          </div>
+        ) : result ? (
+          <ReviewSidebar
+            result={result}
+            acceptedIds={acceptedIds}
+            onToggleAccepted={handleToggleAccepted}
+            onApply={handleApplySuggestion}
+            onLocate={handleLocateViolation}
+          />
+        ) : (
+          <div className="space-y-4">
+            <LiveFeedback input={input} />
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 text-xs text-zinc-600">
+              <div className="font-medium text-zinc-900">Kontext</div>
+              <div className="mt-1">
+                Teilnehmer:{" "}
+                <span className="text-zinc-900">{participantName}</span>
+              </div>
+              <div>Kunden-Nr.: {kundenNr}</div>
+              <div>AVGS: {avgsNummer}</div>
+              <div>Zeitraum: {zeitraum}</div>
+              <div>Gesamt UE: {gesamtzahlUe}</div>
+              <div className="mt-1">Coach: {coachName}</div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -7,11 +7,14 @@ import {
   CheckerProgress,
   type CheckerStep,
 } from "@/components/checker/checker-progress";
-import { FeedbackDetails } from "@/components/checker/feedback-details";
 import { LiveFeedback } from "@/components/checker/live-feedback";
-import { VerdictCard } from "@/components/checker/verdict-card";
+import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
 import { locateQuote } from "@/lib/checker/locate-quote";
+import {
+  fingerprintApplied,
+  markPreviouslyAddressed,
+} from "@/lib/checker/previously-addressed";
 import { inputsEqual } from "@/lib/checker/snapshot";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
@@ -22,6 +25,7 @@ import {
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
+  type Violation,
 } from "@/lib/checker/types";
 
 const EXPORT_STORAGE_KEY = "signflow:checker-export";
@@ -79,17 +83,15 @@ const INITIAL_STEPS: CheckerStep[] = [
 
 const EMPTY_INPUT: CheckerInput = { teilnahme: "", ablauf: "", fazit: "" };
 
-type Phase = "input" | "processing" | "done";
-
 export function CheckerForm({ userId }: { userId: string }) {
   const router = useRouter();
   const draftKey = draftStorageKey(userId);
-  const [phase, setPhase] = useState<Phase>("input");
+  const [isProcessing, setIsProcessing] = useState(false);
   const [input, setInput] = useState<CheckerInput>(EMPTY_INPUT);
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
   const [result, setResult] = useState<CheckerResult | null>(null);
   // Input-Snapshot des letzten Checks — kein erneuter Azure-Call wenn
-  // der Coach ohne Text-Änderungen nochmal „Prüfen" klickt.
+  // der Coach ohne Text-Änderungen nochmal „Erneut prüfen" klickt.
   const [lastCheckedInput, setLastCheckedInput] = useState<CheckerInput | null>(
     null,
   );
@@ -100,14 +102,29 @@ export function CheckerForm({ userId }: { userId: string }) {
     ablauf: null,
     fazit: null,
   });
-  // Zielbereich für „Im Text markieren" — wird nach dem Phase-Switch im
-  // useEffect unten auf die textarea angewendet. useState statt Ref, damit
-  // React den Effekt nach dem Render triggert.
+  // Zielbereich für „Im Text markieren" — wird im useEffect unten auf die
+  // textarea angewendet. useState statt Ref, damit React den Effekt nach
+  // dem Render triggert.
   const [pendingSelection, setPendingSelection] = useState<{
     section: CheckerSection;
     start: number;
     end: number;
   } | null>(null);
+  // Verstoß-IDs, die der Coach in der aktuellen Result-Ansicht als „erledigt"
+  // markiert hat — entweder per Checkbox-Klick oder implizit durch
+  // „Im Text übernehmen". Wird beim nächsten Re-Check zurückgesetzt, weil
+  // Azure neue IDs vergibt; Übernahme-Memory läuft über `appliedFingerprints`.
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // Fingerprints aller Suggestions, die in dieser Session schon einmal
+  // ins Dokument übernommen wurden. Wird beim nächsten Re-Check genutzt,
+  // um vom LLM wieder geflaggte Stellen als „schon übernommen" zu
+  // kennzeichnen — damit der Coach erkennt: nicht-deterministisches
+  // LLM-Rauschen, keine echte neue Anmerkung.
+  const [appliedFingerprints, setAppliedFingerprints] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     // Legacy unscoped Key löschen — Reste aus Sessions vor dem User-Scoping
@@ -173,6 +190,10 @@ export function CheckerForm({ userId }: { userId: string }) {
     }
     setInput(EMPTY_INPUT);
     setSavedAt(null);
+    setResult(null);
+    setLastCheckedInput(null);
+    setAcceptedIds(new Set());
+    setAppliedFingerprints(new Set());
   }
 
   function updateStep(id: string, patch: Partial<CheckerStep>) {
@@ -183,17 +204,16 @@ export function CheckerForm({ userId }: { userId: string }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Short-circuit: gleicher Input wie beim letzten Check → gecachtes
-    // Ergebnis zeigen, kein neuer Azure-Call. Spart Tokens bei Doppel-Klick
-    // oder „Weiter bearbeiten" → „Prüfen" ohne Text-Änderung.
+    // Short-circuit: gleicher Input wie beim letzten Check → kein neuer
+    // Azure-Call. Das aktuelle Result + Steps bleiben sichtbar, der Coach
+    // sieht keinen Spinner für eine identische Prüfung.
     if (result && lastCheckedInput && inputsEqual(input, lastCheckedInput)) {
-      setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "success" })));
-      setPhase("done");
       return;
     }
-    setPhase("processing");
+    setIsProcessing(true);
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
+    setAcceptedIds(new Set());
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -211,7 +231,7 @@ export function CheckerForm({ userId }: { userId: string }) {
         state: "error",
         detail: "Anonymisierung fehlgeschlagen — Prüfung abgebrochen.",
       });
-      setPhase("done");
+      setIsProcessing(false);
       return;
     }
     if (anonResult.bypassed) {
@@ -245,10 +265,14 @@ export function CheckerForm({ userId }: { userId: string }) {
         state: "error",
         detail: "Prüfung konnte nicht durchgeführt werden.",
       });
-      setPhase("done");
+      setIsProcessing(false);
       return;
     }
-    const mappedResult = reverseMap(anonResult.entities, azureResult);
+    const reverseMapped = reverseMap(anonResult.entities, azureResult);
+    const mappedResult = markPreviouslyAddressed(
+      reverseMapped,
+      appliedFingerprints,
+    );
     updateStep("validate", {
       state: "success",
       detail: `${mappedResult.violations.length} ${mappedResult.violations.length === 1 ? "Regelverstoß" : "Regelverstöße"} · ${mappedResult.mustHaves.filter((m) => m.covered).length}/${mappedResult.mustHaves.length} Pflichtbausteine abgedeckt.`,
@@ -270,29 +294,49 @@ export function CheckerForm({ userId }: { userId: string }) {
       state: passed ? "success" : "error",
       detail: passed
         ? "Der Bericht kann so eingereicht werden."
-        : "Bericht muss überarbeitet werden — siehe Feedback unten.",
+        : "Bericht muss überarbeitet werden — siehe Sidebar rechts.",
     });
 
     setResult(mappedResult);
     setLastCheckedInput({ ...input });
-    setPhase("done");
+    setIsProcessing(false);
   }
 
-  function handleReset() {
-    setPhase("input");
-    setSteps(INITIAL_STEPS);
-    setResult(null);
+  function handleToggleAccepted(violationId: string) {
+    setAcceptedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(violationId)) next.delete(violationId);
+      else next.add(violationId);
+      return next;
+    });
   }
 
-  function handleLocateViolation(v: {
-    section: CheckerSection;
-    quote: string;
-  }): "found" | "not_found" {
+  function handleApplySuggestion(v: Violation): "applied" | "not_found" {
+    const text = input[v.section];
+    const loc = locateQuote(text, v.quote);
+    if (!loc.found) return "not_found";
+    const nextText =
+      text.slice(0, loc.start) + v.suggestion + text.slice(loc.end);
+    setInput((prev) => ({ ...prev, [v.section]: nextText }));
+    setAcceptedIds((prev) => {
+      const out = new Set(prev);
+      out.add(v.id);
+      return out;
+    });
+    setAppliedFingerprints((prev) => {
+      const out = new Set(prev);
+      out.add(fingerprintApplied(v.section, v.suggestion));
+      return out;
+    });
+    return "applied";
+  }
+
+  function handleLocateViolation(v: Violation): "found" | "not_found" {
     const loc = locateQuote(input[v.section], v.quote);
     if (!loc.found) return "not_found";
-    // Erst zurück in den Edit-Modus, dann wirkt der Selektions-Effekt
-    // (textarea ist sonst gar nicht gemountet).
-    setPhase("input");
+    void navigator.clipboard.writeText(v.suggestion).catch(() => {
+      /* ignore — Coach kann immer noch manuell kopieren */
+    });
     setPendingSelection({
       section: v.section,
       start: loc.start,
@@ -302,143 +346,118 @@ export function CheckerForm({ userId }: { userId: string }) {
   }
 
   useEffect(() => {
-    if (!pendingSelection || phase !== "input") return;
+    if (!pendingSelection) return;
     const el = textareaRefs.current[pendingSelection.section];
     if (!el) return;
     el.focus();
     el.setSelectionRange(pendingSelection.start, pendingSelection.end);
-    // scrollIntoView auf textarea selber — zentriert die Stelle im Viewport.
+    // scrollIntoView auf textarea selber — zentriert sie im Viewport.
     // Danach noch manuell auf die Selektion scrollen, damit die markierte
     // Stelle sichtbar ist (setSelectionRange scrollt nicht automatisch).
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     // Approximation der Y-Position der Selektion: wir nutzen die Zeilenhöhe
-    // * line-index. Das ist nicht pixel-genau, aber reicht, damit das Auge
-    // des Coaches die Selektion findet.
+    // * line-index. Nicht pixel-genau, aber reicht, damit das Auge des
+    // Coaches die Selektion findet.
     const textBefore = el.value.substring(0, pendingSelection.start);
     const lineIndex = (textBefore.match(/\n/g) ?? []).length;
     const approxLineHeight = 22;
     el.scrollTop = Math.max(0, lineIndex * approxLineHeight - 60);
     setPendingSelection(null);
-  }, [pendingSelection, phase]);
+  }, [pendingSelection]);
 
   const canSubmit =
     input.teilnahme.trim().length > 0 &&
     input.ablauf.trim().length > 0 &&
     input.fazit.trim().length > 0;
-
-  if (phase === "input") {
-    return (
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="rounded-xl border border-zinc-300 bg-white p-5 text-sm text-zinc-700">
-            <p>
-              Schreibe den Abschlussbericht direkt hier in Signflow. Rechts
-              siehst du <span className="font-medium">live</span>, welche
-              Pflichtbausteine schon abgedeckt sind und welche Formulierungen
-              der Bildungsträger nicht akzeptiert. Personenbezogene Daten
-              werden vor der finalen Prüfung automatisch anonymisiert —{" "}
-              <span className="font-medium text-zinc-900">
-                deine Daten verlassen nie Deutschland.
-              </span>
-            </p>
-          </div>
-
-          {CHECKER_SECTIONS.map((section) => (
-            <div key={section.id} className="space-y-2">
-              <label
-                htmlFor={`checker-${section.id}`}
-                className="block text-sm font-medium text-zinc-900"
-              >
-                {section.label}
-              </label>
-              <textarea
-                id={`checker-${section.id}`}
-                ref={(el) => {
-                  textareaRefs.current[section.id] = el;
-                }}
-                rows={10}
-                value={input[section.id]}
-                onChange={(e) =>
-                  setInput((prev) => ({
-                    ...prev,
-                    [section.id]: e.target.value,
-                  }))
-                }
-                placeholder={section.placeholder}
-                className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
-              />
-            </div>
-          ))}
-
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="min-w-0 text-xs text-zinc-500">
-              <p>Finale Prüfung dauert ca. 6 Sekunden.</p>
-              {savedAt ? (
-                <p className="mt-1">
-                  <span aria-hidden className="text-emerald-600">
-                    ●
-                  </span>{" "}
-                  Entwurf automatisch im Browser gespeichert (zuletzt{" "}
-                  {savedAt.toLocaleTimeString("de-DE", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
-                  ).{" "}
-                  <button
-                    type="button"
-                    onClick={handleDiscardDraft}
-                    className="underline decoration-dotted underline-offset-2 hover:text-zinc-700"
-                  >
-                    Entwurf verwerfen
-                  </button>
-                </p>
-              ) : (
-                <p className="mt-1 text-zinc-400">
-                  Entwurf wird automatisch im Browser gespeichert, sobald du
-                  schreibst — Refresh ist ungefährlich.
-                </p>
-              )}
-            </div>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
-            >
-              Bericht final prüfen
-            </button>
-          </div>
-        </form>
-
-        <div>
-          <LiveFeedback input={input} />
-        </div>
-      </div>
-    );
-  }
+  const inputUnchangedSinceCheck =
+    !!result &&
+    !!lastCheckedInput &&
+    inputsEqual(input, lastCheckedInput);
+  const submitLabel = isProcessing
+    ? "Prüfung läuft…"
+    : result
+      ? inputUnchangedSinceCheck
+        ? "Schon geprüft"
+        : "Erneut prüfen"
+      : "Bericht prüfen";
+  const showExport =
+    result?.status === "pass" && !isProcessing;
 
   return (
-    <div className="space-y-6">
-      <CheckerProgress steps={steps} />
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="rounded-xl border border-zinc-300 bg-white p-5 text-sm text-zinc-700">
+          <p>
+            Schreibe den Abschlussbericht direkt hier in Signflow. Rechts
+            siehst du <span className="font-medium">live</span>, welche
+            Pflichtbausteine schon abgedeckt sind und welche Formulierungen
+            der Bildungsträger nicht akzeptiert. Personenbezogene Daten
+            werden vor der finalen Prüfung automatisch anonymisiert —{" "}
+            <span className="font-medium text-zinc-900">
+              deine Daten verlassen nie Deutschland.
+            </span>
+          </p>
+        </div>
 
-      {phase === "done" && result && (
-        <>
-          <VerdictCard result={result} />
-          {result.status === "needs_revision" && (
-            <FeedbackDetails
-              result={result}
-              onLocateViolation={handleLocateViolation}
-            />
-          )}
-          <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="rounded-lg border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
+        {CHECKER_SECTIONS.map((section) => (
+          <div key={section.id} className="space-y-2">
+            <label
+              htmlFor={`checker-${section.id}`}
+              className="block text-sm font-medium text-zinc-900"
             >
-              Weiter bearbeiten
-            </button>
-            {result.status === "pass" && (
+              {section.label}
+            </label>
+            <textarea
+              id={`checker-${section.id}`}
+              ref={(el) => {
+                textareaRefs.current[section.id] = el;
+              }}
+              rows={10}
+              value={input[section.id]}
+              onChange={(e) =>
+                setInput((prev) => ({
+                  ...prev,
+                  [section.id]: e.target.value,
+                }))
+              }
+              placeholder={section.placeholder}
+              className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
+            />
+          </div>
+        ))}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="min-w-0 text-xs text-zinc-500">
+            <p>Finale Prüfung dauert ca. 6 Sekunden.</p>
+            {savedAt ? (
+              <p className="mt-1">
+                <span aria-hidden className="text-emerald-600">
+                  ●
+                </span>{" "}
+                Entwurf automatisch im Browser gespeichert (zuletzt{" "}
+                {savedAt.toLocaleTimeString("de-DE", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+                ).{" "}
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="underline decoration-dotted underline-offset-2 hover:text-zinc-700"
+                >
+                  Entwurf verwerfen
+                </button>
+              </p>
+            ) : (
+              <p className="mt-1 text-zinc-400">
+                Entwurf wird automatisch im Browser gespeichert, sobald du
+                schreibst — Refresh ist ungefährlich.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {showExport && (
               <button
                 type="button"
                 onClick={handleExportPdf}
@@ -447,9 +466,34 @@ export function CheckerForm({ userId }: { userId: string }) {
                 Als Erango-PDF exportieren →
               </button>
             )}
+            <button
+              type="submit"
+              disabled={!canSubmit || isProcessing || inputUnchangedSinceCheck}
+              className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              {submitLabel}
+            </button>
           </div>
-        </>
-      )}
+        </div>
+      </form>
+
+      <div>
+        {isProcessing ? (
+          <div className="sticky top-4">
+            <CheckerProgress steps={steps} />
+          </div>
+        ) : result ? (
+          <ReviewSidebar
+            result={result}
+            acceptedIds={acceptedIds}
+            onToggleAccepted={handleToggleAccepted}
+            onApply={handleApplySuggestion}
+            onLocate={handleLocateViolation}
+          />
+        ) : (
+          <LiveFeedback input={input} />
+        )}
+      </div>
     </div>
   );
 }

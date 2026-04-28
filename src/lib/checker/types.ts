@@ -92,6 +92,13 @@ export type Violation = {
   quote: string;
   rule: string;
   suggestion: string;
+  /**
+   * True wenn diese Violation auf einer schon übernommenen Umformulierung
+   * sitzt (Coach hat „Im Text übernehmen" geklickt, das LLM mäkelt aber
+   * beim Re-Check nochmal). Wird clientseitig nach `runCheck` markiert,
+   * kommt nicht von Azure. Visuell als „schon übernommen"-Badge gerendert.
+   */
+  previouslyAddressed?: boolean;
 };
 
 export type CheckerResult = {
