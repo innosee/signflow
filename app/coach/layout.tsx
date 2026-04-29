@@ -38,6 +38,7 @@ export default async function CoachLayout({
           navLinks={navLinks}
           userName={session.user.name}
           userEmail={session.user.email}
+          settingsHref="/coach/settings"
           impersonating={isImpersonating(session)}
           logoutAction={logoutAction}
           stopImpersonationAction={stopImpersonating}

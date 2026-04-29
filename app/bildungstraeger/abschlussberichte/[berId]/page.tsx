@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
+import { getBranding } from "@/lib/branding";
 import { requireBildungstraeger } from "@/lib/dal";
 import { readSoftFlags } from "@/lib/checker/snapshot";
 import {
@@ -62,6 +63,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
         startDate: schema.courses.startDate,
         endDate: schema.courses.endDate,
         anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+        durchfuehrungsort: schema.courses.durchfuehrungsort,
       },
       participant: {
         id: schema.participants.id,
@@ -73,6 +75,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
         id: schema.users.id,
         name: schema.users.name,
         email: schema.users.email,
+        signatureUrl: schema.users.signatureUrl,
       },
     })
     .from(schema.abschlussberichte)
@@ -93,6 +96,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
   if (!row) notFound();
 
   const { ber, course, participant, coach } = row;
+  const branding = await getBranding();
   const softFlags = readSoftFlags(ber.checkSnapshot);
   const softFlagsAcknowledged = !!ber.softFlagsAcknowledgedAt;
   const ackDate = ber.softFlagsAcknowledgedAt
@@ -282,7 +286,16 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
             zeitraum: zeitraumDisplay,
             coachName: coach.name,
             gesamtzahlUe: ueDisplay,
+            // Schnell-Check: kein Ort/Datum (Coach trägt handschriftlich ein)
+            // und keine digitale Coach-Signatur. Kurs-gebundene BERs:
+            // Ort = `courses.durchfuehrungsort`, Datum = `submitted_at`.
+            ortDatum:
+              !isAdhoc && course?.durchfuehrungsort && submittedAt
+                ? `${course.durchfuehrungsort}, ${submittedAt.toLocaleDateString("de-DE")}`
+                : "",
+            coachSignatureUrl: isAdhoc ? null : coach.signatureUrl ?? null,
           }}
+          branding={branding}
         />
       </div>
 

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
+import { getBranding } from "@/lib/branding";
 import { requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +24,12 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
 
   const [row] = await db
     .select({
+      courseId: schema.abschlussberichte.courseId,
       teilnahme: schema.abschlussberichte.teilnahme,
       ablauf: schema.abschlussberichte.ablauf,
       fazit: schema.abschlussberichte.fazit,
       status: schema.abschlussberichte.status,
+      submittedAt: schema.abschlussberichte.submittedAt,
       tnVorname: schema.abschlussberichte.tnVorname,
       tnNachname: schema.abschlussberichte.tnNachname,
       tnKundenNr: schema.abschlussberichte.tnKundenNr,
@@ -42,7 +45,9 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
       courseStart: schema.courses.startDate,
       courseEnd: schema.courses.endDate,
       courseUe: schema.courses.anzahlBewilligteUe,
+      courseOrt: schema.courses.durchfuehrungsort,
       coachName: schema.users.name,
+      coachSignatureUrl: schema.users.signatureUrl,
     })
     .from(schema.abschlussberichte)
     .leftJoin(
@@ -62,6 +67,8 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
 
   if (!row || row.status !== "submitted") notFound();
 
+  const branding = await getBranding();
+
   const teilnehmerName =
     [row.tnVorname, row.tnNachname].filter(Boolean).join(" ").trim() ||
     row.participantName ||
@@ -73,6 +80,18 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
       ? `${new Date(row.courseStart).toLocaleDateString("de-DE")} — ${new Date(row.courseEnd).toLocaleDateString("de-DE")}`
       : "");
   const coachName = row.coachName || row.coachNameSnapshot || "";
+
+  // Signatur + auto-gefülltes "Ort, Datum" nur für kurs-gebundene BERs:
+  // Schnell-Check-Submissions sind Ad-hoc ohne Kurs-Kontext, da wäre der
+  // Ort frei erfunden — der Coach trägt ihn handschriftlich nach.
+  const isAdhoc = row.courseId === null;
+  const submittedAtDisplay = row.submittedAt
+    ? new Date(row.submittedAt).toLocaleDateString("de-DE")
+    : "";
+  const ortDatum =
+    !isAdhoc && row.courseOrt && submittedAtDisplay
+      ? `${row.courseOrt}, ${submittedAtDisplay}`
+      : "";
 
   return (
     <BerDocument
@@ -92,7 +111,10 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
           (row.courseUe !== undefined && row.courseUe !== null
             ? String(row.courseUe)
             : ""),
+        ortDatum,
+        coachSignatureUrl: isAdhoc ? null : row.coachSignatureUrl ?? null,
       }}
+      branding={branding}
     />
   );
 }

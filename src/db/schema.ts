@@ -74,6 +74,15 @@ export const users = pgTable(
     role: userRole("role").notNull().default("coach"),
     signatureUrl: text("signature_url"),
     /**
+     * Branding für PDF-Header (Logo + Postadresse). In Single-Tenant
+     * (aktueller Stand) nur auf der `bildungstraeger`-User-Zeile gesetzt;
+     * Coaches lesen die Werte vom Bildungsträger ihres Mandanten beim
+     * BER-Export. Wandert mit dem Multi-Tenant-Schema-Change auf die
+     * spätere Org-Tabelle (siehe Memory `project_multitenant_commitment.md`).
+     */
+    pdfLogoUrl: text("pdf_logo_url"),
+    pdfAddress: text("pdf_address"),
+    /**
      * Feature-Flag für den Signatur-Flow (Kurse/Sessions/FES/AfA).
      * Default `false` — ausgerollt nur für Pilot-Coaches (3–4 zum Start).
      * Der Checker ist davon unabhängig und für alle sichtbar.

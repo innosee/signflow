@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AdhocSubmitForm } from "@/components/checker/adhoc-submit-form";
@@ -30,16 +29,15 @@ import {
   type Violation,
 } from "@/lib/checker/types";
 
-const EXPORT_STORAGE_KEY = "signflow:checker-export";
 // Legacy unscoped key — wird beim Mount gelöscht, damit Reste aus älteren
 // Sessions auf demselben Browser nicht in fremde Coach-Konten leaken.
 const LEGACY_DRAFT_STORAGE_KEY = "signflow:checker-draft";
 const draftStorageKey = (userId: string) =>
   `signflow:checker-draft:${userId}`;
 // Result + lastCheckedInput werden mitpersistiert, damit nach Navigation
-// (PDF-Export-Page) oder Refresh die „Als PDF / An BT einreichen"-Buttons
-// nicht verloren gehen — der Coach soll nicht erneut Tokens verbrennen
-// müssen, nur weil er kurz die Seite gewechselt hat.
+// oder Refresh der „An BT einreichen"-Button nicht verloren geht — der
+// Coach soll nicht erneut Tokens verbrennen müssen, nur weil er kurz
+// die Seite gewechselt hat.
 const resultStorageKey = (userId: string) =>
   `signflow:checker-result:${userId}`;
 const DRAFT_DEBOUNCE_MS = 800;
@@ -98,7 +96,6 @@ export function CheckerForm({
   userId: string;
   coachName: string;
 }) {
-  const router = useRouter();
   const draftKey = draftStorageKey(userId);
   const resultKey = resultStorageKey(userId);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -235,15 +232,6 @@ export function CheckerForm({
     }, DRAFT_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [input, draftLoaded, draftKey]);
-
-  function handleExportPdf() {
-    try {
-      sessionStorage.setItem(EXPORT_STORAGE_KEY, JSON.stringify(input));
-    } catch {
-      // sessionStorage voll/blockiert — Export-Page zeigt dann den Fallback
-    }
-    router.push("/coach/checker/export");
-  }
 
   function handleDiscardDraft() {
     const confirmed = window.confirm(
@@ -571,34 +559,19 @@ export function CheckerForm({
               </button>
             )}
             {showExport && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleExportPdf}
-                  disabled={exportDisabled}
-                  title={
-                    exportDisabled
-                      ? "Text wurde geändert — bitte erneut prüfen."
-                      : undefined
-                  }
-                  className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-50 disabled:text-zinc-400"
-                >
-                  Als PDF exportieren
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmitMode("form")}
-                  disabled={exportDisabled}
-                  title={
-                    exportDisabled
-                      ? "Text wurde geändert — bitte erneut prüfen."
-                      : undefined
-                  }
-                  className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-                >
-                  An Bildungsträger einreichen →
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => setSubmitMode("form")}
+                disabled={exportDisabled}
+                title={
+                  exportDisabled
+                    ? "Text wurde geändert — bitte erneut prüfen."
+                    : undefined
+                }
+                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+              >
+                An Bildungsträger einreichen →
+              </button>
             )}
             <button
               type="submit"
