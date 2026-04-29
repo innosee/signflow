@@ -238,8 +238,23 @@ export async function submitBerAction(
       };
     }
   }
-  if (!teilnahme.trim() || !ablauf.trim() || !fazit.trim()) {
+  // Vollständige 3-Abschnitt-Pflicht gilt nur ohne Override. Mit Override
+  // (kurze AVGS-Maßnahme, Coach hat dokumentiert warum) reicht mindestens
+  // ein gefüllter Abschnitt — die fehlenden Sektionen bleiben sichtbar
+  // leer im PDF und die Begründung erklärt warum.
+  if (!overrideActive && (!teilnahme.trim() || !ablauf.trim() || !fazit.trim())) {
     return { error: "Alle drei Abschnitte müssen ausgefüllt sein." };
+  }
+  if (
+    overrideActive &&
+    !teilnahme.trim() &&
+    !ablauf.trim() &&
+    !fazit.trim()
+  ) {
+    return {
+      error:
+        "Mindestens ein Abschnitt muss Inhalt haben — sonst gibt es nichts einzureichen.",
+    };
   }
 
   const ctx = await requireOwnedTnContext(courseId, participantId, coachId);

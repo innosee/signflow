@@ -423,9 +423,13 @@ export function BerEditor({
     router.push("/coach/checker/export");
   }
 
+  // Mindestens ein Abschnitt muss Inhalt haben — sonst gibt es nichts zu
+  // prüfen. Drei-Felder-Pflicht würde Coaches mit kurzen AVGS-Maßnahmen
+  // (z.B. 5 UE „Bewerbungsunterlagen optimieren") blockieren: ohne Check
+  // kein Override-Toggle, ohne Override kein Submit.
   const canSubmit =
-    input.teilnahme.trim().length > 0 &&
-    input.ablauf.trim().length > 0 &&
+    input.teilnahme.trim().length > 0 ||
+    input.ablauf.trim().length > 0 ||
     input.fazit.trim().length > 0;
 
   const overrideReasonTrim = mustHaveOverrideReason.trim();
@@ -498,6 +502,12 @@ export function BerEditor({
               placeholder={section.placeholder}
               spellCheck
               lang="de"
+              // Drittanbieter-Plugins (Grammarly, LanguageTool, …) hart aus —
+              // sie würden Klartext mit potentiell PII an US-Server senden,
+              // bevor unser IONOS-Anonymizer greift.
+              data-gramm="false"
+              data-gramm_editor="false"
+              data-enable-grammarly="false"
               className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
             />
           </div>
@@ -520,6 +530,9 @@ export function BerEditor({
             placeholder="z.B. GEPEDU-Test durchgeführt, Anerkennung ausländischer Diplome, Tragfähigkeitsanalyse, Weiterbildungssuche …"
             spellCheck
             lang="de"
+            data-gramm="false"
+            data-gramm_editor="false"
+            data-enable-grammarly="false"
             maxLength={4000}
             className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
           />
