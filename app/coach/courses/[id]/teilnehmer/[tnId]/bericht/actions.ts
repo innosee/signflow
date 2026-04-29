@@ -8,7 +8,13 @@ import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
-export type BerActionState = { error?: string; savedAt?: string } | undefined;
+export type BerActionState =
+  | { error?: string; savedAt?: string; berId?: string }
+  | undefined;
+
+const OVERRIDE_REASON_MIN = 10;
+const OVERRIDE_REASON_MAX = 500;
+const SONSTIGES_MAX = 4000;
 
 type OwnedContext = {
   courseId: string;
@@ -74,6 +80,11 @@ export async function saveBerDraftAction(
   const teilnahme = String(formData.get("teilnahme") ?? "");
   const ablauf = String(formData.get("ablauf") ?? "");
   const fazit = String(formData.get("fazit") ?? "");
+  const sonstiges = String(formData.get("sonstiges") ?? "").slice(
+    0,
+    SONSTIGES_MAX,
+  );
+  const keineFehlzeiten = formData.get("keineFehlzeiten") === "true";
 
   if (!courseId || !participantId) {
     return { error: "Kurs oder Teilnehmer fehlt." };
@@ -99,7 +110,7 @@ export async function saveBerDraftAction(
   if (existing) {
     await db
       .update(schema.abschlussberichte)
-      .set({ teilnahme, ablauf, fazit })
+      .set({ teilnahme, ablauf, fazit, sonstiges, keineFehlzeiten })
       .where(eq(schema.abschlussberichte.id, existing.id));
     berId = existing.id;
   } else {
@@ -112,6 +123,8 @@ export async function saveBerDraftAction(
         teilnahme,
         ablauf,
         fazit,
+        sonstiges,
+        keineFehlzeiten,
       })
       .returning({ id: schema.abschlussberichte.id });
     berId = created.id;
@@ -150,7 +163,7 @@ export async function saveBerDraftAction(
   revalidatePath(`/coach/courses/${courseId}`);
   revalidatePath(`/coach/courses/${courseId}/teilnehmer/${participantId}/bericht`);
 
-  return { savedAt: new Date().toISOString() };
+  return { savedAt: new Date().toISOString(), berId };
 }
 
 /**
@@ -180,6 +193,13 @@ export async function submitBerAction(
   const teilnahme = String(formData.get("teilnahme") ?? "");
   const ablauf = String(formData.get("ablauf") ?? "");
   const fazit = String(formData.get("fazit") ?? "");
+  const sonstigesRaw = String(formData.get("sonstiges") ?? "").trim();
+  const sonstiges = sonstigesRaw.slice(0, SONSTIGES_MAX);
+  const keineFehlzeiten = formData.get("keineFehlzeiten") === "true";
+  const overrideReasonRaw = String(
+    formData.get("mustHaveOverrideReason") ?? "",
+  ).trim();
+  const overrideActive = overrideReasonRaw.length > 0;
   const lastCheckPassed = formData.get("lastCheckPassed") === "true";
   const checkSnapshotRaw = formData.get("checkSnapshot");
   // Snapshot ist ein String (JSON) vom Client. Wir validieren beim Parse
@@ -200,11 +220,23 @@ export async function submitBerAction(
   if (!courseId || !participantId) {
     return { error: "Kurs oder Teilnehmer fehlt." };
   }
-  if (!lastCheckPassed) {
+  if (!lastCheckPassed && !overrideActive) {
     return {
       error:
         "Der Bericht hat die finale Prüfung nicht bestanden — bitte erst korrigieren.",
     };
+  }
+  if (overrideActive) {
+    if (overrideReasonRaw.length < OVERRIDE_REASON_MIN) {
+      return {
+        error: `Begründung für Override muss mindestens ${OVERRIDE_REASON_MIN} Zeichen haben.`,
+      };
+    }
+    if (overrideReasonRaw.length > OVERRIDE_REASON_MAX) {
+      return {
+        error: `Begründung für Override darf max. ${OVERRIDE_REASON_MAX} Zeichen haben.`,
+      };
+    }
   }
   if (!teilnahme.trim() || !ablauf.trim() || !fazit.trim()) {
     return { error: "Alle drei Abschnitte müssen ausgefüllt sein." };
@@ -278,7 +310,12 @@ export async function submitBerAction(
         teilnahme,
         ablauf,
         fazit,
+        sonstiges,
+        keineFehlzeiten,
+        mustHaveOverrideReason: overrideActive ? overrideReasonRaw : null,
         status: "submitted",
+        // Override hält DB-Invariante (lastCheckPassed = true) — Begründung
+        // dokumentiert die fehlenden Pflicht-Bausteine separat.
         lastCheckPassed: true,
         submittedAt: now,
         checkSnapshot,
@@ -300,6 +337,9 @@ export async function submitBerAction(
         teilnahme,
         ablauf,
         fazit,
+        sonstiges,
+        keineFehlzeiten,
+        mustHaveOverrideReason: overrideActive ? overrideReasonRaw : null,
         status: "submitted",
         lastCheckPassed: true,
         submittedAt: now,
@@ -327,5 +367,5 @@ export async function submitBerAction(
   revalidatePath("/coach/checker");
   revalidatePath("/bildungstraeger");
 
-  return { savedAt: now.toISOString() };
+  return { savedAt: now.toISOString(), berId };
 }

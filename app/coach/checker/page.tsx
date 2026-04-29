@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { requireCoach } from "@/lib/dal";
@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 type RowStatus = "submitted" | "draft" | "missing";
 
 type Row = {
+  berId: string | null;
   courseId: string;
   courseTitle: string;
   participantId: string;
@@ -19,11 +20,20 @@ type Row = {
   updatedAt: Date | null;
 };
 
+type AdhocRow = {
+  berId: string;
+  tnName: string;
+  kundenNr: string;
+  avgsNummer: string;
+  submittedAt: Date | null;
+};
+
 export default async function CheckerDashboard() {
   const session = await requireCoach();
 
   const rows = await db
     .select({
+      berId: schema.abschlussberichte.id,
       courseId: schema.courses.id,
       courseTitle: schema.courses.title,
       participantId: schema.participants.id,
@@ -61,6 +71,7 @@ export default async function CheckerDashboard() {
     .orderBy(asc(schema.courses.title), asc(schema.participants.name));
 
   const normalized: Row[] = rows.map((r) => ({
+    berId: r.berId ?? null,
     courseId: r.courseId,
     courseTitle: r.courseTitle,
     participantId: r.participantId,
@@ -78,6 +89,37 @@ export default async function CheckerDashboard() {
   const missing = normalized.filter((r) => r.status === "missing");
   const drafts = normalized.filter((r) => r.status === "draft");
   const submitted = normalized.filter((r) => r.status === "submitted");
+
+  // Schnell-Check (ad-hoc) Submissions — kein Kurs-Kontext, eigene Sektion
+  // damit der Coach das PDF auch nach dem Einreichen wieder runterladen kann.
+  const adhocRowsRaw = await db
+    .select({
+      id: schema.abschlussberichte.id,
+      tnVorname: schema.abschlussberichte.tnVorname,
+      tnNachname: schema.abschlussberichte.tnNachname,
+      tnKundenNr: schema.abschlussberichte.tnKundenNr,
+      tnAvgsNummer: schema.abschlussberichte.tnAvgsNummer,
+      submittedAt: schema.abschlussberichte.submittedAt,
+    })
+    .from(schema.abschlussberichte)
+    .where(
+      and(
+        eq(schema.abschlussberichte.coachId, session.user.id),
+        isNull(schema.abschlussberichte.courseId),
+        eq(schema.abschlussberichte.status, "submitted"),
+      ),
+    )
+    .orderBy(desc(schema.abschlussberichte.submittedAt))
+    .limit(50);
+
+  const adhocRows: AdhocRow[] = adhocRowsRaw.map((r) => ({
+    berId: r.id,
+    tnName:
+      [r.tnVorname, r.tnNachname].filter(Boolean).join(" ").trim() || "—",
+    kundenNr: r.tnKundenNr,
+    avgsNummer: r.tnAvgsNummer,
+    submittedAt: r.submittedAt ? new Date(r.submittedAt) : null,
+  }));
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10 space-y-8">
@@ -183,7 +225,55 @@ export default async function CheckerDashboard() {
         emptyMessage="Noch keine eingereichten Berichte."
       />
 
+      <AdhocSection rows={adhocRows} />
     </div>
+  );
+}
+
+function AdhocSection({ rows }: { rows: AdhocRow[] }) {
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="rounded-xl border border-zinc-300 bg-white">
+      <div className="border-b border-zinc-200 px-5 py-3">
+        <h2 className="text-sm font-semibold text-zinc-900">
+          Schnell-Check (ad-hoc) ({rows.length})
+        </h2>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          Eingereichte Schnell-Check-Berichte ohne Kurs-Kontext. PDF
+          jederzeit erneut öffnen oder herunterladen.
+        </p>
+      </div>
+      <ul className="divide-y divide-zinc-100">
+        {rows.map((r) => (
+          <li
+            key={r.berId}
+            className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 text-sm"
+          >
+            <div className="min-w-0 flex-1 basis-60">
+              <div className="font-medium text-zinc-900">{r.tnName}</div>
+              <div className="text-xs text-zinc-500">
+                Kd-Nr. {r.kundenNr || "—"}
+                {r.avgsNummer && ` · AVGS ${r.avgsNummer}`}
+              </div>
+            </div>
+            <div className="text-xs text-zinc-500">
+              {r.submittedAt
+                ? `eingereicht am ${r.submittedAt.toLocaleDateString("de-DE")}`
+                : ""}
+            </div>
+            <Link
+              href={`/coach/abschlussberichte/${r.berId}/print`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50"
+            >
+              PDF öffnen ↗
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -264,6 +354,16 @@ function BerListSection({
                     ? `zuletzt gespeichert ${r.updatedAt.toLocaleDateString("de-DE")}`
                     : "noch nicht begonnen"}
               </div>
+              {r.status === "submitted" && r.berId && (
+                <Link
+                  href={`/coach/abschlussberichte/${r.berId}/print`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50"
+                >
+                  PDF
+                </Link>
+              )}
               <Link
                 href={`/coach/courses/${r.courseId}/teilnehmer/${r.participantId}/bericht`}
                 className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800"

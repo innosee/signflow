@@ -38,6 +38,10 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
         teilnahme: schema.abschlussberichte.teilnahme,
         ablauf: schema.abschlussberichte.ablauf,
         fazit: schema.abschlussberichte.fazit,
+        sonstiges: schema.abschlussberichte.sonstiges,
+        keineFehlzeiten: schema.abschlussberichte.keineFehlzeiten,
+        mustHaveOverrideReason:
+          schema.abschlussberichte.mustHaveOverrideReason,
         status: schema.abschlussberichte.status,
         submittedAt: schema.abschlussberichte.submittedAt,
         updatedAt: schema.abschlussberichte.updatedAt,
@@ -294,6 +298,9 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
                 ? `${course.durchfuehrungsort}, ${submittedAt.toLocaleDateString("de-DE")}`
                 : "",
             coachSignatureUrl: isAdhoc ? null : coach.signatureUrl ?? null,
+            keineFehlzeiten: ber.keineFehlzeiten,
+            sonstiges: ber.sonstiges,
+            mustHaveOverrideReason: ber.mustHaveOverrideReason,
           }}
           branding={branding}
         />

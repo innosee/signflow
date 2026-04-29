@@ -28,6 +28,10 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
       teilnahme: schema.abschlussberichte.teilnahme,
       ablauf: schema.abschlussberichte.ablauf,
       fazit: schema.abschlussberichte.fazit,
+      sonstiges: schema.abschlussberichte.sonstiges,
+      keineFehlzeiten: schema.abschlussberichte.keineFehlzeiten,
+      mustHaveOverrideReason:
+        schema.abschlussberichte.mustHaveOverrideReason,
       status: schema.abschlussberichte.status,
       submittedAt: schema.abschlussberichte.submittedAt,
       tnVorname: schema.abschlussberichte.tnVorname,
@@ -113,6 +117,9 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
             : ""),
         ortDatum,
         coachSignatureUrl: isAdhoc ? null : row.coachSignatureUrl ?? null,
+        keineFehlzeiten: row.keineFehlzeiten,
+        sonstiges: row.sonstiges,
+        mustHaveOverrideReason: row.mustHaveOverrideReason,
       }}
       branding={branding}
     />

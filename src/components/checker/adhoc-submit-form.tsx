@@ -11,7 +11,17 @@ import type { CheckerInput, CheckerResult } from "@/lib/checker/types";
 type Props = {
   input: CheckerInput;
   result: CheckerResult;
+  /** Optionales 4. Freitext-Feld (AVGS-Inhalte / Sonstiges). */
+  sonstiges: string;
   coachName: string;
+  /**
+   * Wenn nicht-leer: der Coach hat im Sidebar/Editor explizit angegeben,
+   * dass nicht alle Pflicht-Bausteine in dieser Maßnahme abdeckbar sind
+   * + eine Begründung gegeben. Erlaubt der Server den Submit auch wenn
+   * `result.status === "needs_revision"` ausschließlich wegen fehlender
+   * mustHaves wäre.
+   */
+  mustHaveOverrideReason: string | null;
   onSubmitted: (berId: string) => void;
   onCancel: () => void;
 };
@@ -23,6 +33,7 @@ type FormState = {
   tnAvgsNummer: string;
   tnZeitraum: string;
   tnUe: string;
+  keineFehlzeiten: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -32,12 +43,15 @@ const EMPTY_FORM: FormState = {
   tnAvgsNummer: "",
   tnZeitraum: "",
   tnUe: "",
+  keineFehlzeiten: false,
 };
 
 export function AdhocSubmitForm({
   input,
   result,
+  sonstiges,
   coachName,
+  mustHaveOverrideReason,
   onSubmitted,
   onCancel,
 }: Props) {
@@ -59,7 +73,19 @@ export function AdhocSubmitForm({
       setError("Nachname ist Pflicht.");
       return;
     }
-    const payload: AdhocBerInput = { ...form, input, result };
+    const payload: AdhocBerInput = {
+      tnVorname: form.tnVorname,
+      tnNachname: form.tnNachname,
+      tnKundenNr: form.tnKundenNr,
+      tnAvgsNummer: form.tnAvgsNummer,
+      tnZeitraum: form.tnZeitraum,
+      tnUe: form.tnUe,
+      keineFehlzeiten: form.keineFehlzeiten,
+      sonstiges,
+      mustHaveOverrideReason,
+      input,
+      result,
+    };
     startTransition(async () => {
       try {
         const res = await submitAdhocBerAction(payload);
@@ -154,6 +180,29 @@ export function AdhocSubmitForm({
         />
       </div>
 
+      <label className="mt-4 flex items-center gap-2 text-sm text-zinc-800 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.keineFehlzeiten}
+          onChange={(e) => update("keineFehlzeiten", e.target.checked)}
+          className="h-4 w-4 accent-zinc-900"
+        />
+        <span>Keine Fehlzeiten</span>
+        <span className="text-xs text-zinc-500">
+          (erscheint im PDF-Header als Markierung)
+        </span>
+      </label>
+
+      {mustHaveOverrideReason && mustHaveOverrideReason.trim().length > 0 && (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <span className="font-medium">
+            Pflicht-Baustein-Override aktiv:
+          </span>{" "}
+          &bdquo;{mustHaveOverrideReason}&ldquo;. Wird im PDF und im
+          Bildungsträger-Detail-View sichtbar.
+        </div>
+      )}
+
       {error && (
         <p className="mt-3 text-xs text-rose-700" role="alert">
           {error}
@@ -175,7 +224,7 @@ export function AdhocSubmitForm({
           disabled={isPending}
           className="rounded-lg bg-black px-5 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
         >
-          {isPending ? "Reiche ein …" : "Bericht einreichen →"}
+          {isPending ? "Reiche ein …" : "Einreichen + PDF anzeigen →"}
         </button>
       </div>
     </div>
