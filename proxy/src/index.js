@@ -6,7 +6,16 @@ import { anonymizeSections } from "./anonymize.js";
 import { verifyToken } from "./auth.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? "https://signflow.coach";
+// Multi-Origin: comma-separated Liste in `ALLOWED_ORIGIN`. Default für Prod
+// nur `https://signflow.coach`; Staging-Setup ergänzt die Vercel-Preview-
+// Domain. Wildcards / Regex bewusst NICHT erlaubt — alle erlaubten Origins
+// werden explizit als String-Match geprüft.
+const ALLOWED_ORIGINS = (
+  process.env.ALLOWED_ORIGIN ?? "https://signflow.coach"
+)
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 const app = Fastify({
   logger: {
@@ -20,7 +29,15 @@ const app = Fastify({
 });
 
 await app.register(cors, {
-  origin: ALLOWED_ORIGIN,
+  // Function-Form, damit das Echo des erlaubten Origins in der CORS-Response
+  // exakt der Anfrage-Origin ist. Unbekannte Origins → `false` → Browser blockt.
+  // Server-zu-Server (kein Origin-Header) wird erlaubt — der echte Schutz
+  // steckt im HMAC-Auth-Layer, nicht im CORS.
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(null, false);
+  },
   methods: ["POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 });
