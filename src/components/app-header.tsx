@@ -7,6 +7,8 @@ type Props = {
   navLinks: NavLink[];
   userName: string;
   userEmail: string;
+  /** Optionaler Link zur Einstellungs-Seite (Profil/Passwort/Branding/Billing). */
+  settingsHref?: string;
   impersonating: boolean;
   logoutAction: () => Promise<void>;
   stopImpersonationAction: () => Promise<void>;
@@ -17,6 +19,7 @@ export function AppHeader({
   navLinks,
   userName,
   userEmail,
+  settingsHref,
   impersonating,
   logoutAction,
   stopImpersonationAction,
@@ -70,6 +73,14 @@ export function AppHeader({
               <div className="font-medium text-zinc-900">{userName}</div>
               <div>{userEmail}</div>
             </div>
+            {settingsHref && !impersonating && (
+              <Link
+                href={settingsHref}
+                className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm text-zinc-800 hover:bg-zinc-50"
+              >
+                Einstellungen
+              </Link>
+            )}
             {!impersonating && (
               <form action={logoutAction}>
                 <button

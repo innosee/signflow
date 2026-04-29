@@ -7,7 +7,32 @@ type BerMetadata = {
   zeitraum?: string;
   coachName?: string;
   gesamtzahlUe?: string;
+  /**
+   * "Ort, Datum"-Eintrag im Footer. Wird für kurs-gebundene BERs
+   * automatisch aus `courses.durchfuehrungsort` + `submitted_at` befüllt;
+   * bei Schnell-Check-Submissions bleibt er leer und der Coach trägt
+   * ihn handschriftlich nach.
+   */
+  ortDatum?: string;
+  /** Optionaler Signatur-Bild-URL des Coaches (PNG, transparenter Hintergrund). */
+  coachSignatureUrl?: string | null;
 };
+
+type BerBranding = {
+  /** Logo-URL des Bildungsträgers; wenn null → Text-Fallback im Header-Block. */
+  logoUrl?: string | null;
+  /** Postadresse (mehrzeilig, `\n`-separiert). */
+  address?: string;
+};
+
+const DEFAULT_ADDRESS_LINES = [
+  "Ekkehardstraße 12b",
+  "D-78224 Singen",
+  "Tel. +49 (0) 7731 / 90 97 18 - 10",
+  "Fax +49 (0) 7731 / 90 97 18 - 11",
+  "avgs@erango.de",
+  "www.erango.de",
+];
 
 const SECTION_TITLES = [
   {
@@ -62,33 +87,45 @@ function Paragraphs({ text }: { text: string }) {
 export function BerDocument({
   input,
   meta,
+  branding,
 }: {
   input: CheckerInput;
   meta?: BerMetadata;
+  branding?: BerBranding;
 }) {
+  const addressLines = (branding?.address && branding.address.trim().length > 0
+    ? branding.address
+    : DEFAULT_ADDRESS_LINES.join("\n"))
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
   return (
     <article className="ber-document" aria-label="TN-bezogener Bericht">
       <header className="ber-header">
         <address className="ber-address">
-          Ekkehardstraße 12b
-          <br />
-          D-78224 Singen
-          <br />
-          Tel. +49 (0) 7731 / 90 97 18 - 10
-          <br />
-          Fax +49 (0) 7731 / 90 97 18 - 11
-          <br />
-          avgs@erango.de
-          <br />
-          www.erango.de
+          {addressLines.map((line, idx) => (
+            <span key={idx} className="ber-address-line">
+              {line}
+            </span>
+          ))}
         </address>
-        <div className="ber-logo" aria-hidden>
-          er—
-          <br />
-          -an
-          <br />
-          go.
-        </div>
+        {branding?.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={branding.logoUrl}
+            alt="Logo Bildungsträger"
+            className="ber-logo-image"
+          />
+        ) : (
+          <div className="ber-logo" aria-hidden>
+            er—
+            <br />
+            -an
+            <br />
+            go.
+          </div>
+        )}
       </header>
 
       <h1 className="ber-title">→ TN-bezogener Bericht</h1>
@@ -122,9 +159,17 @@ export function BerDocument({
       <footer className="ber-footer">
         <div className="ber-signfield">
           <div className="ber-signlabel">Ort, Datum</div>
-          <div className="ber-signvalue">{meta?.coachName ? "" : ""}</div>
+          <div className="ber-signvalue">{meta?.ortDatum ?? ""}</div>
         </div>
         <div className="ber-signfield">
+          {meta?.coachSignatureUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={meta.coachSignatureUrl}
+              alt="Unterschrift Coach"
+              className="ber-coach-signature"
+            />
+          ) : null}
           <div className="ber-signlabel">Name Coach</div>
           <div className="ber-signvalue">{meta?.coachName ?? ""}</div>
         </div>
@@ -167,6 +212,11 @@ const berCss = `
   font-size: 8.5pt;
   line-height: 1.5;
   color: #3f3f46;
+  display: flex;
+  flex-direction: column;
+}
+.ber-address-line {
+  display: block;
 }
 .ber-logo {
   font-family: ui-sans-serif, system-ui, sans-serif;
@@ -179,6 +229,14 @@ const berCss = `
   color: #18181b;
   text-align: left;
   min-width: 16mm;
+}
+.ber-logo-image {
+  max-height: 22mm;
+  max-width: 50mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
 }
 .ber-title {
   font-size: 22pt;
@@ -248,6 +306,7 @@ const berCss = `
   flex: 1;
   border-top: 1px solid #18181b;
   padding-top: 2mm;
+  position: relative;
 }
 .ber-signlabel {
   font-weight: 600;
@@ -257,6 +316,17 @@ const berCss = `
 .ber-signvalue {
   font-size: 10pt;
   min-height: 6mm;
+}
+.ber-coach-signature {
+  position: absolute;
+  bottom: calc(100% - 2mm);
+  left: 0;
+  max-height: 18mm;
+  max-width: 70mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
 }
 @media print {
   @page {

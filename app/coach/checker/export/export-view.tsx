@@ -4,13 +4,25 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { BerDocument } from "@/components/checker/ber-document";
+import type { Branding } from "@/lib/branding";
 import { isCheckerInput, type CheckerInput } from "@/lib/checker/types";
 
 const STORAGE_KEY = "signflow:checker-export";
 
-export function ExportView({ coachName }: { coachName: string }) {
+export function ExportView({
+  coachName,
+  coachSignatureUrl,
+  branding,
+}: {
+  coachName: string;
+  coachSignatureUrl: string | null;
+  branding: Branding;
+}) {
   const [input, setInput] = useState<CheckerInput | null>(null);
   const [ready, setReady] = useState(false);
+  // Default: Unterschrift drucken, sobald der Coach eine hinterlegt hat —
+  // das ist der Hauptgrund, warum er die Sig-Funktion aktiviert hat.
+  const [withSignature, setWithSignature] = useState(true);
 
   useEffect(() => {
     let parsed: CheckerInput | null = null;
@@ -48,6 +60,9 @@ export function ExportView({ coachName }: { coachName: string }) {
     );
   }
 
+  const renderedSignature =
+    withSignature && coachSignatureUrl ? coachSignatureUrl : null;
+
   return (
     <div className="export-wrapper">
       <div className="export-toolbar" data-print-hide>
@@ -58,11 +73,30 @@ export function ExportView({ coachName }: { coachName: string }) {
           ← zurück zum Checker
         </Link>
         <div className="export-toolbar-actions">
-          <p className="text-xs text-zinc-500">
-            Dein Bericht im Erango-Layout. Klick auf &bdquo;Als PDF
-            speichern&ldquo;, dein Browser öffnet den Druckdialog — dort
-            Ziel &bdquo;Als PDF speichern&ldquo; wählen.
-          </p>
+          <div className="export-toolbar-controls">
+            {coachSignatureUrl ? (
+              <label className="export-sig-toggle">
+                <input
+                  type="checkbox"
+                  checked={withSignature}
+                  onChange={(e) => setWithSignature(e.target.checked)}
+                />
+                <span>Mit Unterschrift</span>
+              </label>
+            ) : (
+              <Link
+                href="/coach/settings"
+                className="export-sig-cta"
+                title="Unterschrift jetzt hinterlegen"
+              >
+                Unterschrift hinterlegen ↗
+              </Link>
+            )}
+            <p className="text-xs text-zinc-500">
+              Klick auf &bdquo;Als PDF speichern&ldquo; öffnet den Druckdialog —
+              dort Ziel &bdquo;Als PDF speichern&ldquo; wählen.
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => window.print()}
@@ -74,7 +108,11 @@ export function ExportView({ coachName }: { coachName: string }) {
       </div>
 
       <div className="export-canvas">
-        <BerDocument input={input} meta={{ coachName }} />
+        <BerDocument
+          input={input}
+          meta={{ coachName, coachSignatureUrl: renderedSignature }}
+          branding={branding}
+        />
       </div>
 
       <style>{toolbarCss}</style>
@@ -102,10 +140,34 @@ const toolbarCss = `
     align-items: center;
     gap: 0.75rem;
   }
-  .export-toolbar-actions p {
+  .export-toolbar-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+  }
+  .export-toolbar-controls p {
     margin: 0;
     max-width: 40ch;
     text-align: right;
+  }
+  .export-sig-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8125rem;
+    color: #18181b;
+    cursor: pointer;
+    user-select: none;
+  }
+  .export-sig-toggle input {
+    accent-color: #18181b;
+  }
+  .export-sig-cta {
+    font-size: 0.75rem;
+    color: #1d4ed8;
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
   .export-canvas {
     max-width: 210mm;

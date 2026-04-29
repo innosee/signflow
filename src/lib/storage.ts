@@ -46,6 +46,28 @@ export async function uploadSignature(
   return url;
 }
 
+/**
+ * Logo-Upload für PDF-Branding. Bewusst kein Re-Encoding: das vom Bildungs-
+ * träger hochgeladene PNG/JPEG/SVG landet 1:1 im Blob-Store, damit das
+ * PDF-Layout deterministisch bleibt. Validierung (Content-Type/Größe)
+ * passiert im API-Handler.
+ */
+export async function uploadBrandingLogo(
+  ownerKey: string,
+  file: Blob,
+  extension: "png" | "jpg" | "svg",
+): Promise<string> {
+  assertToken();
+  const path = `branding/${ownerKey}/${Date.now()}.${extension}`;
+  const { url } = await put(path, file, {
+    access: "public",
+    contentType: file.type,
+    addRandomSuffix: true,
+    cacheControlMaxAge: 60 * 60 * 24 * 365,
+  });
+  return url;
+}
+
 export async function deleteBlob(url: string): Promise<void> {
   assertToken();
   await del(url);

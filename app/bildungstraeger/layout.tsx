@@ -25,6 +25,7 @@ export default async function BildungstraegerLayout({
           ]}
           userName={session.user.name}
           userEmail={session.user.email}
+          settingsHref="/bildungstraeger/settings"
           impersonating={isImpersonating(session)}
           logoutAction={logoutAction}
           stopImpersonationAction={stopImpersonating}
