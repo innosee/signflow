@@ -25,6 +25,14 @@ type ReviewSidebarProps = {
   onToggleAccepted: (id: string) => void;
   onApply: (v: Violation) => ApplyOutcome;
   onLocate: (v: Violation) => LocateOutcome;
+  /**
+   * Wenn der Coach im Sidebar-MustHave-Block "Bausteine nicht abdeckbar"
+   * aktiviert + Begründung tippt, gibt er hier seine Eingabe nach oben.
+   * Optional — wenn der Caller das nicht durchreicht, ist der Override
+   * deaktiviert (klassisches Verhalten).
+   */
+  mustHaveOverrideReason?: string;
+  onMustHaveOverrideReasonChange?: (reason: string) => void;
 };
 
 export function ReviewSidebar({
@@ -33,6 +41,8 @@ export function ReviewSidebar({
   onToggleAccepted,
   onApply,
   onLocate,
+  mustHaveOverrideReason,
+  onMustHaveOverrideReasonChange,
 }: ReviewSidebarProps) {
   // Sortierung: offen vor erledigt, hard_block vor soft_flag, sonst stabil
   const sorted = [...result.violations].sort((a, b) => {
@@ -49,10 +59,32 @@ export function ReviewSidebar({
   ).length;
   const doneCount = result.violations.length - openCount;
 
+  const missingMustHaves = result.mustHaves.filter((m) => !m.covered);
+  const hasHardBlock = result.violations.some(
+    (v) => v.severity === "hard_block",
+  );
+  const overrideAvailable =
+    !!onMustHaveOverrideReasonChange &&
+    missingMustHaves.length > 0 &&
+    !hasHardBlock;
+
   return (
     <aside aria-label="Prüfungsergebnis" className="sticky top-4 space-y-4">
-      <StatusPill openCount={openCount} status={result.status} />
-      <MustHaveCard mustHaves={result.mustHaves} />
+      <StatusPill
+        openCount={openCount}
+        status={result.status}
+        overrideActive={
+          overrideAvailable &&
+          !!mustHaveOverrideReason &&
+          mustHaveOverrideReason.trim().length >= 10
+        }
+      />
+      <MustHaveCard
+        mustHaves={result.mustHaves}
+        overrideAvailable={overrideAvailable}
+        overrideReason={mustHaveOverrideReason ?? ""}
+        onOverrideReasonChange={onMustHaveOverrideReasonChange}
+      />
 
       {result.violations.length > 0 && (
         <section className="rounded-xl border border-zinc-300 bg-white">
@@ -93,34 +125,49 @@ export function ReviewSidebar({
 function StatusPill({
   status,
   openCount,
+  overrideActive,
 }: {
   status: CheckerResult["status"];
   openCount: number;
+  overrideActive: boolean;
 }) {
   // `acceptedIds`-Status wird hier bewusst nicht eingerechnet: ob der Bericht
   // wirklich pass-fähig ist, weiß nur der Re-Check. Die Häkchen sind ein
   // lokaler Coach-Marker, keine Azure-Bestätigung.
   const isPass = status === "pass";
+  const isPassWithOverride = !isPass && overrideActive;
+  const effectivePass = isPass || isPassWithOverride;
+
   return (
     <div
       className={`rounded-xl border p-4 ${
-        isPass
+        effectivePass
           ? "border-emerald-300 bg-emerald-50"
           : "border-rose-300 bg-rose-50"
       }`}
     >
       <div className="flex items-center gap-2 text-sm font-semibold">
-        {isPass ? (
-          <span className="text-emerald-900">Bereit zum Export</span>
+        {effectivePass ? (
+          <span className="text-emerald-900">
+            {isPassWithOverride
+              ? "Freigegeben mit Override"
+              : "Bereit zum Export"}
+          </span>
         ) : (
           <span className="text-rose-900">Überarbeitung nötig</span>
         )}
       </div>
-      {!isPass && (
+      {!effectivePass && (
         <p className="mt-1 text-xs text-rose-800">
           {openCount === 0
             ? "Alle abgehakt — bitte zur finalen Bestätigung erneut prüfen."
             : `${openCount} ${openCount === 1 ? "Stelle" : "Stellen"} noch offen.`}
+        </p>
+      )}
+      {isPassWithOverride && (
+        <p className="mt-1 text-xs text-emerald-900">
+          Coach hat fehlende Pflicht-Bausteine begründet — Bildungsträger
+          sieht die Begründung im Detail-View.
         </p>
       )}
     </div>
@@ -129,10 +176,20 @@ function StatusPill({
 
 function MustHaveCard({
   mustHaves,
+  overrideAvailable,
+  overrideReason,
+  onOverrideReasonChange,
 }: {
   mustHaves: CheckerResult["mustHaves"];
+  overrideAvailable: boolean;
+  overrideReason: string;
+  onOverrideReasonChange?: (reason: string) => void;
 }) {
   const coveredCount = mustHaves.filter((m) => m.covered).length;
+  const [overrideOpen, setOverrideOpen] = useState(
+    overrideReason.length > 0,
+  );
+
   return (
     <section className="rounded-xl border border-zinc-300 bg-white">
       <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
@@ -164,6 +221,60 @@ function MustHaveCard({
           </li>
         ))}
       </ul>
+
+      {overrideAvailable && (
+        <div className="border-t border-zinc-200 bg-amber-50/50 px-4 py-3 text-xs">
+          {!overrideOpen ? (
+            <button
+              type="button"
+              onClick={() => setOverrideOpen(true)}
+              className="text-left text-amber-900 underline-offset-2 hover:underline"
+            >
+              Bausteine in dieser Maßnahme nicht abdeckbar? →
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <div>
+                <p className="font-medium text-amber-900">
+                  Bei sehr kurzen AVGS (z.B. 5 UE &bdquo;Bewerbungsunterlagen&ldquo;)
+                  passt nicht jeder Pflicht-Baustein.
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-800/80">
+                  Begründe kurz, warum einzelne Bausteine in dieser Maßnahme
+                  nicht relevant sind. Der Bildungsträger sieht die
+                  Begründung im Detail-View und kann den Bericht trotzdem
+                  freigeben — der Bericht wird mit Override eingereicht.
+                </p>
+              </div>
+              <textarea
+                rows={3}
+                value={overrideReason}
+                onChange={(e) => onOverrideReasonChange?.(e.target.value)}
+                maxLength={500}
+                placeholder="z.B. AVGS umfasst nur 5 UE zur Bewerbungsoptimierung; Profiling/Strategie nicht im Maßnahme-Scope."
+                className="block w-full resize-y rounded-md border border-amber-300 bg-white px-2.5 py-2 text-xs leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+              <div className="flex items-center justify-between text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOverrideReasonChange?.("");
+                    setOverrideOpen(false);
+                  }}
+                  className="text-zinc-500 underline-offset-2 hover:underline"
+                >
+                  Override zurücknehmen
+                </button>
+                <span className="text-zinc-500">
+                  {overrideReason.trim().length < 10
+                    ? `noch ${10 - overrideReason.trim().length} Zeichen Begründung`
+                    : "✓ Override aktiv"}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

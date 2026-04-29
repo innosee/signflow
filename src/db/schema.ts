@@ -551,6 +551,29 @@ export const abschlussberichte = pgTable(
     ablauf: text("ablauf").notNull().default(""),
     fazit: text("fazit").notNull().default(""),
     /**
+     * Optionales Freitextfeld für AVGS-Inhalte (GEPEDU-Test, Anerkennung
+     * ausländischer Diplome, Tragfähigkeitsanalyse, …). Bewusst KEIN
+     * `CheckerSection` — wird weder anonymisiert noch gegen den
+     * Pflicht-Baustein-Katalog geprüft. Coach ist verantwortlich, hier keine
+     * Klarnamen / Kunden-Nr. zu hinterlegen (Hinweistext steht im UI).
+     */
+    sonstiges: text("sonstiges").notNull().default(""),
+    /**
+     * "Keine Fehlzeiten"-Markierung — wenn `true` wird im PDF eine Pille im
+     * Header gerendert. Default `false` ist neutral; ein Coach wählt es
+     * explizit aus.
+     */
+    keineFehlzeiten: boolean("keine_fehlzeiten").notNull().default(false),
+    /**
+     * Wenn ein Coach für eine sehr kurze AVGS-Maßnahme (z.B. 5 UE
+     * "Bewerbungsunterlagen optimieren") nicht alle Pflicht-Bausteine
+     * bedienen kann, trägt er hier eine kurze Begründung ein. Die fehlenden
+     * mustHaves werden dann zu Soft-Flags umgewandelt, der Submit-Gate
+     * öffnet sich. `NULL` = kein Override. Wird sowohl beim BT-Detail
+     * sichtbar (Audit) als auch beim PDF-Footer als Anmerkung gerendert.
+     */
+    mustHaveOverrideReason: text("must_have_override_reason"),
+    /**
      * Snapshot der TN-Stammdaten zum Zeitpunkt des Submits. Wird sowohl bei
      * Kurs-gebundenen als auch bei Ad-hoc-BERs gefüllt — gibt der Bildungs-
      * träger-Liste eine einheitliche Datenquelle, ermöglicht Suche per

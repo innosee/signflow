@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
@@ -108,8 +109,18 @@ export function BerEditor({
     ablauf: initialBer?.ablauf ?? "",
     fazit: initialBer?.fazit ?? "",
   });
+  const [sonstiges, setSonstiges] = useState(initialBer?.sonstiges ?? "");
+  const [keineFehlzeiten, setKeineFehlzeiten] = useState(
+    initialBer?.keineFehlzeiten ?? false,
+  );
+  const [mustHaveOverrideReason, setMustHaveOverrideReason] = useState(
+    initialBer?.mustHaveOverrideReason ?? "",
+  );
   const [status, setStatus] = useState<"draft" | "submitted">(
     initialBer?.status ?? "draft",
+  );
+  const [submittedBerId, setSubmittedBerId] = useState<string | null>(
+    initialBer?.id ?? null,
   );
   const [submittedAt, setSubmittedAt] = useState<Date | null>(
     initialBer?.submittedAt ? new Date(initialBer.submittedAt) : null,
@@ -209,13 +220,23 @@ export function BerEditor({
       fd.append("teilnahme", input.teilnahme);
       fd.append("ablauf", input.ablauf);
       fd.append("fazit", input.fazit);
+      fd.append("sonstiges", sonstiges);
+      fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
       startSaveTransition(async () => {
         const res = await saveBerDraftAction(undefined, fd);
         if (res?.savedAt) setSavedAt(new Date(res.savedAt));
+        if (res?.berId) setSubmittedBerId(res.berId);
       });
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [input, courseId, participantId, impersonating]);
+  }, [
+    input,
+    sonstiges,
+    keineFehlzeiten,
+    courseId,
+    participantId,
+    impersonating,
+  ]);
 
   useEffect(() => {
     if (!pendingSelection) return;
@@ -341,7 +362,10 @@ export function BerEditor({
   }
 
   function handleSubmitBer() {
-    if (!result || result.status !== "pass") return;
+    if (!result) return;
+    const overrideTrim = mustHaveOverrideReason.trim();
+    const overrideActive = overrideTrim.length >= 10;
+    if (result.status !== "pass" && !overrideActive) return;
     setSubmitError(null);
     const fd = new FormData();
     fd.append("courseId", courseId);
@@ -349,6 +373,11 @@ export function BerEditor({
     fd.append("teilnahme", input.teilnahme);
     fd.append("ablauf", input.ablauf);
     fd.append("fazit", input.fazit);
+    fd.append("sonstiges", sonstiges);
+    fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
+    if (overrideActive) {
+      fd.append("mustHaveOverrideReason", overrideTrim);
+    }
     fd.append("lastCheckPassed", "true");
     // Snapshot v2 = { v: 2, input, result } — mit eingebettetem Input,
     // damit wir beim nächsten Öffnen des BER (und unverändertem Text)
@@ -366,11 +395,26 @@ export function BerEditor({
       setStatus("submitted");
       setSubmittedAt(now);
       setSavedAt(now);
+      if (res?.berId) {
+        setSubmittedBerId(res.berId);
+        // Direkt zur Print-Page springen — Coach soll das fertige PDF
+        // sofort sehen und drucken/speichern können.
+        router.push(`/coach/abschlussberichte/${res.berId}/print`);
+        return;
+      }
       router.refresh();
     });
   }
 
   function handleExportPdf() {
+    // Wenn der Bericht schon einmal gespeichert wurde (Autosave hat einen
+    // berId geliefert oder existiert von vorher), direkt zur autoritativen
+    // Print-Page mit allen TN-Daten. Andernfalls Fallback auf den
+    // sessionStorage-Preview.
+    if (submittedBerId) {
+      router.push(`/coach/abschlussberichte/${submittedBerId}/print`);
+      return;
+    }
     try {
       sessionStorage.setItem(EXPORT_STORAGE_KEY, JSON.stringify(input));
     } catch {
@@ -384,6 +428,18 @@ export function BerEditor({
     input.ablauf.trim().length > 0 &&
     input.fazit.trim().length > 0;
 
+  const overrideReasonTrim = mustHaveOverrideReason.trim();
+  const overrideActive = overrideReasonTrim.length >= 10;
+  const hasMissingMustHaves =
+    !!result && result.mustHaves.some((m) => !m.covered);
+  const hasHardBlock =
+    !!result && result.violations.some((v) => v.severity === "hard_block");
+  const effectivePass =
+    !isProcessing &&
+    !!result &&
+    (result.status === "pass" ||
+      (overrideActive && !hasHardBlock && hasMissingMustHaves));
+
   // 60-Sekunden-Buffer filtert Mikro-Autosaves direkt nach dem Submit raus
   // (z.B. wenn der Submit kurz nach einem Tipp kommt). Gleicher Wert wie
   // auf der Bildungsträger-Seite — nicht auseinanderlaufen lassen.
@@ -395,7 +451,7 @@ export function BerEditor({
 
   const inputUnchangedSinceCheck =
     !!result && !!lastCheckedInput && inputsEqual(input, lastCheckedInput);
-  const passed = result?.status === "pass" && !isProcessing;
+  const passed = effectivePass;
   const checkLabel = isProcessing
     ? "Prüfung läuft…"
     : result
@@ -440,10 +496,52 @@ export function BerEditor({
                 }))
               }
               placeholder={section.placeholder}
+              spellCheck
+              lang="de"
               className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
             />
           </div>
         ))}
+
+        {/* Optionales 4. Feld — nicht durch den Checker geprüft. */}
+        <div className="space-y-2">
+          <label
+            htmlFor="ber-sonstiges"
+            className="block text-sm font-medium text-zinc-900"
+          >
+            Sonstige AVGS-Inhalte{" "}
+            <span className="font-normal text-zinc-500">(optional)</span>
+          </label>
+          <textarea
+            id="ber-sonstiges"
+            rows={4}
+            value={sonstiges}
+            onChange={(e) => setSonstiges(e.target.value)}
+            placeholder="z.B. GEPEDU-Test durchgeführt, Anerkennung ausländischer Diplome, Tragfähigkeitsanalyse, Weiterbildungssuche …"
+            spellCheck
+            lang="de"
+            maxLength={4000}
+            className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+          />
+          <p className="text-xs text-zinc-500">
+            Wird nicht gegen den Regelkatalog geprüft und nicht anonymisiert —
+            bitte hier <strong>keine Klarnamen oder Kunden-Nr.</strong>{" "}
+            eintragen.
+          </p>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm text-zinc-800 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={keineFehlzeiten}
+            onChange={(e) => setKeineFehlzeiten(e.target.checked)}
+            className="h-4 w-4 accent-zinc-900"
+          />
+          <span>Keine Fehlzeiten</span>
+          <span className="text-xs text-zinc-500">
+            (erscheint im PDF-Header)
+          </span>
+        </label>
 
         {submitError && (
           <div className="rounded-xl border border-rose-300 bg-rose-50 px-5 py-3 text-sm text-rose-800">
@@ -491,8 +589,20 @@ export function BerEditor({
             )}
             {passed &&
               (status === "submitted" ? (
-                <div className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white">
-                  ✓ Bereits eingereicht
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white">
+                    ✓ Bereits eingereicht
+                  </div>
+                  {submittedBerId && (
+                    <Link
+                      href={`/coach/abschlussberichte/${submittedBerId}/print`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-emerald-400 bg-white px-3 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+                    >
+                      PDF öffnen ↗
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <button
@@ -508,7 +618,7 @@ export function BerEditor({
                 >
                   {isSubmitting
                     ? "Reiche ein …"
-                    : "An Bildungsträger einreichen →"}
+                    : "Einreichen + PDF anzeigen →"}
                 </button>
               ))}
             <button
@@ -536,6 +646,8 @@ export function BerEditor({
             onToggleAccepted={handleToggleAccepted}
             onApply={handleApplySuggestion}
             onLocate={handleLocateViolation}
+            mustHaveOverrideReason={mustHaveOverrideReason}
+            onMustHaveOverrideReasonChange={setMustHaveOverrideReason}
           />
         ) : (
           <div className="space-y-4">

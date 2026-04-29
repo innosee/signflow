@@ -16,6 +16,19 @@ type BerMetadata = {
   ortDatum?: string;
   /** Optionaler Signatur-Bild-URL des Coaches (PNG, transparenter Hintergrund). */
   coachSignatureUrl?: string | null;
+  /** Markierung "Keine Fehlzeiten" → Pille im Header. */
+  keineFehlzeiten?: boolean;
+  /**
+   * Optionales Freitextfeld für AVGS-Inhalte. Wenn nicht leer, wird unter
+   * den drei Standard-Sektionen eine 4. "Sonstiges"-Sektion gerendert.
+   */
+  sonstiges?: string;
+  /**
+   * Begründung des Coaches, warum bestimmte Pflicht-Bausteine in dieser
+   * AVGS nicht abgedeckt sind (z.B. 5-UE-Bewerbungsoptimierung). Wird
+   * unauffällig unter dem Footer als Anmerkung gerendert — Audit-Trail.
+   */
+  mustHaveOverrideReason?: string | null;
 };
 
 type BerBranding = {
@@ -138,6 +151,15 @@ export function BerDocument({
           <MetaRow label="Zeitraum" value={meta?.zeitraum} />
           <MetaRow label="Coach" value={meta?.coachName} />
           <MetaRow label="Gesamtzahl UE" value={meta?.gesamtzahlUe} />
+          <tr>
+            <th scope="row">Fehlzeiten:</th>
+            <td>
+              <span className="ber-checkbox" aria-hidden>
+                {meta?.keineFehlzeiten ? "☒" : "☐"}
+              </span>{" "}
+              keine Fehlzeiten
+            </td>
+          </tr>
         </tbody>
       </table>
 
@@ -155,6 +177,33 @@ export function BerDocument({
           </div>
         </section>
       ))}
+
+      {meta?.sonstiges && meta.sonstiges.trim().length > 0 && (
+        <section className="ber-section">
+          <h2 className="ber-section-title">
+            Sonstige AVGS-Inhalte
+            <span className="ber-section-hint">
+              {" "}
+              (z.B. GEPEDU-Test, Anerkennung ausländischer Diplome,
+              Tragfähigkeitsanalyse)
+            </span>
+            :
+          </h2>
+          <div className="ber-content-box">
+            <Paragraphs text={meta.sonstiges} />
+          </div>
+        </section>
+      )}
+
+      {meta?.mustHaveOverrideReason &&
+        meta.mustHaveOverrideReason.trim().length > 0 && (
+          <section className="ber-override-note" aria-label="Anmerkung des Coaches">
+            <span className="ber-override-label">
+              Anmerkung zur Pflicht-Baustein-Abdeckung:
+            </span>{" "}
+            {meta.mustHaveOverrideReason}
+          </section>
+        )}
 
       <footer className="ber-footer">
         <div className="ber-signfield">
@@ -265,6 +314,26 @@ const berCss = `
   border: 1px solid #e4e4e7;
   background: #fafafa;
   color: #18181b;
+}
+.ber-checkbox {
+  display: inline-block;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11pt;
+  line-height: 1;
+  vertical-align: middle;
+  margin-right: 1.5mm;
+}
+.ber-override-note {
+  margin: -2mm 0 6mm 0;
+  padding: 3mm 4mm;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  font-size: 9pt;
+  color: #78350f;
+  break-inside: avoid-page;
+}
+.ber-override-label {
+  font-weight: 600;
 }
 .ber-section {
   margin-bottom: 8mm;

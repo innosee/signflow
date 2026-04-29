@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AdhocSubmitForm } from "@/components/checker/adhoc-submit-form";
@@ -96,8 +98,10 @@ export function CheckerForm({
   userId: string;
   coachName: string;
 }) {
+  const router = useRouter();
   const draftKey = draftStorageKey(userId);
   const resultKey = resultStorageKey(userId);
+  const sonstigesKey = `signflow:checker-sonstiges:${userId}`;
   const [isProcessing, setIsProcessing] = useState(false);
   // Submit-Flow zum Bildungsträger:
   //   "idle"      → Standard-Anzeige, keine Form sichtbar
@@ -108,6 +112,14 @@ export function CheckerForm({
   );
   const [submittedBerId, setSubmittedBerId] = useState<string | null>(null);
   const [input, setInput] = useState<CheckerInput>(EMPTY_INPUT);
+  // Optionales Sonstiges-Feld (AVGS-Inhalte / Freitext). Außerhalb von
+  // CheckerInput, weil es NICHT durch den Checker läuft (kein PII-Pass,
+  // keine Pflicht-Bausteine, keine Verstöße geprüft).
+  const [sonstiges, setSonstiges] = useState("");
+  // Override-Begründung wenn Pflicht-Bausteine in der Maßnahme nicht
+  // abdeckbar sind (z.B. 5-UE-Bewerbungsoptimierung). Wird vom Sidebar-
+  // Toggle befüllt, fließt in den Submit-Payload.
+  const [mustHaveOverrideReason, setMustHaveOverrideReason] = useState("");
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
   const [result, setResult] = useState<CheckerResult | null>(null);
   // Input-Snapshot des letzten Checks — kein erneuter Azure-Call wenn
@@ -169,6 +181,15 @@ export function CheckerForm({
       setInput(parsed);
     }
 
+    try {
+      const rawSonstiges = localStorage.getItem(sonstigesKey);
+      if (rawSonstiges && typeof rawSonstiges === "string") {
+        setSonstiges(rawSonstiges);
+      }
+    } catch {
+      // ignore
+    }
+
     // Letztes Check-Ergebnis wiederherstellen — Buttons („Als PDF",
     // „An BT einreichen") sollen nach Navigation oder Refresh weiter
     // verfügbar sein, ohne erneuten Azure-Call.
@@ -197,7 +218,21 @@ export function CheckerForm({
     }
 
     setDraftLoaded(true);
-  }, [draftKey, resultKey]);
+  }, [draftKey, resultKey, sonstigesKey]);
+
+  // Sonstiges separat persistieren — kleines Feld, eigener Key.
+  useEffect(() => {
+    if (!draftLoaded) return;
+    try {
+      if (sonstiges.trim().length > 0) {
+        localStorage.setItem(sonstigesKey, sonstiges);
+      } else {
+        localStorage.removeItem(sonstigesKey);
+      }
+    } catch {
+      /* noop */
+    }
+  }, [sonstiges, draftLoaded, sonstigesKey]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -240,10 +275,13 @@ export function CheckerForm({
     if (!confirmed) return;
     try {
       localStorage.removeItem(draftKey);
+      localStorage.removeItem(sonstigesKey);
     } catch {
       /* noop */
     }
     setInput(EMPTY_INPUT);
+    setSonstiges("");
+    setMustHaveOverrideReason("");
     setSavedAt(null);
     setResult(null);
     setLastCheckedInput(null);
@@ -271,6 +309,10 @@ export function CheckerForm({
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
     setAcceptedIds(new Set());
+    // Re-Check setzt einen ggf. aktiven Override zurück — Coach soll das
+    // bei verändertem Text bewusst neu entscheiden, falls weiterhin
+    // Bausteine fehlen.
+    setMustHaveOverrideReason("");
     // Re-Check soll nicht den Erfolgs-Banner stehen lassen, sonst denkt
     // der Coach er hätte den neuen Bericht schon eingereicht.
     setSubmitMode("idle");
@@ -445,8 +487,21 @@ export function CheckerForm({
   // auch wenn der Coach danach noch Text editiert. Bei verändertem Text
   // werden sie disabled (siehe `inputUnchangedSinceCheck`), damit kein
   // ungeprüfter Stand exportiert oder eingereicht wird.
-  const showExport =
-    result?.status === "pass" && !isProcessing && submitMode !== "form";
+  const overrideReasonTrim = mustHaveOverrideReason.trim();
+  const overrideActive = overrideReasonTrim.length >= 10;
+  const hasMissingMustHaves =
+    !!result && result.mustHaves.some((m) => !m.covered);
+  const hasHardBlock =
+    !!result && result.violations.some((v) => v.severity === "hard_block");
+  // Effektiver Pass — wenn Coach Override mit gültiger Begründung gesetzt
+  // hat UND keine Hard-Blocks bestehen UND tatsächlich Bausteine fehlen,
+  // ist der Submit-Gate offen.
+  const effectivePass =
+    !isProcessing &&
+    !!result &&
+    (result.status === "pass" ||
+      (overrideActive && !hasHardBlock && hasMissingMustHaves));
+  const showExport = effectivePass && submitMode !== "form";
   const showResetButton = hasAnyContent(input) || !!result;
   const exportDisabled = !inputUnchangedSinceCheck;
 
@@ -488,19 +543,54 @@ export function CheckerForm({
                 }))
               }
               placeholder={section.placeholder}
+              spellCheck
+              lang="de"
               className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
             />
           </div>
         ))}
 
+        {/* Optionales Sonstiges-Feld — nicht durch den Checker geprüft. */}
+        <div className="space-y-2">
+          <label
+            htmlFor="checker-sonstiges"
+            className="block text-sm font-medium text-zinc-900"
+          >
+            Sonstige AVGS-Inhalte{" "}
+            <span className="font-normal text-zinc-500">(optional)</span>
+          </label>
+          <textarea
+            id="checker-sonstiges"
+            rows={4}
+            value={sonstiges}
+            onChange={(e) => setSonstiges(e.target.value)}
+            placeholder={`z.B. GEPEDU-Test durchgeführt, Anerkennung ausländischer Diplome, Tragfähigkeitsanalyse, Weiterbildungssuche …`}
+            spellCheck
+            lang="de"
+            maxLength={4000}
+            className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+          />
+          <p className="text-xs text-zinc-500">
+            Wird nicht gegen den Regelkatalog geprüft und nicht anonymisiert —
+            bitte hier <strong>keine Klarnamen oder Kunden-Nr.</strong>{" "}
+            eintragen. Rechtschreibung prüft dein Browser; der Checker
+            kümmert sich um Inhalte.
+          </p>
+        </div>
+
         {submitMode === "form" && result && (
           <AdhocSubmitForm
             input={input}
             result={result}
+            sonstiges={sonstiges}
+            mustHaveOverrideReason={overrideActive ? overrideReasonTrim : null}
             coachName={coachName}
             onSubmitted={(berId) => {
               setSubmittedBerId(berId);
               setSubmitMode("submitted");
+              // Direkt zur Print-Page springen — der Coach soll das
+              // ausgefüllte PDF sofort sehen + drucken/speichern können.
+              router.push(`/coach/abschlussberichte/${berId}/print`);
             }}
             onCancel={() => setSubmitMode("idle")}
           />
@@ -508,14 +598,28 @@ export function CheckerForm({
 
         {submitMode === "submitted" && submittedBerId && (
           <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-5 text-sm text-emerald-900">
-            <p className="font-semibold">
-              ✓ Bericht eingereicht.
-            </p>
+            <p className="font-semibold">✓ Bericht eingereicht.</p>
             <p className="mt-1 text-xs text-emerald-800">
-              Der Bildungsträger findet den Bericht in seiner Übersicht und
-              kann ihn von dort herunterladen oder weiterleiten. Für einen
-              weiteren Bericht klick auf „Neuer Bericht&ldquo;.
+              Der Bildungsträger findet den Bericht in seiner Übersicht. Du
+              kannst das PDF jederzeit über die Berichts-Übersicht im
+              Coach-Dashboard erneut öffnen.
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Link
+                href={`/coach/abschlussberichte/${submittedBerId}/print`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-emerald-400 bg-white px-4 py-2 text-xs font-medium text-emerald-800 transition hover:bg-emerald-50"
+              >
+                PDF anzeigen / herunterladen ↗
+              </Link>
+              <Link
+                href="/coach/checker"
+                className="text-xs text-emerald-800 underline-offset-2 hover:underline"
+              >
+                Zur Berichts-Übersicht
+              </Link>
+            </div>
           </div>
         )}
 
@@ -596,6 +700,8 @@ export function CheckerForm({
             onToggleAccepted={handleToggleAccepted}
             onApply={handleApplySuggestion}
             onLocate={handleLocateViolation}
+            mustHaveOverrideReason={mustHaveOverrideReason}
+            onMustHaveOverrideReasonChange={setMustHaveOverrideReason}
           />
         ) : (
           <LiveFeedback input={input} />
