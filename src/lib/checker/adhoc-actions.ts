@@ -125,6 +125,20 @@ export async function submitAdhocBerAction(
     };
   }
 
+  // Mindestens ein Abschnitt muss Inhalt haben — gilt auch mit Override.
+  // Sonst entstünde ein leerer Bericht.
+  if (
+    !data.input.teilnahme.trim() &&
+    !data.input.ablauf.trim() &&
+    !data.input.fazit.trim()
+  ) {
+    return {
+      ok: false,
+      error:
+        "Mindestens ein Abschnitt muss Inhalt haben — sonst gibt es nichts einzureichen.",
+    };
+  }
+
   let row: { id: string };
   try {
     [row] = await db

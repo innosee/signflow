@@ -252,6 +252,11 @@ function MustHaveCard({
                 onChange={(e) => onOverrideReasonChange?.(e.target.value)}
                 maxLength={500}
                 placeholder="z.B. AVGS umfasst nur 5 UE zur Bewerbungsoptimierung; Profiling/Strategie nicht im Maßnahme-Scope."
+                spellCheck
+                lang="de"
+                data-gramm="false"
+                data-gramm_editor="false"
+                data-enable-grammarly="false"
                 className="block w-full resize-y rounded-md border border-amber-300 bg-white px-2.5 py-2 text-xs leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
               <div className="flex items-center justify-between text-[11px]">

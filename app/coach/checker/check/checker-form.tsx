@@ -468,9 +468,13 @@ export function CheckerForm({
     setPendingSelection(null);
   }, [pendingSelection]);
 
+  // Mindestens ein Abschnitt muss Inhalt haben — sonst gibt es nichts zu
+  // prüfen. Drei-Felder-Pflicht würde Coaches mit kurzen AVGS-Maßnahmen
+  // (z.B. 5 UE „Bewerbungsunterlagen optimieren") in eine Falle laufen
+  // lassen: ohne Check kein Override-Toggle, ohne Override kein Submit.
   const canSubmit =
-    input.teilnahme.trim().length > 0 &&
-    input.ablauf.trim().length > 0 &&
+    input.teilnahme.trim().length > 0 ||
+    input.ablauf.trim().length > 0 ||
     input.fazit.trim().length > 0;
   const inputUnchangedSinceCheck =
     !!result &&
@@ -501,6 +505,10 @@ export function CheckerForm({
     !!result &&
     (result.status === "pass" ||
       (overrideActive && !hasHardBlock && hasMissingMustHaves));
+  const filledSectionCount = (Object.keys(input) as CheckerSection[]).filter(
+    (k) => input[k].trim().length > 0,
+  ).length;
+  const partiallyFilled = filledSectionCount > 0 && filledSectionCount < 3;
   const showExport = effectivePass && submitMode !== "form";
   const showResetButton = hasAnyContent(input) || !!result;
   const exportDisabled = !inputUnchangedSinceCheck;
@@ -545,6 +553,13 @@ export function CheckerForm({
               placeholder={section.placeholder}
               spellCheck
               lang="de"
+              // Drittanbieter-Plugins (Grammarly, LanguageTool, …)
+              // hart deaktiviert: sie würden Klartext mit potentiell PII
+              // an US-Server schicken, BEVOR unser IONOS-Anonymizer greift.
+              // Native Browser-Spellcheck bleibt aktiv (`spellCheck`).
+              data-gramm="false"
+              data-gramm_editor="false"
+              data-enable-grammarly="false"
               className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
             />
           </div>
@@ -567,6 +582,9 @@ export function CheckerForm({
             placeholder={`z.B. GEPEDU-Test durchgeführt, Anerkennung ausländischer Diplome, Tragfähigkeitsanalyse, Weiterbildungssuche …`}
             spellCheck
             lang="de"
+            data-gramm="false"
+            data-gramm_editor="false"
+            data-enable-grammarly="false"
             maxLength={4000}
             className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
           />
@@ -649,6 +667,13 @@ export function CheckerForm({
               <p className="mt-1 text-amber-700">
                 Text wurde nach der letzten Prüfung geändert — bitte erneut
                 prüfen, bevor du exportierst oder einreichst.
+              </p>
+            )}
+            {partiallyFilled && !result && !isProcessing && (
+              <p className="mt-1 text-zinc-500">
+                Du kannst auch mit nur einem ausgefüllten Abschnitt prüfen.
+                Bei kurzen AVGS-Maßnahmen erscheint nach der Prüfung in der
+                Sidebar ein Override mit Begründung.
               </p>
             )}
           </div>
