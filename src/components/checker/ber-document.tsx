@@ -38,15 +38,6 @@ type BerBranding = {
   address?: string;
 };
 
-const DEFAULT_ADDRESS_LINES = [
-  "Ekkehardstraße 12b",
-  "D-78224 Singen",
-  "Tel. +49 (0) 7731 / 90 97 18 - 10",
-  "Fax +49 (0) 7731 / 90 97 18 - 11",
-  "avgs@erango.de",
-  "www.erango.de",
-];
-
 const SECTION_TITLES = [
   {
     id: "teilnahme" as const,
@@ -106,9 +97,11 @@ export function BerDocument({
   meta?: BerMetadata;
   branding?: BerBranding;
 }) {
-  const addressLines = (branding?.address && branding.address.trim().length > 0
-    ? branding.address
-    : DEFAULT_ADDRESS_LINES.join("\n"))
+  // Header rendert NUR was via `branding` reinkommt — keine Hardcoded-
+  // Fallbacks mehr (vorher Erango-Adresse/-Logo, was im Multi-Tenant-
+  // Setup ein Datenleck wäre, sobald ein zweiter Tenant ein PDF rendert).
+  // Ein Tenant ohne hinterlegtes Branding bekommt einen leeren Header.
+  const addressLines = (branding?.address ?? "")
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
@@ -123,21 +116,13 @@ export function BerDocument({
             </span>
           ))}
         </address>
-        {branding?.logoUrl ? (
+        {branding?.logoUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={branding.logoUrl}
             alt="Logo Bildungsträger"
             className="ber-logo-image"
           />
-        ) : (
-          <div className="ber-logo" aria-hidden>
-            er—
-            <br />
-            -an
-            <br />
-            go.
-          </div>
         )}
       </header>
 

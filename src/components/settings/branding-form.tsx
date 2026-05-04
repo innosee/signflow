@@ -142,7 +142,7 @@ export function BrandingForm({
           <h3 className="text-sm font-medium text-zinc-900">PDF-Postanschrift</h3>
           <p className="mt-0.5 text-xs text-zinc-500">
             Erscheint oben links auf jedem BER-PDF. Eine Zeile pro Eintrag.
-            Leer lassen, um auf den Erango-Standard zurückzufallen.
+            Wenn du das Feld leer lässt, rendert das PDF einen leeren Header.
           </p>
         </div>
         <textarea

@@ -20,18 +20,17 @@ export type Branding = {
   address: string;
 };
 
-const DEFAULT_ADDRESS = [
-  "Ekkehardstraße 12b",
-  "D-78224 Singen",
-  "Tel. +49 (0) 7731 / 90 97 18 - 10",
-  "Fax +49 (0) 7731 / 90 97 18 - 11",
-  "avgs@erango.de",
-  "www.erango.de",
-].join("\n");
-
+/**
+ * Multi-Tenant-Default ist bewusst LEER — kein Hardcoded-Bildungsträger
+ * mehr. Single-Tenant-Defaults (Erango-Adresse) waren im Multi-Tenant-
+ * Setup ein Datenleck, sobald ein zweiter Mandant ein PDF rendert.
+ *
+ * Konsequenz: Ein BT muss seine Adresse + Logo in /bildungstraeger/settings
+ * setzen, sonst rendert das BER-PDF einen leeren Header.
+ */
 export const DEFAULT_BRANDING: Branding = {
   logoUrl: null,
-  address: DEFAULT_ADDRESS,
+  address: "",
 };
 
 /**
@@ -64,10 +63,7 @@ export const getBranding = cache(
 
     return {
       logoUrl: row.logoUrl ?? null,
-      address:
-        row.address && row.address.trim().length > 0
-          ? row.address
-          : DEFAULT_ADDRESS,
+      address: row.address ?? "",
     };
   },
 );
