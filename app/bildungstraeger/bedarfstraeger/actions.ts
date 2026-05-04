@@ -3,7 +3,11 @@
 import { redirect } from "next/navigation";
 
 import { db, schema } from "@/db";
-import { assertNotImpersonating, requireBildungstraeger } from "@/lib/dal";
+import {
+  assertNotImpersonating,
+  getTenantId,
+  requireBildungstraeger,
+} from "@/lib/dal";
 
 export type BedarfstraegerFormState = { error?: string } | undefined;
 
@@ -17,6 +21,7 @@ export async function createBedarfstraeger(
 ): Promise<BedarfstraegerFormState> {
   const session = await requireBildungstraeger();
   assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
 
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "").trim();
@@ -35,6 +40,7 @@ export async function createBedarfstraeger(
 
   try {
     await db.insert(schema.bedarfstraeger).values({
+      tenantId,
       name,
       type,
       adresse,

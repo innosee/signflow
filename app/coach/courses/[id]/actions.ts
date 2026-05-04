@@ -7,7 +7,11 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
-import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
+import {
+  assertNotImpersonating,
+  getTenantId,
+  requireSigningEnabled,
+} from "@/lib/dal";
 import { sealWithFes } from "@/lib/firma";
 import {
   sendParticipantInvite,
@@ -201,6 +205,7 @@ export async function addParticipant(
   const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
+  const tenantId = getTenantId(session);
 
   const courseId = String(formData.get("courseId") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -223,10 +228,16 @@ export async function addParticipant(
   let reused = false;
   try {
     await db.transaction(async (tx) => {
+      // Tenant-scoped Lookup — Email ist nur innerhalb eines Tenants unique.
       const [existing] = await tx
         .select({ id: schema.participants.id })
         .from(schema.participants)
-        .where(eq(schema.participants.email, email))
+        .where(
+          and(
+            eq(schema.participants.email, email),
+            eq(schema.participants.tenantId, tenantId),
+          ),
+        )
         .limit(1);
 
       let participantId: string;
@@ -236,7 +247,7 @@ export async function addParticipant(
       } else {
         const [created] = await tx
           .insert(schema.participants)
-          .values({ name, email, kundenNr })
+          .values({ tenantId, name, email, kundenNr })
           .returning({ id: schema.participants.id });
         if (!created) throw new Error("PARTICIPANT_INSERT_FAILED");
         participantId = created.id;

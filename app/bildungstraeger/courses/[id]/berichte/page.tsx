@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,8 @@ type Props = {
 };
 
 export default async function BildungstraegerCourseBerListPage({ params }: Props) {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const { id: courseId } = await params;
 
   const [course] = await db
@@ -34,7 +35,11 @@ export default async function BildungstraegerCourseBerListPage({ params }: Props
     .from(schema.courses)
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
     .where(
-      and(eq(schema.courses.id, courseId), isNull(schema.courses.deletedAt)),
+      and(
+        eq(schema.courses.id, courseId),
+        eq(schema.users.tenantId, tenantId),
+        isNull(schema.courses.deletedAt),
+      ),
     )
     .limit(1);
 

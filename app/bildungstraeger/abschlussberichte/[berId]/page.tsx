@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { readSoftFlags } from "@/lib/checker/snapshot";
 import {
   VIOLATION_CATEGORY_LABELS,
@@ -28,7 +28,8 @@ type Props = {
 };
 
 export default async function BildungstraegerBerDetailPage({ params }: Props) {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const { berId } = await params;
 
   const [row] = await db
@@ -94,13 +95,20 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
       eq(schema.participants.id, schema.abschlussberichte.participantId),
     )
     .innerJoin(schema.users, eq(schema.users.id, schema.abschlussberichte.coachId))
-    .where(eq(schema.abschlussberichte.id, berId))
+    // Tenant-Filter via Coach — verhindert Cross-Tenant-Read durch UUID-
+    // Manipulation in der URL.
+    .where(
+      and(
+        eq(schema.abschlussberichte.id, berId),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    )
     .limit(1);
 
   if (!row) notFound();
 
   const { ber, course, participant, coach } = row;
-  const branding = await getBranding();
+  const branding = await getBranding(tenantId);
   const softFlags = readSoftFlags(ber.checkSnapshot);
   const softFlagsAcknowledged = !!ber.softFlagsAcknowledgedAt;
   const ackDate = ber.softFlagsAcknowledgedAt

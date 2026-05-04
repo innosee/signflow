@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { asc, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,8 @@ const TYPE_LABEL = {
 } as const;
 
 export default async function BedarfstraegerListPage() {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
 
   const rows = await db
     .select({
@@ -24,7 +25,12 @@ export default async function BedarfstraegerListPage() {
       email: schema.bedarfstraeger.email,
     })
     .from(schema.bedarfstraeger)
-    .where(isNull(schema.bedarfstraeger.deletedAt))
+    .where(
+      and(
+        eq(schema.bedarfstraeger.tenantId, tenantId),
+        isNull(schema.bedarfstraeger.deletedAt),
+      ),
+    )
     .orderBy(asc(schema.bedarfstraeger.name));
 
   return (

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 import { BerProgressList } from "./ber-progress-list";
 import { CoachListItem } from "./coach-list-item";
@@ -25,20 +25,26 @@ type Props = {
 };
 
 export default async function BildungstraegerDashboard({ searchParams }: Props) {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const { imp_error } = await searchParams;
   const impErrorMsg = imp_error ? IMP_ERRORS[imp_error] : undefined;
 
   // Offene AfA-Übermittlungen (gesiegelt, aber noch nicht an die AfA raus)
   // — als Teaser oben in der Übersicht anzeigen, damit der Firmen-User
-  // direkt sieht, dass Arbeit im Stapel liegt.
+  // direkt sieht, dass Arbeit im Stapel liegt. Tenant-Filter via Coach-Join,
+  // weil final_documents nicht direkt tenant-scoped ist (kommt indirekt über
+  // den Kurs-Coach).
   const [pendingSubmissionsRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.finalDocuments)
+    .innerJoin(schema.courses, eq(schema.courses.id, schema.finalDocuments.courseId))
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
     .where(
       and(
         eq(schema.finalDocuments.fesStatus, "completed"),
         eq(schema.finalDocuments.afaStatus, "pending"),
+        eq(schema.users.tenantId, tenantId),
       ),
     );
   const pendingSubmissions = pendingSubmissionsRow?.count ?? 0;
@@ -55,14 +61,18 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
     })
     .from(schema.users)
     .where(
-      and(eq(schema.users.role, "coach"), isNull(schema.users.deletedAt)),
+      and(
+        eq(schema.users.role, "coach"),
+        eq(schema.users.tenantId, tenantId),
+        isNull(schema.users.deletedAt),
+      ),
     )
     .orderBy(desc(schema.users.createdAt));
 
   /**
    * BER-Fortschritt pro Kurs: wie viele Teilnehmer haben schon einen
    * eingereichten Bericht gegen wie viele eingeschriebene. Aggregiert in
-   * einer Query, um N+1 zu vermeiden.
+   * einer Query, um N+1 zu vermeiden. Tenant-Filter via Coach.
    */
   const berProgress = await db
     .select({
@@ -90,7 +100,12 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
         ),
       ),
     )
-    .where(isNull(schema.courses.deletedAt))
+    .where(
+      and(
+        eq(schema.users.tenantId, tenantId),
+        isNull(schema.courses.deletedAt),
+      ),
+    )
     .groupBy(
       schema.courses.id,
       schema.courses.title,

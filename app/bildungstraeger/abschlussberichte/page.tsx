@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,8 @@ type Props = {
 export default async function BildungstraegerAbschlussberichteListPage({
   searchParams,
 }: Props) {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const { q: rawQuery } = await searchParams;
   const q = (rawQuery ?? "").trim();
 
@@ -52,6 +53,9 @@ export default async function BildungstraegerAbschlussberichteListPage({
     )
     .where(
       and(
+        // Tenant-Filter via Coach (BER.coach_id ist NOT NULL, der leftJoin
+        // ist effektiv ein innerJoin — direkter Filter sicher).
+        eq(schema.users.tenantId, tenantId),
         eq(schema.abschlussberichte.status, "submitted"),
         isNotNull(schema.abschlussberichte.submittedAt),
         q.length > 0
