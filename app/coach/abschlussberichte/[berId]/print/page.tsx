@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
-import { requireCoach } from "@/lib/dal";
+import { getTenantId, requireCoach } from "@/lib/dal";
 
 import { PrintButton } from "./print-button";
 
@@ -24,6 +24,7 @@ type Props = {
  */
 export default async function CoachBerPrintPage({ params }: Props) {
   const session = await requireCoach();
+  const tenantId = getTenantId(session);
   const { berId } = await params;
 
   const [row] = await db
@@ -84,7 +85,7 @@ export default async function CoachBerPrintPage({ params }: Props) {
   if (!row) notFound();
   const { ber } = row;
 
-  const branding = await getBranding();
+  const branding = await getBranding(tenantId);
 
   const teilnehmerName =
     [ber.tnVorname, ber.tnNachname].filter(Boolean).join(" ").trim() ||

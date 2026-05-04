@@ -52,13 +52,21 @@ export async function inviteCoach(
   // banned werden zurückgesetzt, der Name aktualisiert. Audit-History
   // (gleiche user_id) bleibt erhalten. Better Auth's reset-flow setzt
   // dann das Passwort.
+  // Existence-Check tenant-scoped — sonst könnte ein Bildungsträger eine
+  // E-Mail-Adresse einladen, die im Tenant eines anderen BT bereits aktiv
+  // ist, was zu einer überraschenden Resurrect-Kollision führen würde.
   const [existing] = await db
     .select({
       id: schema.users.id,
       deletedAt: schema.users.deletedAt,
     })
     .from(schema.users)
-    .where(eq(schema.users.email, email))
+    .where(
+      and(
+        eq(schema.users.email, email),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    )
     .limit(1);
 
   let createdUserId: string | null = null;
@@ -145,10 +153,14 @@ function backToBildungstraegerWithError(code: string): never {
 }
 
 export async function impersonateCoach(formData: FormData): Promise<void> {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const userId = String(formData.get("userId") ?? "");
   if (!userId) backToBildungstraegerWithError("invalid");
 
+  // Tenant-Filter ist hart Pflicht: ohne den könnte ein BT durch einfache
+  // UUID-Manipulation einen Coach eines anderen Mandanten impersonaten —
+  // direkter Datenleak und Beweiskraft kaputt.
   const [target] = await db
     .select({
       id: schema.users.id,
@@ -158,6 +170,7 @@ export async function impersonateCoach(formData: FormData): Promise<void> {
     .where(
       and(
         eq(schema.users.id, userId),
+        eq(schema.users.tenantId, tenantId),
         eq(schema.users.role, "coach"),
         isNull(schema.users.deletedAt),
       ),
@@ -203,6 +216,7 @@ export async function setCoachSigningEnabled(formData: FormData): Promise<void> 
   if (isImpersonating(session)) {
     redirect("/bildungstraeger?imp_error=invalid");
   }
+  const tenantId = getTenantId(session);
 
   const coachId = String(formData.get("coachId") ?? "").trim();
   const enabled = String(formData.get("enabled") ?? "") === "true";
@@ -216,6 +230,7 @@ export async function setCoachSigningEnabled(formData: FormData): Promise<void> 
     .where(
       and(
         eq(schema.users.id, coachId),
+        eq(schema.users.tenantId, tenantId),
         eq(schema.users.role, "coach"),
         isNull(schema.users.deletedAt),
       ),
@@ -255,16 +270,29 @@ export async function acknowledgeSoftFlags(
   if (isImpersonating(session)) {
     redirect("/bildungstraeger?imp_error=invalid");
   }
+  const tenantId = getTenantId(session);
   const berId = String(formData.get("berId") ?? "").trim();
   if (!berId) return;
 
+  // BER über Coach-Join tenant-scopen — sonst könnte ein BT die soft-flags
+  // einer fremden Bildungsträger-BER acknowledgen, was im Audit-Log
+  // zu „BT von Tenant A hat BER von Tenant B freigegeben" führt.
   const [existing] = await db
     .select({
       id: schema.abschlussberichte.id,
       alreadyAckAt: schema.abschlussberichte.softFlagsAcknowledgedAt,
     })
     .from(schema.abschlussberichte)
-    .where(eq(schema.abschlussberichte.id, berId))
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.abschlussberichte.coachId),
+    )
+    .where(
+      and(
+        eq(schema.abschlussberichte.id, berId),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    )
     .limit(1);
   if (!existing) return;
   if (existing.alreadyAckAt) {
@@ -309,6 +337,7 @@ export async function deleteCoach(formData: FormData): Promise<void> {
   if (isImpersonating(session)) {
     redirect("/bildungstraeger?imp_error=invalid");
   }
+  const tenantId = getTenantId(session);
 
   const coachId = String(formData.get("coachId") ?? "").trim();
   if (!coachId) {
@@ -321,6 +350,7 @@ export async function deleteCoach(formData: FormData): Promise<void> {
     .where(
       and(
         eq(schema.users.id, coachId),
+        eq(schema.users.tenantId, tenantId),
         eq(schema.users.role, "coach"),
         isNull(schema.users.deletedAt),
       ),
@@ -384,10 +414,14 @@ export async function submitCourseToAfa(
     return { error: "Während Impersonation nicht möglich." };
   }
   const bildungstraegerUserId = session.user.id;
+  const tenantId = getTenantId(session);
 
   const courseId = String(formData.get("courseId") ?? "").trim();
   if (!courseId) return { error: "Kurs fehlt." };
 
+  // Tenant-Filter über Coach-Join — sonst könnte ein BT durch courseId-
+  // Manipulation einen Kurs eines fremden Mandanten als „an AfA übermittelt"
+  // markieren und damit die Beweiskette stören.
   const [doc] = await db
     .select({
       id: schema.finalDocuments.id,
@@ -395,7 +429,14 @@ export async function submitCourseToAfa(
       afaStatus: schema.finalDocuments.afaStatus,
     })
     .from(schema.finalDocuments)
-    .where(eq(schema.finalDocuments.courseId, courseId))
+    .innerJoin(schema.courses, eq(schema.courses.id, schema.finalDocuments.courseId))
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .where(
+      and(
+        eq(schema.finalDocuments.courseId, courseId),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    )
     .limit(1);
   if (!doc) return { error: "Kurs ist noch nicht gesiegelt." };
   if (doc.fesStatus !== "completed") {

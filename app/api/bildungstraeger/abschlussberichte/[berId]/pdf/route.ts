@@ -1,9 +1,9 @@
 import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { renderPdfFromUrl } from "@/lib/pdf";
 
 export const runtime = "nodejs";
@@ -22,9 +22,12 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ berId: string }> },
 ) {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const { berId } = await ctx.params;
 
+  // Tenant-Filter via Coach-innerJoin — verhindert PDF-Download eines
+  // BER aus einem fremden Tenant durch URL-Manipulation.
   const [row] = await db
     .select({
       id: schema.abschlussberichte.id,
@@ -35,11 +38,20 @@ export async function GET(
       participantName: schema.participants.name,
     })
     .from(schema.abschlussberichte)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.abschlussberichte.coachId),
+    )
     .leftJoin(
       schema.participants,
       eq(schema.participants.id, schema.abschlussberichte.participantId),
     )
-    .where(eq(schema.abschlussberichte.id, berId))
+    .where(
+      and(
+        eq(schema.abschlussberichte.id, berId),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    )
     .limit(1);
 
   if (!row || row.status !== "submitted") {

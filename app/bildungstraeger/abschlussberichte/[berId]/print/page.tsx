@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,8 @@ type Props = {
  * (Cmd+P → Save as PDF), Layout ist unverändert.
  */
 export default async function BildungstraegerBerPrintPage({ params }: Props) {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const { berId } = await params;
 
   const [row] = await db
@@ -62,16 +63,23 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
       schema.courses,
       eq(schema.courses.id, schema.abschlussberichte.courseId),
     )
-    .leftJoin(
+    .innerJoin(
       schema.users,
       eq(schema.users.id, schema.abschlussberichte.coachId),
     )
-    .where(eq(schema.abschlussberichte.id, berId))
+    // Tenant-Filter via Coach — verhindert Cross-Tenant-Print-Access
+    // durch UUID-Manipulation in der URL.
+    .where(
+      and(
+        eq(schema.abschlussberichte.id, berId),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    )
     .limit(1);
 
   if (!row || row.status !== "submitted") notFound();
 
-  const branding = await getBranding();
+  const branding = await getBranding(tenantId);
 
   const teilnehmerName =
     [row.tnVorname, row.tnNachname].filter(Boolean).join(" ").trim() ||

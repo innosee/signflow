@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
-import { requireCoach } from "@/lib/dal";
+import { getTenantId, requireCoach } from "@/lib/dal";
 
 import { ExportView } from "./export-view";
 
@@ -10,9 +10,10 @@ export const dynamic = "force-dynamic";
 
 export default async function CheckerExportPage() {
   const session = await requireCoach();
+  const tenantId = getTenantId(session);
 
   const [branding, coachRow] = await Promise.all([
-    getBranding(),
+    getBranding(tenantId),
     db
       .select({ signatureUrl: schema.users.signatureUrl })
       .from(schema.users)

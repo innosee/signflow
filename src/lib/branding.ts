@@ -35,31 +35,39 @@ export const DEFAULT_BRANDING: Branding = {
 };
 
 /**
- * Lädt das Branding des einzigen Bildungsträgers im Deployment.
- * React.cache → eine Query pro Request, auch wenn mehrere Stellen das
- * Branding lesen (Export-Page, Settings-Page).
+ * Lädt das Branding des Bildungsträgers für den angegebenen Tenant.
+ * Pflicht-Argument seit Multi-Tenant — vorher las die Funktion blind den
+ * ersten BT-User der DB, was im Multi-Tenant-Setup das Branding eines
+ * fremden Mandanten liefern könnte.
+ *
+ * React.cache + tenantId als Cache-Key → eine Query pro (Request, Tenant),
+ * auch wenn mehrere Stellen das Branding lesen.
  */
-export const getBranding = cache(async (): Promise<Branding> => {
-  const [row] = await db
-    .select({
-      logoUrl: schema.users.pdfLogoUrl,
-      address: schema.users.pdfAddress,
-    })
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.role, "bildungstraeger"),
-        isNull(schema.users.deletedAt),
-      ),
-    )
-    .limit(1);
+export const getBranding = cache(
+  async (tenantId: string): Promise<Branding> => {
+    const [row] = await db
+      .select({
+        logoUrl: schema.users.pdfLogoUrl,
+        address: schema.users.pdfAddress,
+      })
+      .from(schema.users)
+      .where(
+        and(
+          eq(schema.users.tenantId, tenantId),
+          eq(schema.users.role, "bildungstraeger"),
+          isNull(schema.users.deletedAt),
+        ),
+      )
+      .limit(1);
 
-  if (!row) return DEFAULT_BRANDING;
+    if (!row) return DEFAULT_BRANDING;
 
-  return {
-    logoUrl: row.logoUrl ?? null,
-    address: row.address && row.address.trim().length > 0
-      ? row.address
-      : DEFAULT_ADDRESS,
-  };
-});
+    return {
+      logoUrl: row.logoUrl ?? null,
+      address:
+        row.address && row.address.trim().length > 0
+          ? row.address
+          : DEFAULT_ADDRESS,
+    };
+  },
+);
