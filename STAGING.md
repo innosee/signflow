@@ -1,100 +1,41 @@
 # Staging-Setup
 
-Eigene Sandkiste für riskante Änderungen — Multi-Tenant-Schema, Stripe-Wiring, Auth-Proxy für Blobs etc. — bevor sie auf `signflow.coach` (Production) gehen. Geteilte IONOS-Anonymizer-VM (CORS-Multi-Origin), eigener Neon-Branch, ausschließlich synthetische Testdaten.
+Eigene Sandkiste für riskante Änderungen — Multi-Tenant-Schema, Stripe-Wiring, Auth-Proxy für Blobs etc. — bevor sie auf `signflow.coach` gehen. Geteilte IONOS-Anonymizer-VM (CORS-Multi-Origin), eigener Neon Schema-only-Branch, ausschließlich synthetische Testdaten.
+
+**Status:** live seit 2026-05-04.
 
 ## Topologie
 
 ```
 Production           Staging
 ─────────            ───────
-signflow.coach   ──► Vercel "production" env  ─► Neon `main` branch
-preview-*.vercel.app  ►  Vercel "preview" env  ─► Neon `staging` branch
-                                                   ▲
-                                                   └─ identical schema, eigene Daten
+signflow.coach   ──► Vercel "Production" env  ─► Neon `production` branch (br-old-art-alnooacc)
+signflow-git-staging
+  -innosee-team
+  .vercel.app    ──► Vercel "Preview" + branch=staging  ─► Neon `staging` branch (br-icy-thunder-…)
+                                                          ▲
+                                                          └─ Schema-only Root-Branch, keine Daten von prod
 
 Beide Environments rufen denselben IONOS-Anonymizer (anon.signflow.coach) —
-der akzeptiert mehrere Origins via comma-separated `ALLOWED_ORIGIN`.
+der akzeptiert mehrere Origins via comma-separated ALLOWED_ORIGIN.
 ```
 
-## Einmalige Einrichtung
+## Konkrete IDs
 
-Reihenfolge wichtig — IONOS zuerst, dann Vercel-Config, dann Seed.
-
-### 1. Neon-Branch anlegen
-
-Im Neon-Dashboard zum Signflow-Projekt → "Branches" → "Create branch" → von `main` aus → Name `staging`. Neon kopiert das Schema 1:1 inkl. Daten — den Daten-Stand schmeißen wir gleich weg.
-
-Connection-String aus dem neuen Branch kopieren (Settings → Connection-String → "Pooled connection") — das ist der `STAGING_DATABASE_URL` für unten.
-
-### 2. IONOS-Proxy: CORS-Multi-Origin
-
-Auf der IONOS-VM die systemd-Unit-Env anpassen:
-
-```bash
-ssh signflow@anon.signflow.coach
-sudo systemctl edit anon-proxy
-```
-
-Im Override:
-
-```
-[Service]
-Environment="ALLOWED_ORIGIN=https://signflow.coach,https://signflow-staging-innosee-team.vercel.app"
-```
-
-Das zweite Element ist die feste Vercel-Preview-URL für den `staging`-Branch — **siehe Schritt 4** für die genaue URL. Wenn der User auch von `localhost:3000` aus den IONOS-Proxy ansprechen will (Dev), zusätzlich `,http://localhost:3000` anhängen.
-
-Dann den neuen Code aus diesem Repo deployen:
-
-```bash
-# vom Mac aus, im Repo-Root
-cd proxy
-./deploy.sh
-```
-
-Healthcheck soll `{"ok": true}` zurückgeben.
-
-### 3. Vercel: dedizierter Staging-Branch + Preview-Env
-
-Im Vercel-Dashboard → Signflow-Projekt → "Settings" → "Git" → "Production Branch" lassen wir auf `main`. Für Staging:
-
-- **Settings → Environments** → New "Preview"-Environment kopieren oder neu anlegen, falls nicht da.
-- **Branch-Filter setzen:** der bestehende `preview`-Env soll nur für den `staging`-Branch greifen. Alternativ: jeder Feature-Branch deployed automatisch eine Preview-URL und teilt sich die `staging`-Env.
-
-**Env-Vars für `preview`** (Settings → Environment Variables → "Preview" auswählen):
-
-| Variable | Wert |
+| Resource | Wert |
 |---|---|
-| `DATABASE_URL` | Neon-Pooled-URL aus Schritt 1 (Staging-Branch) |
-| `BETTER_AUTH_SECRET` | gleich wie Production (oder neu generieren — dann sind alle Sessions invalide) |
-| `BETTER_AUTH_URL` | `https://signflow-staging-innosee-team.vercel.app` (= URL aus Schritt 4) |
-| `NEXT_PUBLIC_APP_URL` | gleich wie `BETTER_AUTH_URL` |
-| `IONOS_PROXY_SHARED_SECRET` | **gleich wie Production** — derselbe IONOS-Proxy validiert beide |
-| `RESEND_API_KEY` | gleich wie Production (oder einen Test-Key — Resend hat kein Free-Tier-Limit pro Domain) |
-| `EMAIL_FROM` | optional: `Signflow Staging <staging@signflow.coach>` |
-| `BLOB_READ_WRITE_TOKEN` | gleich wie Production — Blobs landen im selben Store, Random-Suffix mitigiert Mischung |
-| Alle Azure/Anonymizer-Vars | gleich wie Production |
+| Neon-Org-ID | `org-flat-haze-22361689` (innosee) |
+| Neon-Project-ID | `solitary-waterfall-77539790` (Display-Name: „afa unterschriften") |
+| Neon Production-Branch-ID | `br-old-art-alnooacc` |
+| Neon Staging-Branch-ID | `br-icy-thunder-al1canw5` |
+| Staging Compute-Endpoint | `ep-steep-flower-alzbnwmm-pooler` |
+| Vercel Staging-URL | `https://signflow-git-staging-innosee-team.vercel.app` |
+| IONOS Proxy SSH | `signflow@anon.signflow.coach` |
+| IONOS Proxy Env-File | `/home/signflow/app/.env` (kommasepariertes `ALLOWED_ORIGIN`) |
 
-Vercel-Preview-Branch-URL: stabilisierbar via "Project Settings → Domains → Add" mit fester Subdomain `staging.signflow.coach` (DNS-CNAME nötig). Solange das nicht eingerichtet ist, ändert sich die URL bei jedem Push — dann musst du `BETTER_AUTH_URL` + `ALLOWED_ORIGIN` jeweils anpassen.
+## Demo-Accounts
 
-### 4. Staging-Branch im Repo anlegen + ersten Deploy
-
-```bash
-git checkout -b staging
-git push -u origin staging
-```
-
-Vercel deployed automatisch. Aus den Logs die Preview-URL kopieren — die brauchst du für `BETTER_AUTH_URL` + `ALLOWED_ORIGIN` aus Schritt 2/3.
-
-### 5. Synthetisch seeden
-
-```bash
-STAGING_OK=1 \
-  DATABASE_URL="<staging-neon-url>" \
-  node scripts/seed-staging.mjs
-```
-
-Das Skript wipet den Staging-Branch (Schema bleibt) und legt frische Demo-Accounts an:
+Geseeded via `scripts/seed-staging.mjs`. Shared-Passwort: **`staging1234`**.
 
 | E-Mail | Rolle | signing_enabled |
 |---|---|---|
@@ -102,13 +43,7 @@ Das Skript wipet den Staging-Branch (Schema bleibt) und legt frische Demo-Accoun
 | `coach.alpha@signflow-staging.test` | Coach | true |
 | `coach.beta@signflow-staging.test` | Coach | false (Checker-only) |
 
-Shared-Passwort: **`staging1234`**. Plus 1 Kurs mit 2 TN, 1 fertig eingereichter BER (kurs-gebunden) und 1 Schnell-Check-BER.
-
-### 6. Smoke-Test
-
-1. Browser → Vercel-Preview-URL → Login als `admin@signflow-staging.test`.
-2. „Eingereichte Abschlussberichte" → der Demo-BER von TN Alpha sollte auftauchen.
-3. Logout → Login als `coach.alpha@signflow-staging.test` → Schnell-Check öffnen → Bericht prüfen → Anonymisierung darf NICHT mit „Proxy nicht konfiguriert" stehen, sonst CORS-Block (Schritt 2 ist nicht durch).
+Demo-Daten: 1 Bedarfsträger („Demo Jobcenter Singen"), 1 Kurs („Demo AVGS-Coaching „Karriere & Selbständigkeit""), 2 TN, 1 fertig eingereichter kurs-gebundener BER, 1 Schnell-Check-BER mit Override-Begründung.
 
 ## Tagesablauf
 
@@ -119,22 +54,145 @@ git checkout staging
 git pull
 git merge feat/<deine-feature-branch>
 git push
-# Vercel deployed → ~45s warten → Preview-URL antesten
+# Vercel deployed automatisch → ~45 s → Preview-URL antesten
 ```
 
-### Staging-DB resetten
+Alternativ: Feature-Branch direkt pushen — Vercel macht eine eigene Branch-Preview-URL. Die teilt sich aber die Branch-`staging`-DB nur, wenn der Branch explizit `staging` heißt; sonst greifen die globalen Preview-Env-Vars.
+
+### Staging-DB resetten (Seeder)
+
+Variante A — autonom via Neon-CLI (User hat einmal `npx neonctl auth` gemacht, Token in `~/.config/neonctl/credentials.json`):
 
 ```bash
-STAGING_OK=1 DATABASE_URL="<staging-url>" node scripts/seed-staging.mjs
+cd /path/to/signflow
+DATABASE_URL=$(npx neonctl connection-string staging \
+  --project-id solitary-waterfall-77539790 \
+  --pooled --database-name neondb 2>&1 | tail -1)
+export DATABASE_URL
+export STAGING_OK=1
+node scripts/seed-staging.mjs
 ```
+
+Variante B — interaktiv (wenn neonctl nicht authentifiziert ist):
+
+```bash
+cd /path/to/signflow
+read -rs "DATABASE_URL?Pooled-Connection-String aus Neon-Dashboard + Enter: "
+export DATABASE_URL
+export STAGING_OK=1
+node scripts/seed-staging.mjs
+```
+
+Der Seeder hat einen Refuse-Guard: bricht ab, sobald er einen Bildungsträger ohne `@signflow-staging.test`-Suffix in der Ziel-DB findet. Schutz vor versehentlicher Production-Wipe.
 
 ### Staging-Branch komplett verwerfen + neu
 
-Im Neon-Dashboard → Branches → `staging` → "Delete branch" → dann Schritt 1 wiederholen + Vercel-`DATABASE_URL` aktualisieren.
+Im Neon-Dashboard → Branches → `staging` → „Delete branch" → dann neu anlegen:
+
+- Branch name: `staging`
+- **Auto-Delete deaktiviert** (sonst kommt Free-Tier-Retention)
+- **Schema only** auswählen (kein „Current data" — wir wollen keine prod-Daten)
+
+Sobald der Branch da ist: Compute-Endpoint hat einen neuen Hostname → Vercel-`DATABASE_URL` ersetzen:
+
+```bash
+vercel env rm DATABASE_URL preview staging --yes
+DATABASE_URL=$(npx neonctl connection-string staging \
+  --project-id solitary-waterfall-77539790 \
+  --pooled --database-name neondb 2>&1 | tail -1)
+echo -n "$DATABASE_URL" | vercel env add DATABASE_URL preview staging
+unset DATABASE_URL
+# Empty-Commit auf staging → Vercel-Redeploy mit der frischen URL
+git commit --allow-empty -m "chore(staging): redeploy with refreshed Neon DATABASE_URL"
+git push origin staging
+```
+
+Dann seeden (siehe oben). Smoke-Test:
+
+```bash
+curl -s -o /dev/null -w "Login: %{http_code}\n" \
+  https://signflow-git-staging-innosee-team.vercel.app/login
+# erwartet: Login: 200
+```
+
+## Einmalige Erst-Einrichtung (Referenz)
+
+Falls Staging-Setup von Null neu gemacht werden muss — z.B. nach Vercel-Projekt-Reset oder neuem Neon-Project. Reihenfolge wichtig.
+
+### 1. Neon-Branch anlegen
+
+Neon-Dashboard → Project „afa unterschriften" → Branches → „Create branch" → `staging` → **Auto-Delete aus**, **Schema only** → Create.
+
+### 2. Vercel-Preview-Env-Vars setzen
+
+Vercel-Dashboard → Project signflow → Settings → Environment Variables. Folgende Vars als **Preview** + **Branch=`staging`** anlegen (Branch-scoped Override schützt davor, dass Production-Werte greifen):
+
+| Variable | Wert |
+|---|---|
+| `DATABASE_URL` | Neon-Pooled-URL aus Schritt 1 |
+| `BETTER_AUTH_URL` | `https://signflow-git-staging-innosee-team.vercel.app` |
+| `NEXT_PUBLIC_APP_URL` | gleich |
+| `NEXT_PUBLIC_BETTER_AUTH_URL` | gleich |
+| `BETTER_AUTH_SECRET` | **frisch generieren** mit `openssl rand -hex 32` (nicht das prod-Secret recyclen — sonst sind Sessions zwischen den Environments austauschbar) |
+
+Alle anderen Variablen (`IONOS_PROXY_URL`, `IONOS_PROXY_SHARED_SECRET`, `RESEND_API_KEY`, `BLOB_READ_WRITE_TOKEN`, `AZURE_*`) erben aus dem Production-Scope-Set, das bei „Production and Preview" ankreuzt ist — nichts zu tun.
+
+CLI-Variante:
+
+```bash
+echo -n "https://signflow-git-staging-innosee-team.vercel.app" \
+  | vercel env add BETTER_AUTH_URL preview staging
+echo -n "https://signflow-git-staging-innosee-team.vercel.app" \
+  | vercel env add NEXT_PUBLIC_APP_URL preview staging
+echo -n "https://signflow-git-staging-innosee-team.vercel.app" \
+  | vercel env add NEXT_PUBLIC_BETTER_AUTH_URL preview staging
+echo -n "$(openssl rand -hex 32)" | vercel env add BETTER_AUTH_SECRET preview staging
+```
+
+`DATABASE_URL` wird per Dashboard gesetzt (Sensitive-Flag, nicht via CLI).
+
+### 3. Vercel-Deployment-Protection für Preview ausschalten
+
+Settings → Deployment Protection → **Vercel Authentication: Disabled**. Sonst gibt jede Preview-URL 401 ohne Vercel-Team-SSO. Production-`signflow.coach` ist von der Einstellung nicht betroffen (custom domain).
+
+### 4. IONOS-Proxy: ALLOWED_ORIGIN erweitern
+
+```bash
+ssh signflow@anon.signflow.coach
+# In /home/signflow/app/.env die ALLOWED_ORIGIN-Zeile setzen:
+sed -i 's|^ALLOWED_ORIGIN=.*|ALLOWED_ORIGIN=https://signflow.coach,https://signflow-git-staging-innosee-team.vercel.app|' \
+  /home/signflow/app/.env
+exit
+# Vom Repo-Root deployen + Neustart
+cd proxy && ./deploy.sh
+```
+
+`deploy.sh` synct Code (Multi-Origin-Support ist auf `main`), restartet den Service via NOPASSWD-sudo, und macht einen Healthcheck.
+
+### 5. Staging-Branch im Repo + erster Deploy
+
+```bash
+git checkout main && git pull
+git checkout -b staging
+git push -u origin staging
+```
+
+Vercel deployt automatisch — ~45 s. Falls der Webhook hängt: leerer Commit pushen.
+
+### 6. Seeden + Smoke-Test
+
+Siehe „Tagesablauf → Staging-DB resetten" oben.
+
+## Bekannte Stolperfallen
+
+- **Neon Free-Plan Auto-Cleanup:** Schema-only-Branches verschwinden bei langer Inaktivität, auch wenn „Automatically delete branch after" UNCHECKED ist. Wenn der Staging-Login plötzlich 500 wirft → erst checken, ob der Branch noch da ist (`npx neonctl branches list --project-id solitary-waterfall-77539790`). Neu anlegen + Vercel-`DATABASE_URL` ersetzen + seeden.
+- **Vercel Sensitive-Flag** auf `DATABASE_URL` blockt `vercel env pull` (liefert leeren String). Lese-Pfad für Skripte: `npx neonctl connection-string`. Schreib-Pfad: `vercel env rm` + `vercel env add` (das geht trotz Sensitive).
+- **`vercel env pull --git-branch=staging`** liefert nur die Branch-scoped Vars — Werte global gesetzter Vars sind dort leer. Wenn ein Skript einen Wert nicht findet, ist die Var entweder Sensitive oder im falschen Scope.
+- **Sudoers auf der IONOS-VM** erlaubt `signflow` nur `systemctl restart anon-proxy` und `systemctl status anon-proxy`. `systemctl edit` braucht Passwort → entweder den User-shell mit `sudo -i` aufmachen, oder Env-Var via `/home/signflow/app/.env` ändern (so wie wir's tun).
+- **Resend-Mails aus Staging** gehen an reale Adressen, falls `RESEND_API_KEY` gesetzt ist. Beim Magic-Link-Test mit echter Empfänger-E-Mail kommen die Mails wirklich an. Wenn das stört: API-Key in Staging-Branch-Override unsetzen — der Code fällt dann auf `console.log` zurück (nur Dev — in Production würde das werfen).
 
 ## Sicherheits-Hinweise
 
 - **Niemals Production-Daten in Staging kopieren.** Der Seeder wipet immer vorher; falls jemand manuell echte Daten überträgt, ist das ein Datenschutzverstoß.
-- **`STAGING_OK=1` nicht in Production-Shells setzen.** Der Seeder bricht zwar ab wenn er einen non-Staging Bildungsträger findet, aber das ist die letzte Verteidigungslinie.
-- **Shared-Secret-Rotation** (`IONOS_PROXY_SHARED_SECRET`) muss in beiden Vercel-Environments synchron passieren — sonst kippt eine Seite ins Bypass.
-- **Resend-Mails** aus Staging gehen an reale E-Mail-Adressen. Wenn der Seeder Magic-Links ausstellt o.ä., bitte `RESEND_API_KEY` weglassen — dann landet der Inhalt im Server-Log.
+- **`STAGING_OK=1` nicht in Production-Shells setzen.** Der Seeder-Refuse-Guard ist die letzte Verteidigungslinie, nicht die einzige.
+- **`IONOS_PROXY_SHARED_SECRET`** muss in beiden Vercel-Environments synchron sein. Bei Rotation: erst IONOS-VM (`/home/signflow/app/.env`) → dann Vercel Production-Var → dann Vercel Preview-Var. Reihenfolge umgekehrt = Anonymizer rejected die Calls.
