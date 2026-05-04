@@ -27,6 +27,25 @@ export async function requireSession() {
   return session;
 }
 
+/**
+ * Liefert die `tenantId` des aktuellen Users. Pflicht für jede Coach-/BT-
+ * Aktion, die Daten anlegt oder filtert — Multi-Tenant-Isolation hängt an
+ * diesem Wert.
+ *
+ * Wirft, wenn die Session keinen tenantId hat (Schema-Drift oder Bug —
+ * darf in Production nie passieren, weil tenant_id NOT NULL ist).
+ */
+export function getTenantId(session: SessionData): string {
+  const tenantId = (session?.user as { tenantId?: string } | undefined)
+    ?.tenantId;
+  if (!tenantId) {
+    throw new Error(
+      "Session has no tenantId — DB schema or auth setup is inconsistent.",
+    );
+  }
+  return tenantId;
+}
+
 export async function requireBildungstraeger() {
   const session = await requireSession();
   if (session.user.role !== "bildungstraeger") redirect("/");

@@ -10,7 +10,12 @@ import { APIError } from "better-auth/api";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
-import { requireBildungstraeger, isImpersonating, getCurrentSession } from "@/lib/dal";
+import {
+  getCurrentSession,
+  getTenantId,
+  isImpersonating,
+  requireBildungstraeger,
+} from "@/lib/dal";
 
 export type InviteFormState =
   | { error?: string; success?: string }
@@ -20,7 +25,8 @@ export async function inviteCoach(
   _prev: InviteFormState,
   formData: FormData,
 ): Promise<InviteFormState> {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
 
   const email = String(formData.get("email") ?? "")
     .trim()
@@ -57,10 +63,14 @@ export async function inviteCoach(
 
   let createdUserId: string | null = null;
   if (existing && existing.deletedAt) {
-    // Resurrect-Pfad
+    // Resurrect-Pfad — beim Wiederbeleben wird der User dem Tenant des
+    // einladenden Bildungsträgers zugeschlagen, auch wenn die alte Zeile
+    // ggf. einem anderen Tenant gehörte (in der Praxis Single-Tenant zur
+    // Migrations-Zeit, aber sauber für Multi-Tenant ab jetzt).
     await db
       .update(schema.users)
       .set({
+        tenantId,
         deletedAt: null,
         banned: false,
         banReason: null,
@@ -78,7 +88,15 @@ export async function inviteCoach(
   } else {
     try {
       const result = await auth.api.createUser({
-        body: { email, name, password: placeholderPassword, role: "coach" },
+        body: {
+          email,
+          name,
+          password: placeholderPassword,
+          role: "coach",
+          // Tenant des einladenden Bildungsträgers — Better Auth reicht das
+          // Feld via additionalFields.tenantId (input: true) durch.
+          data: { tenantId },
+        },
         headers: h,
       });
       createdUserId = result.user?.id ?? null;

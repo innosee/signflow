@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
+import {
+  assertNotImpersonating,
+  getTenantId,
+  requireSigningEnabled,
+} from "@/lib/dal";
 
 export type CourseFormState =
   | { error?: string; info?: string }
@@ -48,6 +52,7 @@ export async function createCourse(
   const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
+  const tenantId = getTenantId(session);
 
   const title = String(formData.get("title") ?? "").trim();
   const avgsNummer = String(formData.get("avgsNummer") ?? "").trim();
@@ -86,13 +91,15 @@ export async function createCourse(
 
   // Bedarfsträger-Existenz serverseitig validieren — Client könnte die Option
   // mit dem DevTools manipulieren oder der Bildungsträger-User hat den Datensatz
-  // inzwischen soft-gelöscht.
+  // inzwischen soft-gelöscht. Tenant-Filter verhindert, dass ein Coach via
+  // erratener UUID einen Bedarfsträger eines fremden Mandanten anbindet.
   const [bt] = await db
     .select({ id: schema.bedarfstraeger.id })
     .from(schema.bedarfstraeger)
     .where(
       and(
         eq(schema.bedarfstraeger.id, bedarfstraegerId),
+        eq(schema.bedarfstraeger.tenantId, tenantId),
         isNull(schema.bedarfstraeger.deletedAt),
       ),
     )
@@ -147,6 +154,9 @@ export async function createCourse(
       if (!course) throw new Error("COURSE_INSERT_FAILED");
 
       for (const p of participants) {
+        // Existing-Lookup tenant-scoped: derselbe Mensch kann bei einem
+        // anderen Bildungsträger Kunde sein, wir reusen aber nur innerhalb
+        // unseres eigenen Tenants.
         const [existing] = await tx
           .select({
             id: schema.participants.id,
@@ -154,7 +164,12 @@ export async function createCourse(
             kundenNr: schema.participants.kundenNr,
           })
           .from(schema.participants)
-          .where(eq(schema.participants.email, p.email))
+          .where(
+            and(
+              eq(schema.participants.email, p.email),
+              eq(schema.participants.tenantId, tenantId),
+            ),
+          )
           .limit(1);
 
         let participantId: string;
@@ -162,8 +177,8 @@ export async function createCourse(
           participantId = existing.id;
           // Wenn der Coach abweichende Daten eingibt, notieren wir das in
           // einer Info-Message — die bestehende Zeile bleibt unverändert,
-          // weil participants global-unique per Email ist und andere Kurse
-          // dieselben Werte verwenden könnten.
+          // weil andere Kurse desselben Tenants dieselben Werte verwenden
+          // könnten.
           if (
             existing.name !== p.name ||
             existing.kundenNr !== p.kundenNr
@@ -173,7 +188,12 @@ export async function createCourse(
         } else {
           const [created] = await tx
             .insert(schema.participants)
-            .values({ name: p.name, email: p.email, kundenNr: p.kundenNr })
+            .values({
+              tenantId,
+              name: p.name,
+              email: p.email,
+              kundenNr: p.kundenNr,
+            })
             .returning({ id: schema.participants.id });
           if (!created) throw new Error("PARTICIPANT_INSERT_FAILED");
           participantId = created.id;

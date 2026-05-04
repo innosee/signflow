@@ -1,14 +1,15 @@
-import { asc, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireSigningEnabled } from "@/lib/dal";
+import { getTenantId, requireSigningEnabled } from "@/lib/dal";
 
 import { CourseForm } from "./course-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewCoursePage() {
-  await requireSigningEnabled();
+  const session = await requireSigningEnabled();
+  const tenantId = getTenantId(session);
 
   const bedarfstraeger = await db
     .select({
@@ -17,7 +18,12 @@ export default async function NewCoursePage() {
       type: schema.bedarfstraeger.type,
     })
     .from(schema.bedarfstraeger)
-    .where(isNull(schema.bedarfstraeger.deletedAt))
+    .where(
+      and(
+        eq(schema.bedarfstraeger.tenantId, tenantId),
+        isNull(schema.bedarfstraeger.deletedAt),
+      ),
+    )
     .orderBy(asc(schema.bedarfstraeger.name));
 
   return (
