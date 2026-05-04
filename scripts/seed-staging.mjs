@@ -85,11 +85,34 @@ for (const t of tables) {
   await client.query(`TRUNCATE TABLE ${t} CASCADE`);
 }
 
+console.log("→ resolve/create default tenant");
+// Multi-Tenant ab 2026-05-04 — alle Test-Users hängen am Default-Tenant
+// (slug='default'), den die Migration angelegt hat. Falls der Tenant
+// fehlt (frisches Schema-Branch), legen wir ihn hier nochmal an, damit
+// das Skript stand-alone reproduzierbar ist.
+const { rows: tenantRows } = await client.query(
+  `INSERT INTO tenants (name, slug)
+     VALUES ('Default', 'default')
+     ON CONFLICT DO NOTHING
+   RETURNING id`,
+);
+let defaultTenantId = tenantRows[0]?.id ?? null;
+if (!defaultTenantId) {
+  const { rows } = await client.query(
+    `SELECT id FROM tenants WHERE slug = 'default' AND deleted_at IS NULL LIMIT 1`,
+  );
+  defaultTenantId = rows[0]?.id;
+}
+if (!defaultTenantId) {
+  throw new Error("Could not resolve default tenant.");
+}
+
 console.log("→ seeding users");
 const { rows: btRows } = await client.query(
-  `INSERT INTO users (email, name, role, email_verified, signing_enabled)
-     VALUES ('admin@signflow-staging.test', 'Demo Bildungsträger', 'bildungstraeger', true, false)
+  `INSERT INTO users (tenant_id, email, name, role, email_verified, signing_enabled)
+     VALUES ($1::uuid, 'admin@signflow-staging.test', 'Demo Bildungsträger', 'bildungstraeger', true, false)
    RETURNING id`,
+  [defaultTenantId],
 );
 const btId = btRows[0].id;
 await client.query(
@@ -101,9 +124,10 @@ await client.query(
 );
 
 const { rows: coachARows } = await client.query(
-  `INSERT INTO users (email, name, role, email_verified, signing_enabled)
-     VALUES ('coach.alpha@signflow-staging.test', 'Coach Alpha', 'coach', true, true)
+  `INSERT INTO users (tenant_id, email, name, role, email_verified, signing_enabled)
+     VALUES ($1::uuid, 'coach.alpha@signflow-staging.test', 'Coach Alpha', 'coach', true, true)
    RETURNING id`,
+  [defaultTenantId],
 );
 const coachAId = coachARows[0].id;
 await client.query(
@@ -115,9 +139,10 @@ await client.query(
 );
 
 const { rows: coachBRows } = await client.query(
-  `INSERT INTO users (email, name, role, email_verified, signing_enabled)
-     VALUES ('coach.beta@signflow-staging.test', 'Coach Beta', 'coach', true, false)
+  `INSERT INTO users (tenant_id, email, name, role, email_verified, signing_enabled)
+     VALUES ($1::uuid, 'coach.beta@signflow-staging.test', 'Coach Beta', 'coach', true, false)
    RETURNING id`,
+  [defaultTenantId],
 );
 const coachBId = coachBRows[0].id;
 await client.query(
@@ -130,9 +155,10 @@ await client.query(
 
 console.log("→ seeding bedarfstraeger");
 const { rows: btsRows } = await client.query(
-  `INSERT INTO bedarfstraeger (name, type)
-     VALUES ('Demo Jobcenter Singen', 'JC')
+  `INSERT INTO bedarfstraeger (tenant_id, name, type)
+     VALUES ($1::uuid, 'Demo Jobcenter Singen', 'JC')
    RETURNING id`,
+  [defaultTenantId],
 );
 const bedId = btsRows[0].id;
 
@@ -150,16 +176,18 @@ const { rows: courseRows } = await client.query(
 const courseId = courseRows[0].id;
 
 const { rows: tn1Rows } = await client.query(
-  `INSERT INTO participants (name, email, kunden_nr)
-     VALUES ('TN Alpha (Demo)', 'tn.alpha@signflow-staging.test', '999A11111')
+  `INSERT INTO participants (tenant_id, name, email, kunden_nr)
+     VALUES ($1::uuid, 'TN Alpha (Demo)', 'tn.alpha@signflow-staging.test', '999A11111')
    RETURNING id`,
+  [defaultTenantId],
 );
 const tn1Id = tn1Rows[0].id;
 
 const { rows: tn2Rows } = await client.query(
-  `INSERT INTO participants (name, email, kunden_nr)
-     VALUES ('TN Beta (Demo)', 'tn.beta@signflow-staging.test', '999B22222')
+  `INSERT INTO participants (tenant_id, name, email, kunden_nr)
+     VALUES ($1::uuid, 'TN Beta (Demo)', 'tn.beta@signflow-staging.test', '999B22222')
    RETURNING id`,
+  [defaultTenantId],
 );
 const tn2Id = tn2Rows[0].id;
 
