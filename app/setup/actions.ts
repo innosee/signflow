@@ -29,9 +29,11 @@ export async function bootstrapBildungstraeger(
 
   const passwordHash = await hashPassword(password);
 
-  // Existence-Check UND beide Inserts in einer Transaktion —
+  // Existence-Check UND alle Inserts in einer Transaktion —
   // verhindert TOCTOU-Race (zwei parallele Requests erstellen je eine Bildungsträger)
   // und orphan-User (users eingefügt, authAccount-Insert scheitert).
+  // Der initiale Bildungsträger-Account legt zugleich den Default-Tenant an
+  // (slug='default'), in dem alle nachfolgenden Coaches/Teilnehmer leben.
   let userId: string | null = null;
   try {
     userId = await db.transaction(async (tx) => {
@@ -44,9 +46,33 @@ export async function bootstrapBildungstraeger(
         throw new Error("BILDUNGSTRAEGER_EXISTS");
       }
 
+      // Tenant + erster Admin-User immer zusammen — die Rollout-Reihenfolge
+      // ist „erst Mandant, dann sein Admin", sonst hat der Admin keinen
+      // tenant_id. Nach der Multi-Tenant-Migration existiert i.d.R. schon
+      // der `default`-Tenant aus dem Backfill; diesen wiederverwenden statt
+      // doppelt anlegen.
+      let [tenant] = await tx
+        .select({ id: schema.tenants.id })
+        .from(schema.tenants)
+        .where(eq(schema.tenants.slug, "default"))
+        .limit(1);
+      if (!tenant) {
+        [tenant] = await tx
+          .insert(schema.tenants)
+          .values({ name, slug: "default" })
+          .returning({ id: schema.tenants.id });
+      }
+      if (!tenant) throw new Error("TENANT_INSERT_FAILED");
+
       const [user] = await tx
         .insert(schema.users)
-        .values({ email, name, role: "bildungstraeger", emailVerified: true })
+        .values({
+          email,
+          name,
+          role: "bildungstraeger",
+          emailVerified: true,
+          tenantId: tenant.id,
+        })
         .returning();
       if (!user) throw new Error("USER_INSERT_FAILED");
 

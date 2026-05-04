@@ -2,7 +2,7 @@ import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 import { SubmitAfaButton } from "./submit-button";
 
@@ -19,8 +19,11 @@ export const dynamic = "force-dynamic";
  * sichtbar ist.
  */
 export default async function BildungstraegerSubmissionsPage() {
-  await requireBildungstraeger();
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
 
+  // Tenant-Filter via Coach — finalDocuments selbst hat keinen tenantId,
+  // kommt indirekt über den Kurs-Coach.
   const rows = await db
     .select({
       courseId: schema.courses.id,
@@ -44,6 +47,7 @@ export default async function BildungstraegerSubmissionsPage() {
       schema.bedarfstraeger,
       eq(schema.bedarfstraeger.id, schema.courses.bedarfstraegerId),
     )
+    .where(eq(schema.users.tenantId, tenantId))
     .orderBy(desc(schema.finalDocuments.completedAt));
 
   const pending = rows.filter(

@@ -95,6 +95,15 @@ export const auth = betterAuth({
         defaultValue: "coach",
         input: false,
       },
+      tenantId: {
+        // Mandant des Users. Wird beim Coach-Invite vom server-seitigen
+        // Caller (admin.createUser) mitgegeben — niemals aus Client-Input,
+        // weil die einzigen User-Erstell-Pfade Server-Actions sind und
+        // `disableSignUp: true` den offenen Signup blockt.
+        type: "string",
+        required: false,
+        input: true,
+      },
       signatureUrl: {
         type: "string",
         required: false,
@@ -123,6 +132,7 @@ export const auth = betterAuth({
       },
     },
   },
+
 
   account: { modelName: "authAccount" },
   verification: { modelName: "authVerification" },

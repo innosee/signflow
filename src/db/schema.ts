@@ -63,10 +63,49 @@ export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
  */
 export const berStatus = pgEnum("ber_status", ["draft", "submitted"]);
 
+/**
+ * Mandant (Bildungsträger-Organisation). Single-Tenant war der Stand bis
+ * 2026-05; mit dem Multi-Tenant-Refactor sind Coaches, Bedarfsträger und
+ * Teilnehmer pro Tenant isoliert. Der `bildungstraeger`-Rolle-User ist der
+ * Admin innerhalb seines Tenants — für die Org-Daten (Branding, Adresse)
+ * gilt dieser Eintrag.
+ *
+ * Slug wird intern für Logs/Subdomain-fähigen URL-Aufbau verwendet, ist
+ * aber nicht öffentlich. `default` ist der Erango-Bestand zum Zeitpunkt
+ * der Einführung — kann später umbenannt werden.
+ */
+export const tenants = pgTable("tenants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+}, (t) => [
+  // Partial unique — gelöschte Tenants sollen ihre Slug nicht ewig blockieren.
+  uniqueIndex("tenants_slug_active_uq")
+    .on(t.slug)
+    .where(sql`${t.deletedAt} IS NULL`),
+]);
+
 export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /**
+     * Tenant-Zugehörigkeit. Ein User gehört zu genau einem Tenant; Coaches
+     * sehen nur Kurse/TN/BERs ihres Tenants, Bildungsträger-Admins
+     * verwalten nur ihren Tenant. Setzt jede DB-Query in der Codebase
+     * unter Tenant-Filter-Pflicht.
+     */
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
     name: text("name").notNull(),
@@ -193,6 +232,11 @@ export const authVerification = pgTable("auth_verification", {
  */
 export const bedarfstraeger = pgTable("bedarfstraeger", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Mandant, dem dieser Bedarfsträger gehört. Gleiche Behörde kann von
+   * mehreren Bildungsträgern unabhängig gepflegt werden. */
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
   type: bedarfstraegerType("type").notNull(),
   adresse: text("adresse"),
@@ -206,7 +250,9 @@ export const bedarfstraeger = pgTable("bedarfstraeger", {
     .defaultNow()
     .$onUpdate(() => new Date()),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+}, (t) => [
+  index("bedarfstraeger_tenant_idx").on(t.tenantId),
+]);
 
 export const courses = pgTable("courses", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -247,8 +293,16 @@ export const courses = pgTable("courses", {
 
 export const participants = pgTable("participants", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /**
+   * Mandant, der diesen Teilnehmer betreut. Derselbe Mensch (gleiche E-Mail)
+   * kann bei mehreren Bildungsträgern parallel Kunde sein — Unique deshalb
+   * auf `(tenant_id, email)` statt global.
+   */
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email").notNull(),
   /**
    * AfA-Kunden-Nummer des Teilnehmers (z.B. "160B29588") — Pflichtfeld,
    * kommt aus dem Stundennachweis-Formular (Zeile "Kunden-Nr. TN*in").
@@ -267,7 +321,10 @@ export const participants = pgTable("participants", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+}, (t) => [
+  uniqueIndex("participants_tenant_email_uq").on(t.tenantId, t.email),
+  index("participants_tenant_idx").on(t.tenantId),
+]);
 
 export const courseParticipants = pgTable(
   "course_participants",
@@ -666,6 +723,8 @@ export const abschlussberichte = pgTable(
   ],
 );
 
+export type Tenant = typeof tenants.$inferSelect;
+export type NewTenant = typeof tenants.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Course = typeof courses.$inferSelect;

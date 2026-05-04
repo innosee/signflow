@@ -6,13 +6,14 @@ import {
   SettingsSection,
 } from "@/components/settings/section";
 import { DEFAULT_BRANDING, getBranding } from "@/lib/branding";
-import { requireBildungstraeger } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
 export default async function BildungstraegerSettingsPage() {
   const session = await requireBildungstraeger();
-  const branding = await getBranding();
+  const tenantId = getTenantId(session);
+  const branding = await getBranding(tenantId);
 
   // Im Branding-Form zeigen wir den Default-Block, wenn der BT noch keine
   // eigene Adresse hinterlegt hat — sonst wäre das Textarea leer und der
