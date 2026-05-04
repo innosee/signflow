@@ -156,6 +156,19 @@ const statements = [
 
   `CREATE UNIQUE INDEX IF NOT EXISTS participants_tenant_email_uq
      ON participants (tenant_id, email)`,
+
+  // 7. Erango-Branding aus dem ehemaligen Hardcoded-Default in die DB
+  //    übertragen — nur für den Default-Tenant-BT, NUR wenn pdf_address
+  //    noch leer/null ist (Idempotenz). Sonst hätten Erangos BERs nach
+  //    dem Code-Cutover (kein Hardcoded-Fallback mehr) einen leeren
+  //    Header. Andere Tenants müssen ihr Branding selbst in Settings
+  //    hinterlegen — bewusst kein Default-Erango für fremde Tenants.
+  `UPDATE users
+     SET pdf_address = E'Ekkehardstraße 12b\nD-78224 Singen\nTel. +49 (0) 7731 / 90 97 18 - 10\nFax +49 (0) 7731 / 90 97 18 - 11\navgs@erango.de\nwww.erango.de'
+     WHERE role = 'bildungstraeger'
+       AND deleted_at IS NULL
+       AND tenant_id = (SELECT id FROM tenants WHERE slug = 'default' AND deleted_at IS NULL)
+       AND (pdf_address IS NULL OR length(trim(pdf_address)) = 0)`,
 ];
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
