@@ -93,8 +93,10 @@ const { rows: btRows } = await client.query(
 );
 const btId = btRows[0].id;
 await client.query(
+  // user_id ist uuid, account_id ist text — Postgres deduziert sonst
+  // einen Konflikt für $1, also explizit casten.
   `INSERT INTO auth_account (user_id, provider_id, account_id, password)
-     VALUES ($1, 'credential', $1, $2)`,
+     VALUES ($1::uuid, 'credential', $1::text, $2)`,
   [btId, PASSWORD_HASH],
 );
 
@@ -105,8 +107,10 @@ const { rows: coachARows } = await client.query(
 );
 const coachAId = coachARows[0].id;
 await client.query(
+  // user_id ist uuid, account_id ist text — Postgres deduziert sonst
+  // einen Konflikt für $1, also explizit casten.
   `INSERT INTO auth_account (user_id, provider_id, account_id, password)
-     VALUES ($1, 'credential', $1, $2)`,
+     VALUES ($1::uuid, 'credential', $1::text, $2)`,
   [coachAId, PASSWORD_HASH],
 );
 
@@ -117,8 +121,10 @@ const { rows: coachBRows } = await client.query(
 );
 const coachBId = coachBRows[0].id;
 await client.query(
+  // user_id ist uuid, account_id ist text — Postgres deduziert sonst
+  // einen Konflikt für $1, also explizit casten.
   `INSERT INTO auth_account (user_id, provider_id, account_id, password)
-     VALUES ($1, 'credential', $1, $2)`,
+     VALUES ($1::uuid, 'credential', $1::text, $2)`,
   [coachBId, PASSWORD_HASH],
 );
 
