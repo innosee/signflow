@@ -4,6 +4,7 @@ import { cache } from "react";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { resolveAssetUrl } from "@/lib/storage";
 
 /**
  * PDF-Branding für Header (Logo + Postanschrift). In Single-Tenant kommen
@@ -61,8 +62,12 @@ export const getBranding = cache(
 
     if (!row) return DEFAULT_BRANDING;
 
+    // Logo: Object-Key (R2) wird zu signed URL, https-URLs (Vercel-Blob-
+    // Bestand) bleiben unverändert.
+    const logoUrl = await resolveAssetUrl(row.logoUrl);
+
     return {
-      logoUrl: row.logoUrl ?? null,
+      logoUrl,
       address: row.address ?? "",
     };
   },
