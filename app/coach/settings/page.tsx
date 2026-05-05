@@ -9,6 +9,7 @@ import {
 } from "@/components/settings/section";
 import { db, schema } from "@/db";
 import { requireCoach } from "@/lib/dal";
+import { resolveAssetUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function CoachSettingsPage() {
     .where(eq(schema.users.id, session.user.id))
     .limit(1);
 
-  const signatureUrl = row?.signatureUrl ?? null;
+  const signatureUrl = await resolveAssetUrl(row?.signatureUrl);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">

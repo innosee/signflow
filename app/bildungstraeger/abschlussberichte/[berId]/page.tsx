@@ -6,6 +6,7 @@ import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { resolveAssetUrl } from "@/lib/storage";
 import { readSoftFlags } from "@/lib/checker/snapshot";
 import {
   VIOLATION_CATEGORY_LABELS,
@@ -108,7 +109,10 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
   if (!row) notFound();
 
   const { ber, course, participant, coach } = row;
-  const branding = await getBranding(tenantId);
+  const [branding, coachSignatureUrl] = await Promise.all([
+    getBranding(tenantId),
+    resolveAssetUrl(coach.signatureUrl),
+  ]);
   const softFlags = readSoftFlags(ber.checkSnapshot);
   const softFlagsAcknowledged = !!ber.softFlagsAcknowledgedAt;
   const ackDate = ber.softFlagsAcknowledgedAt
@@ -305,7 +309,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
               !isAdhoc && course?.durchfuehrungsort && submittedAt
                 ? `${course.durchfuehrungsort}, ${submittedAt.toLocaleDateString("de-DE")}`
                 : "",
-            coachSignatureUrl: isAdhoc ? null : coach.signatureUrl ?? null,
+            coachSignatureUrl: isAdhoc ? null : coachSignatureUrl,
             keineFehlzeiten: ber.keineFehlzeiten,
             sonstiges: ber.sonstiges,
             mustHaveOverrideReason: ber.mustHaveOverrideReason,

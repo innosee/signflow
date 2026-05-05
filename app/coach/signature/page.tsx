@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { requireCoach } from "@/lib/dal";
+import { resolveAssetUrl } from "@/lib/storage";
 
 import { SignatureSetup } from "./signature-setup";
 
@@ -16,6 +17,8 @@ export default async function CoachSignaturePage() {
     .from(schema.users)
     .where(eq(schema.users.id, session.user.id))
     .limit(1);
+
+  const signatureUrl = await resolveAssetUrl(row?.signatureUrl);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -36,7 +39,7 @@ export default async function CoachSignaturePage() {
         </Link>
       </header>
 
-      <SignatureSetup existingUrl={row?.signatureUrl ?? null} />
+      <SignatureSetup existingUrl={signatureUrl} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
 import { getTenantId, requireCoach } from "@/lib/dal";
+import { resolveAssetUrl } from "@/lib/storage";
 
 import { PrintButton } from "./print-button";
 
@@ -85,7 +86,10 @@ export default async function CoachBerPrintPage({ params }: Props) {
   if (!row) notFound();
   const { ber } = row;
 
-  const branding = await getBranding(tenantId);
+  const [branding, coachSignatureUrl] = await Promise.all([
+    getBranding(tenantId),
+    resolveAssetUrl(row.coachSignatureUrl),
+  ]);
 
   const teilnehmerName =
     [ber.tnVorname, ber.tnNachname].filter(Boolean).join(" ").trim() ||
@@ -147,7 +151,7 @@ export default async function CoachBerPrintPage({ params }: Props) {
                 ? String(row.courseUe)
                 : ""),
             ortDatum,
-            coachSignatureUrl: isAdhoc ? null : row.coachSignatureUrl ?? null,
+            coachSignatureUrl: isAdhoc ? null : coachSignatureUrl,
             keineFehlzeiten: ber.keineFehlzeiten,
             sonstiges: ber.sonstiges,
             mustHaveOverrideReason: ber.mustHaveOverrideReason,

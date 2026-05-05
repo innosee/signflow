@@ -1,43 +1,136 @@
 import "server-only";
 
-import { del, put } from "@vercel/blob";
+import { cache } from "react";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { del as vercelBlobDel, put as vercelBlobPut } from "@vercel/blob";
 
-function assertToken(): void {
+/**
+ * Storage-Layer für Signaturen, Logos und gesiegelte PDFs.
+ *
+ * **Provider:** Cloudflare R2 (S3-kompatibel) als Standard. Fallback auf
+ * Vercel Blob, wenn keine R2-Credentials gesetzt sind — z.B. in lokalen
+ * Dev-Umgebungen ohne `vercel env pull`.
+ *
+ * **Privacy-Modell:** R2-Bucket ist privat. Read-Access via signierte URLs
+ * (24 h TTL). Vorher (Vercel Blob `access: "public"` + Random-Suffix) war
+ * Mitigation gegen Erratbarkeit; jetzt zusätzlich Authentifizierung
+ * gegenüber dem Storage-Provider.
+ *
+ * **Werte in der DB:**
+ *  - Neue Uploads: Object-Key (z.B. `signatures/user-uuid/123.png`).
+ *  - Bestand aus Vercel-Blob-Zeit: vollständige `https://...`-URL.
+ *  Beim Render wird `resolveAssetUrl()` aufgerufen, das beide Formate
+ *  handhabt (Key → signed URL; URL → unverändert).
+ *
+ * **Migration:** `scripts/migrate-blobs-to-r2.mjs` (separat, mit
+ * User-Confirmation) verschiebt existierende Vercel-Blobs nach R2 und
+ * ersetzt URLs durch Keys in der DB.
+ */
+
+type Provider = "r2" | "vercel-blob";
+
+function activeProvider(): Provider {
+  return process.env.R2_ACCOUNT_ID ? "r2" : "vercel-blob";
+}
+
+// --- R2 (S3-kompatibel) ---
+
+function getR2Client(): S3Client {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error(
+      "R2 credentials missing (R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY).",
+    );
+  }
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+}
+
+function getR2Bucket(): string {
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!bucket) throw new Error("R2_BUCKET_NAME missing.");
+  return bucket;
+}
+
+async function r2Put(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
+  const client = getR2Client();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: getR2Bucket(),
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+}
+
+async function r2Delete(key: string): Promise<void> {
+  const client = getR2Client();
+  await client.send(
+    new DeleteObjectCommand({ Bucket: getR2Bucket(), Key: key }),
+  );
+}
+
+async function r2SignedGetUrl(key: string, ttlSec: number): Promise<string> {
+  const client = getR2Client();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: getR2Bucket(), Key: key }),
+    { expiresIn: ttlSec },
+  );
+}
+
+// --- Vercel Blob (Legacy / Local-Dev-Fallback) ---
+
+function vercelBlobAssertToken(): void {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error(
-      "BLOB_READ_WRITE_TOKEN is not set. Link a Vercel Blob store and run `vercel env pull .env.local`.",
+      "BLOB_READ_WRITE_TOKEN is not set. Either configure R2 (R2_ACCOUNT_ID etc.) or link a Vercel Blob store.",
     );
   }
 }
 
+// --- Public API ---
+
+/** Zufälliges Suffix für Object-Keys, damit gleichnamige Uploads kollisionsfrei sind. */
+function randomSuffix(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 /**
- * Provider-agnostischer Signatur-Upload. Rückgabe ist die URL, die in
- * `users.signature_url` / `participants.signature_url` /
- * `signatures.signature_url` persistiert wird.
- *
- * **Privacy-Modell im MVP (Vercel Blob):**
- * `access: "public"` ist aktuell die einzige unterstützte Variante.
- * Mitigation: `addRandomSuffix: true` hängt 256 Bit Entropie an die URL an,
- * sodass sie praktisch unerratbar ist. Die App gibt Blob-URLs ausschließlich
- * server-seitig nach DAL-Auth heraus — Clients bekommen sie nicht direkt aus
- * öffentlichen Endpoints.
- *
- * **TODO(privacy, pre-prod):** Für AfA-Compliance vor Production entweder
- * - auf Cloudflare R2 / S3 mit `access: "private"` + kurzlebigen Signed URLs
- *   migrieren (Storage-Anbieter-Entscheidung steht in CLAUDE.md noch offen),
- *   oder
- * - einen authorisierten Proxy-Endpoint bauen, der den Blob erst nach
- *   Auth-/Ownership-Check streamt, und die öffentliche URL nie rausgibt.
- *
- * Migration zu R2 o.ä. betrifft nur diese Datei.
+ * Lädt eine PNG-Signatur hoch. Gibt einen Object-Key (R2) oder eine
+ * Public-URL (Vercel-Blob) zurück — je nachdem welcher Provider aktiv ist.
  */
 export async function uploadSignature(
   ownerKey: string,
   png: Blob,
 ): Promise<string> {
-  assertToken();
-  const path = `signatures/${ownerKey}/${Date.now()}.png`;
-  const { url } = await put(path, png, {
+  const ts = Date.now();
+  const path = `signatures/${ownerKey}/${ts}-${randomSuffix()}.png`;
+
+  if (activeProvider() === "r2") {
+    const buf = Buffer.from(await png.arrayBuffer());
+    await r2Put(path, buf, "image/png");
+    return path; // Object-Key, wird beim Render via resolveAssetUrl() gesigned
+  }
+
+  vercelBlobAssertToken();
+  const { url } = await vercelBlobPut(path, png, {
     access: "public",
     contentType: "image/png",
     addRandomSuffix: true,
@@ -47,19 +140,25 @@ export async function uploadSignature(
 }
 
 /**
- * Logo-Upload für PDF-Branding. Bewusst kein Re-Encoding: das vom Bildungs-
- * träger hochgeladene PNG/JPEG/SVG landet 1:1 im Blob-Store, damit das
- * PDF-Layout deterministisch bleibt. Validierung (Content-Type/Größe)
- * passiert im API-Handler.
+ * Lädt ein Logo (PNG/JPG/SVG) für PDF-Branding hoch. Wie uploadSignature
+ * gibt der Rückgabewert je nach aktivem Provider Key oder URL zurück.
  */
 export async function uploadBrandingLogo(
   ownerKey: string,
   file: Blob,
   extension: "png" | "jpg" | "svg",
 ): Promise<string> {
-  assertToken();
-  const path = `branding/${ownerKey}/${Date.now()}.${extension}`;
-  const { url } = await put(path, file, {
+  const ts = Date.now();
+  const path = `branding/${ownerKey}/${ts}-${randomSuffix()}.${extension}`;
+
+  if (activeProvider() === "r2") {
+    const buf = Buffer.from(await file.arrayBuffer());
+    await r2Put(path, buf, file.type);
+    return path;
+  }
+
+  vercelBlobAssertToken();
+  const { url } = await vercelBlobPut(path, file, {
     access: "public",
     contentType: file.type,
     addRandomSuffix: true,
@@ -68,7 +167,50 @@ export async function uploadBrandingLogo(
   return url;
 }
 
-export async function deleteBlob(url: string): Promise<void> {
-  assertToken();
-  await del(url);
+/**
+ * Löscht ein Asset aus dem Storage. Akzeptiert sowohl Object-Keys (R2,
+ * neue Uploads) als auch vollständige URLs (Vercel-Blob, Bestand).
+ */
+export async function deleteAsset(keyOrUrl: string): Promise<void> {
+  if (isVercelBlobUrl(keyOrUrl)) {
+    vercelBlobAssertToken();
+    await vercelBlobDel(keyOrUrl);
+    return;
+  }
+  // Object-Key → R2
+  await r2Delete(keyOrUrl);
+}
+
+/** Backwards-compat alias — alter Name wird noch von ein paar Stellen genutzt. */
+export const deleteBlob = deleteAsset;
+
+/**
+ * Macht aus einem gespeicherten Asset-Wert (Key oder URL) einen
+ * abrufbaren URL-String. Wird von Server-Components aufgerufen, die
+ * Signaturen oder Logos in `<img src=…>` rendern.
+ *
+ * - Object-Key (R2) → presigned URL mit TTL (default 24 h)
+ * - https://-URL (Vercel-Blob) → unverändert (public + random suffix
+ *   bietet weiterhin Mitigation gegen Erratbarkeit, bis die Migration
+ *   nach R2 läuft)
+ *
+ * `cache()` aus React stellt sicher dass mehrere Aufrufe für denselben
+ * Key innerhalb eines Renders nur einmal sign'en — Server-Components
+ * können den Helper frei in Loops nutzen ohne N+1 zu produzieren.
+ */
+export const resolveAssetUrl = cache(
+  async (keyOrUrl: string | null | undefined): Promise<string | null> => {
+    if (!keyOrUrl) return null;
+    if (isVercelBlobUrl(keyOrUrl)) return keyOrUrl;
+    if (isAbsoluteUrl(keyOrUrl)) return keyOrUrl;
+    return r2SignedGetUrl(keyOrUrl, 60 * 60 * 24);
+  },
+);
+
+function isVercelBlobUrl(value: string): boolean {
+  return /^https?:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//.test(value);
+}
+
+function isAbsoluteUrl(value: string): boolean {
+  return /^https?:\/\//.test(value);
 }

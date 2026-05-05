@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
 import { getTenantId, requireCoach } from "@/lib/dal";
+import { resolveAssetUrl } from "@/lib/storage";
 
 import { ExportView } from "./export-view";
 
@@ -22,10 +23,12 @@ export default async function CheckerExportPage() {
       .then((rows) => rows[0] ?? null),
   ]);
 
+  const coachSignatureUrl = await resolveAssetUrl(coachRow?.signatureUrl);
+
   return (
     <ExportView
       coachName={session.user.name}
-      coachSignatureUrl={coachRow?.signatureUrl ?? null}
+      coachSignatureUrl={coachSignatureUrl}
       branding={branding}
     />
   );

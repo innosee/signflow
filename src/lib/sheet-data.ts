@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, or } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import type { StundennachweisSheet } from "@/components/stundennachweis";
+import { resolveAssetUrl } from "@/lib/storage";
 
 /**
  * Lädt alle Daten, die für das AfA-Stundennachweis-Sheet eines Teilnehmers
@@ -129,6 +130,10 @@ export async function loadStundennachweisSheet(params: {
       participantSignedAt: string | null;
     }
   >();
+  // Storage-Werte (Object-Key bei R2 oder URL bei Legacy-Vercel-Blob) auf
+  // signed/public URLs auflösen, bevor wir sie ins Sheet rendern. Sequenziell
+  // pro Eintrag, aber `resolveAssetUrl` cached innerhalb des Renders, sodass
+  // wiederholte Coach-Signaturen nicht mehrfach gesigned werden.
   for (const sig of signatures) {
     const slot = sigBySession.get(sig.sessionId) ?? {
       coachSignatureUrl: null,
@@ -136,11 +141,12 @@ export async function loadStundennachweisSheet(params: {
       participantSignatureUrl: null,
       participantSignedAt: null,
     };
+    const resolved = await resolveAssetUrl(sig.signatureUrl);
     if (sig.signerType === "coach") {
-      slot.coachSignatureUrl = sig.signatureUrl;
+      slot.coachSignatureUrl = resolved;
       slot.coachSignedAt = sig.signedAt.toISOString();
     } else {
-      slot.participantSignatureUrl = sig.signatureUrl;
+      slot.participantSignatureUrl = resolved;
       slot.participantSignedAt = sig.signedAt.toISOString();
     }
     sigBySession.set(sig.sessionId, slot);

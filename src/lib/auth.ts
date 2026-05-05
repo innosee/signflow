@@ -66,8 +66,19 @@ export const auth = betterAuth({
   },
 
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 Tage
-    updateAge: 60 * 60 * 24, // Session-Refresh alle 24h
+    // 12h Hard-Cap statt 7 Tage SaaS-Default. Begründung: Signflow verarbeitet
+    // AfA-Sozialdaten und (über den Checker) Art.-9-relevante Inhalte —
+    // 7 Tage Persistenz-Sessions wären für diesen Kontext zu lang. 12h
+    // erlaubt einen ganzen Arbeitstag eingeloggt zu bleiben, erzwingt aber
+    // beim nächsten Tag einen Re-Login (Laptop-über-Nacht-offen-Szenario).
+    //
+    // updateAge=1h heißt: aktive Sessions werden stündlich verlängert,
+    // aber nur bis zur expiresIn-Grenze. Idle-Timeout (Auto-Logout bei
+    // Inaktivität) bewusst NICHT eingebaut — Mehrwert ist im AfA-Kontext
+    // gering, UX-Kosten sind hoch, und das 12h-Hard-Cap deckt das
+    // DSGVO-relevante Worst-Case-Szenario.
+    expiresIn: 60 * 60 * 12, // 12h
+    updateAge: 60 * 60 * 1, // Session-Refresh stündlich bei Aktivität
     modelName: "authSession",
     // impersonatedBy wird vom admin-Plugin selbst registriert (siehe
     // better-auth/plugins/admin/schema). Kein manuelles additionalFields

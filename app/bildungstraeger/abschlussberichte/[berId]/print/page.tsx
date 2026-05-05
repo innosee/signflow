@@ -5,6 +5,7 @@ import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { resolveAssetUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,10 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
 
   if (!row || row.status !== "submitted") notFound();
 
-  const branding = await getBranding(tenantId);
+  const [branding, coachSignatureUrl] = await Promise.all([
+    getBranding(tenantId),
+    resolveAssetUrl(row.coachSignatureUrl),
+  ]);
 
   const teilnehmerName =
     [row.tnVorname, row.tnNachname].filter(Boolean).join(" ").trim() ||
@@ -124,7 +128,7 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
             ? String(row.courseUe)
             : ""),
         ortDatum,
-        coachSignatureUrl: isAdhoc ? null : row.coachSignatureUrl ?? null,
+        coachSignatureUrl: isAdhoc ? null : coachSignatureUrl,
         keineFehlzeiten: row.keineFehlzeiten,
         sonstiges: row.sonstiges,
         mustHaveOverrideReason: row.mustHaveOverrideReason,
