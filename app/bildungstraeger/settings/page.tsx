@@ -5,7 +5,7 @@ import {
   BillingPlaceholder,
   SettingsSection,
 } from "@/components/settings/section";
-import { DEFAULT_BRANDING, getBranding } from "@/lib/branding";
+import { getBranding } from "@/lib/branding";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
@@ -14,14 +14,7 @@ export default async function BildungstraegerSettingsPage() {
   const session = await requireBildungstraeger();
   const tenantId = getTenantId(session);
   const branding = await getBranding(tenantId);
-
-  // Im Branding-Form zeigen wir den Default-Block, wenn der BT noch keine
-  // eigene Adresse hinterlegt hat — sonst wäre das Textarea leer und der
-  // BT müsste die Erango-Werte mühsam abtippen.
-  const initialAddress =
-    branding.address === DEFAULT_BRANDING.address
-      ? branding.address
-      : branding.address;
+  const initialAddress = branding.address;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
