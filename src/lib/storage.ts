@@ -50,9 +50,18 @@ function getR2Client(): S3Client {
       "R2 credentials missing (R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY).",
     );
   }
+  // EU-jurisdiction-Buckets brauchen den jurisdiction-spezifischen
+  // Endpoint (`<account>.eu.r2.cloudflarestorage.com`), sonst gibt R2
+  // 403 AccessDenied. Default ist „eu" weil unser Bucket EU-only ist;
+  // wer einen Default-jurisdiction-Bucket hat, setzt R2_JURISDICTION=default.
+  const jurisdiction = process.env.R2_JURISDICTION ?? "eu";
+  const endpoint =
+    jurisdiction === "default"
+      ? `https://${accountId}.r2.cloudflarestorage.com`
+      : `https://${accountId}.${jurisdiction}.r2.cloudflarestorage.com`;
   return new S3Client({
     region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    endpoint,
     credentials: { accessKeyId, secretAccessKey },
   });
 }
