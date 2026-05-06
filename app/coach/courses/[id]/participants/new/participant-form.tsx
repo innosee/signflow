@@ -8,9 +8,16 @@ import { addParticipant, type AddParticipantState } from "../../actions";
 export function ParticipantForm({
   courseId,
   courseTitle,
+  smsEnabled,
 }: {
   courseId: string;
   courseTitle: string;
+  /**
+   * Globaler SMS-Feature-Gate. Solange `false`, ist das Phone-Feld
+   * komplett ausgeblendet und das Action-Backend ignoriert SMS-Channel-
+   * Wünsche.
+   */
+  smsEnabled: boolean;
 }) {
   const [state, action, pending] = useActionState<
     AddParticipantState,
@@ -38,14 +45,16 @@ export function ParticipantForm({
             required
             autoComplete="off"
           />
-          <Field
-            name="phone"
-            label="Mobilnummer (optional)"
-            type="tel"
-            inputMode="tel"
-            autoComplete="off"
-            placeholder="+4915712345678 oder 0157 1234567"
-          />
+          {smsEnabled && (
+            <Field
+              name="phone"
+              label="Mobilnummer (optional)"
+              type="tel"
+              inputMode="tel"
+              autoComplete="off"
+              placeholder="+4915712345678 oder 0157 1234567"
+            />
+          )}
         </div>
 
         <p className="text-xs text-zinc-500">
@@ -53,10 +62,12 @@ export function ParticipantForm({
           bestehenden Teilnehmer-Datensatz weiter (Name + Kunden-Nr. bleiben
           unverändert).
         </p>
-        <p className="text-xs text-zinc-500">
-          Mobilnummer ist optional — nur nötig, wenn der Teilnehmer den
-          Magic-Link per SMS statt per E-Mail bekommen soll.
-        </p>
+        {smsEnabled && (
+          <p className="text-xs text-zinc-500">
+            Mobilnummer ist optional — nur nötig, wenn der Teilnehmer den
+            Magic-Link per SMS statt per E-Mail bekommen soll.
+          </p>
+        )}
       </section>
 
       {state?.error && (

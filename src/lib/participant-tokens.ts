@@ -5,27 +5,37 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { sendParticipantMagicLink, sendParticipantPreview } from "@/lib/email";
-import { composeMagicLinkSms, isValidE164, sendSms } from "@/lib/sms";
+import {
+  composeMagicLinkSms,
+  isSmsEnabled,
+  isValidE164,
+  sendSms,
+} from "@/lib/sms";
 
 export type NotificationChannel = "email" | "sms";
 
 /**
- * Wirft, wenn der gewählte Channel nicht zustellbar ist (z.B. SMS ohne
- * hinterlegte Nummer). Coach-UI sollte das bereits vorab gaten, aber als
- * Defense-in-Depth fängt's hier nochmal — sonst verschwände ein Magic-Link
- * geräuschlos.
+ * Reduziert den vom Caller gewünschten Channel auf das, was tatsächlich
+ * zustellbar ist. Zwei Filter:
+ *  1. **Feature-Gate**: ist `SMS_ENABLED=true` nicht gesetzt, wird egal
+ *     was der Caller will, immer Email zurückgegeben — Defense-in-Depth
+ *     gegen UI-Bypass durch veraltete Tabs / direkte Action-Aufrufe.
+ *  2. **Deliverability**: SMS ohne gültige Nummer fällt still auf Email
+ *     zurück. (Strikteres Verhalten — Throw — kann der Caller bei Bedarf
+ *     selbst per Vorab-Check umsetzen.)
  */
-function assertChannelDeliverable(
-  channel: NotificationChannel,
+function effectiveChannel(
+  requested: NotificationChannel,
   participantPhone: string | null,
-): void {
-  if (channel === "sms") {
-    if (!participantPhone || !isValidE164(participantPhone)) {
-      throw new Error(
-        "SMS-Versand nicht möglich: Teilnehmer hat keine gültige Telefonnummer hinterlegt.",
-      );
-    }
+): NotificationChannel {
+  if (!isSmsEnabled()) return "email";
+  if (
+    requested === "sms" &&
+    (!participantPhone || !isValidE164(participantPhone))
+  ) {
+    return "email";
   }
+  return requested;
 }
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h per CLAUDE.md
@@ -99,7 +109,7 @@ export async function sendParticipantInvite(params: {
    */
   channel?: NotificationChannel;
 }): Promise<void> {
-  const channel: NotificationChannel = params.channel ?? "email";
+  const requested: NotificationChannel = params.channel ?? "email";
 
   const rows = await db
     .select({
@@ -128,10 +138,12 @@ export async function sendParticipantInvite(params: {
   const row = rows[0];
   if (!row) throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
 
-  // Channel-Vorab-Check VOR dem Token-Insert — sonst hätten wir bei
-  // SMS-Fail einen frischen Token in der DB, der den vorherigen
-  // invalidiert hat, ohne dass ein neuer Magic-Link den TN erreicht.
-  assertChannelDeliverable(channel, row.participantPhone);
+  // Channel-Resolution VOR dem Token-Insert: Feature-Gate + Deliverability
+  // werden hier zentral entschieden, sodass ein SMS-Wunsch ohne aktivierten
+  // Flag (oder ohne Phone) still auf Email umgeleitet wird, statt an einer
+  // Mid-Flight-Validierung zu sterben — wäre fatal, weil der Token-Insert
+  // den vorherigen Magic-Link bereits invalidiert hat.
+  const channel = effectiveChannel(requested, row.participantPhone);
 
   const { url } = await createParticipantMagicLink(params);
 
@@ -177,7 +189,7 @@ export async function sendParticipantPreviewInvite(params: {
   participantId: string;
   channel?: NotificationChannel;
 }): Promise<void> {
-  const channel: NotificationChannel = params.channel ?? "email";
+  const requested: NotificationChannel = params.channel ?? "email";
 
   const rows = await db
     .select({
@@ -208,7 +220,7 @@ export async function sendParticipantPreviewInvite(params: {
     throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
   }
 
-  assertChannelDeliverable(channel, row.participantPhone);
+  const channel = effectiveChannel(requested, row.participantPhone);
 
   const { url } = await createParticipantMagicLink(params);
 

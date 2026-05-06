@@ -32,6 +32,25 @@ function isMockMode(): boolean {
 }
 
 /**
+ * Globaler Feature-Gate für den SMS-Channel. Solange `false`, ist SMS
+ * in der Coach-UI komplett unsichtbar (Channel-Selector, Phone-Feld,
+ * SMS-Badge ausgeblendet) UND der Backend-Layer erzwingt Email-Channel
+ * unabhängig vom Caller-Wunsch (Defense-in-Depth gegen z.B. veraltete
+ * Browser-Tabs nach Flag-Off).
+ *
+ * Hintergrund: Schema-Migration + Code gehen live, BEVOR seven.io-Account
+ * + AVV + Datenschutz-Update fertig sind. Dark-Launch-Pattern (analog zu
+ * `signing_enabled` per User) sorgt dafür, dass das Feature in Production
+ * nichts tut, bis wir es bewusst flippen.
+ *
+ * Pendant-Env: `SMS_ENABLED=true` (server-only — Client erfährt den Wert
+ * über props aus dem Server-RSC, kein NEXT_PUBLIC_-Leak).
+ */
+export function isSmsEnabled(): boolean {
+  return process.env.SMS_ENABLED === "true";
+}
+
+/**
  * Der seven.io-Account erlaubt einen freien Absender-String (Alphanumeric
  * Sender ID). DE-MNOs erlauben max. 11 ASCII-Zeichen. Default „Signflow"
  * ist 8 Zeichen → safe. Nicht alle Zielländer akzeptieren Alpha-Sender;
