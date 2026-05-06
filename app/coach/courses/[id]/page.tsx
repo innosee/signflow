@@ -77,6 +77,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       id: schema.participants.id,
       name: schema.participants.name,
       email: schema.participants.email,
+      phone: schema.participants.phone,
       kundenNr: schema.participants.kundenNr,
     })
     .from(schema.courseParticipants)
@@ -86,6 +87,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     )
     .where(eq(schema.courseParticipants.courseId, id))
     .orderBy(asc(schema.participants.name));
+
+  const participantsWithPhone = participants.filter((p) => !!p.phone).length;
 
   // Sessions + aggregierte Signatur-Counts pro Session in einer Query.
   // Spart N+1 und zeigt direkt "Coach ✓ · 2/3 TN", Status-Badge und ob
@@ -405,6 +408,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               <NotifyParticipantsButton
                 courseId={course.id}
                 participantCount={participants.length}
+                participantsWithPhone={participantsWithPhone}
               />
             </div>
           )}
@@ -422,6 +426,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   <div className="font-medium">{p.name}</div>
                   <div className="text-xs text-zinc-500">
                     Kd-Nr. {p.kundenNr} · {p.email}
+                    {p.phone && (
+                      <span
+                        title={`SMS-Versand möglich: ${p.phone}`}
+                        className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800"
+                      >
+                        SMS
+                      </span>
+                    )}
                   </div>
                 </div>
 

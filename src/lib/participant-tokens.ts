@@ -5,6 +5,28 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { sendParticipantMagicLink, sendParticipantPreview } from "@/lib/email";
+import { composeMagicLinkSms, isValidE164, sendSms } from "@/lib/sms";
+
+export type NotificationChannel = "email" | "sms";
+
+/**
+ * Wirft, wenn der gewählte Channel nicht zustellbar ist (z.B. SMS ohne
+ * hinterlegte Nummer). Coach-UI sollte das bereits vorab gaten, aber als
+ * Defense-in-Depth fängt's hier nochmal — sonst verschwände ein Magic-Link
+ * geräuschlos.
+ */
+function assertChannelDeliverable(
+  channel: NotificationChannel,
+  participantPhone: string | null,
+): void {
+  if (channel === "sms") {
+    if (!participantPhone || !isValidE164(participantPhone)) {
+      throw new Error(
+        "SMS-Versand nicht möglich: Teilnehmer hat keine gültige Telefonnummer hinterlegt.",
+      );
+    }
+  }
+}
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h per CLAUDE.md
 
@@ -70,11 +92,20 @@ export async function createParticipantMagicLink(params: {
 export async function sendParticipantInvite(params: {
   courseId: string;
   participantId: string;
+  /**
+   * Zustellkanal. Default `"email"` für Bestandsverhalten. SMS ist
+   * Fallback für Teilnehmer, die mit Email-Clients/Spam-Ordnern
+   * überfordert sind — siehe Auto-Memory `project_participant_delivery_channels`.
+   */
+  channel?: NotificationChannel;
 }): Promise<void> {
+  const channel: NotificationChannel = params.channel ?? "email";
+
   const rows = await db
     .select({
       participantName: schema.participants.name,
       participantEmail: schema.participants.email,
+      participantPhone: schema.participants.phone,
       courseTitle: schema.courses.title,
     })
     .from(schema.courseParticipants)
@@ -97,7 +128,24 @@ export async function sendParticipantInvite(params: {
   const row = rows[0];
   if (!row) throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
 
+  // Channel-Vorab-Check VOR dem Token-Insert — sonst hätten wir bei
+  // SMS-Fail einen frischen Token in der DB, der den vorherigen
+  // invalidiert hat, ohne dass ein neuer Magic-Link den TN erreicht.
+  assertChannelDeliverable(channel, row.participantPhone);
+
   const { url } = await createParticipantMagicLink(params);
+
+  if (channel === "sms") {
+    await sendSms({
+      to: row.participantPhone!,
+      body: composeMagicLinkSms({
+        participantName: row.participantName,
+        courseTitle: row.courseTitle,
+        url,
+      }),
+    });
+    return;
+  }
 
   await sendParticipantMagicLink({
     to: row.participantEmail,
@@ -127,11 +175,15 @@ export async function sendParticipantInvite(params: {
 export async function sendParticipantPreviewInvite(params: {
   courseId: string;
   participantId: string;
+  channel?: NotificationChannel;
 }): Promise<void> {
+  const channel: NotificationChannel = params.channel ?? "email";
+
   const rows = await db
     .select({
       participantName: schema.participants.name,
       participantEmail: schema.participants.email,
+      participantPhone: schema.participants.phone,
       courseTitle: schema.courses.title,
     })
     .from(schema.courseParticipants)
@@ -156,7 +208,21 @@ export async function sendParticipantPreviewInvite(params: {
     throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
   }
 
+  assertChannelDeliverable(channel, row.participantPhone);
+
   const { url } = await createParticipantMagicLink(params);
+
+  if (channel === "sms") {
+    // Preview-spezifische SMS-Variante: anderer Wortlaut als Magic-Link
+    // (TN soll wissen, dass es um Freigabe statt um Session-Sign geht).
+    const firstName = row.participantName.split(" ")[0] ?? "";
+    const greeting = firstName ? `Hallo ${firstName}, ` : "";
+    await sendSms({
+      to: row.participantPhone!,
+      body: `${greeting}dein Stundennachweis für „${row.courseTitle}" ist fertig — bitte ansehen und freigeben: ${url} (24h gültig).`,
+    });
+    return;
+  }
 
   await sendParticipantPreview({
     to: row.participantEmail,

@@ -38,12 +38,24 @@ export function ParticipantForm({
             required
             autoComplete="off"
           />
+          <Field
+            name="phone"
+            label="Mobilnummer (optional)"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            placeholder="+4915712345678 oder 0157 1234567"
+          />
         </div>
 
         <p className="text-xs text-zinc-500">
           Wenn die E-Mail schon in Signflow existiert, verwenden wir den
           bestehenden Teilnehmer-Datensatz weiter (Name + Kunden-Nr. bleiben
           unverändert).
+        </p>
+        <p className="text-xs text-zinc-500">
+          Mobilnummer ist optional — nur nötig, wenn der Teilnehmer den
+          Magic-Link per SMS statt per E-Mail bekommen soll.
         </p>
       </section>
 

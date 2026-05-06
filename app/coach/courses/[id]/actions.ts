@@ -14,10 +14,12 @@ import {
 } from "@/lib/dal";
 import { sealWithFes } from "@/lib/firma";
 import {
+  type NotificationChannel,
   sendParticipantInvite,
   sendParticipantPreviewInvite,
 } from "@/lib/participant-tokens";
 import { recomputeSessionStatus } from "@/lib/session-status";
+import { isValidE164, normalizePhoneInput } from "@/lib/sms";
 
 export type SessionFormState = { error?: string } | undefined;
 
@@ -211,6 +213,7 @@ export async function addParticipant(
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const kundenNr = String(formData.get("kundenNr") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
 
   if (!courseId) return { error: "Kurs fehlt." };
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
@@ -223,6 +226,22 @@ export async function addParticipant(
     // E-Mail nicht in die Fehlermeldung echo'en — PII gehört nicht in
     // Error-Logs oder Browser-DevTools.
     return { error: "Ungültige E-Mail-Adresse." };
+  }
+
+  // Phone ist optional; wenn gesetzt, normalisieren + strikt validieren.
+  // Bei Reuse eines bestehenden TN überschreiben wir die hinterlegte Nummer
+  // bewusst NICHT — sonst würde ein zweiter Coach versehentlich die im
+  // anderen Kurs eingetragene Nummer überschreiben.
+  let phone: string | null = null;
+  if (phoneRaw.length > 0) {
+    const normalized = normalizePhoneInput(phoneRaw);
+    if (!isValidE164(normalized)) {
+      return {
+        error:
+          "Mobilnummer ist ungültig — bitte im Format +4915712345678 eingeben (oder Feld leer lassen).",
+      };
+    }
+    phone = normalized;
   }
 
   let reused = false;
@@ -247,7 +266,7 @@ export async function addParticipant(
       } else {
         const [created] = await tx
           .insert(schema.participants)
-          .values({ tenantId, name, email, kundenNr })
+          .values({ tenantId, name, email, kundenNr, phone })
           .returning({ id: schema.participants.id });
         if (!created) throw new Error("PARTICIPANT_INSERT_FAILED");
         participantId = created.id;
@@ -309,6 +328,14 @@ export async function notifyParticipants(
   const courseId = String(formData.get("courseId") ?? "").trim();
   if (!courseId) return { error: "Kurs fehlt." };
 
+  // `channel` aus dem Form: "email" (Default, alle bekommen Mail) oder
+  // "sms" (jeder mit hinterlegter Nummer bekommt SMS, alle anderen
+  // fallen zurück auf E-Mail). Per-TN-Channel-Präferenz heben wir uns
+  // für später auf — der Bulk-Switch deckt 90 % der Fälle.
+  const channelRaw = String(formData.get("channel") ?? "email").trim();
+  const preferredChannel: NotificationChannel =
+    channelRaw === "sms" ? "sms" : "email";
+
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
@@ -316,6 +343,7 @@ export async function notifyParticipants(
     .select({
       participantId: schema.participants.id,
       email: schema.participants.email,
+      phone: schema.participants.phone,
     })
     .from(schema.courseParticipants)
     .innerJoin(
@@ -331,10 +359,17 @@ export async function notifyParticipants(
   const failedEmails: string[] = [];
   let success = 0;
   for (const p of participants) {
+    // Channel-Auswahl pro TN: preferred=SMS nur wenn Phone vorhanden,
+    // sonst silent fallback auf Email — sonst hätte ein TN ohne Phone
+    // gar keine Benachrichtigung bekommen.
+    const channel: NotificationChannel =
+      preferredChannel === "sms" && p.phone ? "sms" : "email";
+
     try {
       await sendParticipantInvite({
         courseId: ownedCourseId,
         participantId: p.participantId,
+        channel,
       });
       success++;
     } catch (err) {

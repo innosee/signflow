@@ -313,6 +313,14 @@ export const participants = pgTable("participants", {
    * nullable hinzufügen → vorhandene Zeilen füllen → auf NOT NULL setzen.
    */
   kundenNr: text("kunden_nr").notNull(),
+  /**
+   * Optionale Telefonnummer im E.164-Format (z.B. `+4915712345678`).
+   * Wird ausschließlich für Magic-Link-Versand per SMS verwendet, falls
+   * der Coach diesen Channel statt E-Mail wählt. NULL bedeutet: nur
+   * E-Mail möglich. Validierung beim Erfassen, nicht im DB-Constraint —
+   * Migrationen aus dem Bestand sollen nicht an Format-Strenge scheitern.
+   */
+  phone: text("phone"),
   signatureUrl: text("signature_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
