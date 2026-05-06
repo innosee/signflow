@@ -27,7 +27,8 @@ export default function DatenschutzPage() {
 
       <Section title="1. Verantwortlicher">
         <p>
-          Verantwortlicher im Sinne der DSGVO ist:
+          Verantwortlicher für den Betrieb dieser Website und der zentralen
+          Plattformfunktionen ist:
         </p>
         <p>
           innosee GmbH
@@ -55,6 +56,17 @@ export default function DatenschutzPage() {
             Impressum
           </Link>
           .
+        </p>
+        <p>
+          <Placeholder>
+            Multi-Tenant-Kontext: Signflow wird seit 2026-05-05 mehrmandantenfähig
+            betrieben. Für Kurs-, Sitzungs- und Teilnehmerdaten ist in der Regel
+            der jeweilige Bildungsträger Verantwortlicher; innosee GmbH handelt
+            insoweit als Auftragsverarbeiterin nach Art. 28 DSGVO. Die genaue
+            Abgrenzung (Joint Controllership vs. AV) muss durch die
+            DSGVO-Beratung formuliert und je Bildungsträger per AVV bestätigt
+            werden.
+          </Placeholder>
         </p>
       </Section>
 
@@ -206,9 +218,9 @@ export default function DatenschutzPage() {
                 region="EU (AWS Frankfurt), Unternehmenssitz USA — SCCs"
               />
               <ProcessorRow
-                name="Vercel Blob"
-                purpose="Speicherung der Unterschriftsbilder"
-                region="EU — SCCs"
+                name="Cloudflare, Inc."
+                purpose="Objekt-Storage (R2) für Unterschriftsbilder, Logos und gesiegelte PDFs; privater Bucket, Zugriff nur über kurzlebige signierte URLs"
+                region="EU-Jurisdiction (Frankfurt/Amsterdam), Unternehmenssitz USA — SCCs"
               />
               <ProcessorRow
                 name="Resend Inc."
@@ -340,7 +352,7 @@ export default function DatenschutzPage() {
           unter dieser Adresse abrufbare Fassung.
         </p>
         <p className="text-xs text-zinc-500">
-          Stand: <Placeholder>Datum bei Veröffentlichung einsetzen</Placeholder>
+          Stand: 6. Mai 2026 (Entwurf)
         </p>
       </Section>
     </article>
