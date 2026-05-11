@@ -62,7 +62,7 @@ export default function CookiesPage() {
                   über mehrere Seitenaufrufe aufrecht.
                 </td>
                 <td className="py-2 pr-4 align-top">
-                  Sitzung, maximal 7 Tage
+                  Sitzung, maximal 12 Stunden
                 </td>
                 <td className="py-2 align-top">Technisch notwendig</td>
               </tr>
