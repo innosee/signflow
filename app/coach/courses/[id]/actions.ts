@@ -411,6 +411,75 @@ export async function updateParticipant(
   redirect(`/coach/courses/${ownedCourseId}`);
 }
 
+/**
+ * QR-Code-Übergabe: erzeugt einen frischen Magic-Link für den TN und
+ * gibt ihn samt PNG-Data-URL für den QR-Code zurück. Der Coach zeigt
+ * den QR direkt auf seinem Bildschirm, TN scannt mit der Handy-Kamera.
+ *
+ * Semantisch wie ein Notify-Click: alte Tokens für diese (Kurs, TN)-
+ * Paarung werden invalidiert. UI informiert den Coach darüber.
+ *
+ * Bewusst KEIN Form-Action mit useActionState — wird per direktem
+ * Async-Call aus dem Client gerufen, weil das Modal-Open-Event kein
+ * Submit ist und Form-State unnötigen Overhead bedeuten würde.
+ */
+export async function createParticipantQrLink(params: {
+  courseId: string;
+  participantId: string;
+}): Promise<
+  | { url: string; qrDataUrl: string; error?: undefined }
+  | { error: string; url?: undefined; qrDataUrl?: undefined }
+> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
+
+  const ownedCourseId = await requireOwnedCourseId(params.courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const [enrollment] = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(
+      and(
+        eq(schema.courseParticipants.courseId, ownedCourseId),
+        eq(schema.courseParticipants.participantId, params.participantId),
+        eq(schema.participants.tenantId, tenantId),
+      ),
+    )
+    .limit(1);
+  if (!enrollment) return { error: "Teilnehmer nicht in diesem Kurs." };
+
+  // Dynamic import — qrcode-Lib wird sonst in jeden Action-Bundle gezogen,
+  // obwohl nur dieser eine Code-Pfad sie braucht.
+  const [{ createParticipantMagicLink }, QRCode] = await Promise.all([
+    import("@/lib/participant-tokens"),
+    import("qrcode"),
+  ]);
+
+  const { url } = await createParticipantMagicLink({
+    courseId: ownedCourseId,
+    participantId: params.participantId,
+  });
+
+  // PNG-Data-URL statt SVG: PNG ist binary → kein XSS-Risiko durch
+  // dangerouslySetInnerHTML notwendig, einfaches <img src={…}> reicht.
+  // 320px Breite ist groß genug für scharfe Scans aus ~30 cm Entfernung
+  // auf üblichen Coach-Bildschirmen.
+  const qrDataUrl = await QRCode.toDataURL(url, {
+    margin: 1,
+    width: 320,
+    errorCorrectionLevel: "M",
+  });
+
+  return { url, qrDataUrl };
+}
+
 export type NotifyState =
   | { success?: number; failedEmails?: string[]; error?: string }
   | undefined;

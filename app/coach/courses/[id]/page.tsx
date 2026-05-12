@@ -11,6 +11,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { CoachSignForm } from "./coach-sign-form";
 import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
+import { QrHandoverButton } from "./qr-handover-button";
 import { SealCourseButton } from "./seal-button";
 
 export const dynamic = "force-dynamic";
@@ -500,13 +501,20 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                     Nachweis
                   </Link>
                   {!impersonating && (
-                    <Link
-                      href={`/coach/courses/${course.id}/teilnehmer/${p.id}/edit`}
-                      className="text-zinc-700 underline-offset-2 hover:underline"
-                      title="Stammdaten bearbeiten"
-                    >
-                      Bearbeiten
-                    </Link>
+                    <>
+                      <QrHandoverButton
+                        courseId={course.id}
+                        participantId={p.id}
+                        participantName={p.name}
+                      />
+                      <Link
+                        href={`/coach/courses/${course.id}/teilnehmer/${p.id}/edit`}
+                        className="text-zinc-700 underline-offset-2 hover:underline"
+                        title="Stammdaten bearbeiten"
+                      >
+                        Bearbeiten
+                      </Link>
+                    </>
                   )}
                 </div>
               </li>
