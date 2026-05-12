@@ -499,6 +499,15 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   >
                     Nachweis
                   </Link>
+                  {!impersonating && (
+                    <Link
+                      href={`/coach/courses/${course.id}/teilnehmer/${p.id}/edit`}
+                      className="text-zinc-700 underline-offset-2 hover:underline"
+                      title="Stammdaten bearbeiten"
+                    >
+                      Bearbeiten
+                    </Link>
+                  )}
                 </div>
               </li>
             );

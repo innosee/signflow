@@ -304,6 +304,113 @@ export async function addParticipant(
   );
 }
 
+export type UpdateParticipantState = { error?: string } | undefined;
+
+/**
+ * Update der TN-Stammdaten (Name, Email, Kunden-Nr., Phone). Coach muss
+ * den Kurs besitzen, kein Impersonation. TN ist über `course_participants`
+ * an den Kurs gebunden — wir prüfen die Paarung, bevor der zentrale
+ * `participants`-Datensatz angefasst wird, sonst könnte ein Coach durch
+ * URL-Manipulation an einen TN ran, den er gar nicht betreut.
+ *
+ * Email-Wechsel ist erlaubt — `participantId` bleibt stabil, aktive Magic-
+ * Link-Tokens hängen nicht an der Mail. Bei Konflikt mit existierender
+ * Email im selben Tenant (tenant-scoped UNIQUE) wirft DB und wir geben
+ * eine saubere Fehlermeldung zurück.
+ *
+ * Beachtung: bei Reuse über mehrere Kurse (siehe addParticipant) teilen
+ * sich die Kurse den Stammdatensatz. Eine Stammdaten-Änderung wirkt
+ * also auf ALLE Kurse, in denen der TN eingeschrieben ist — das ist
+ * gewollt (Stammdaten sind eben Stamm). Coach wird durch den Confirm-
+ * Step im UI darauf hingewiesen, falls der TN mehrfach enrollt ist.
+ */
+export async function updateParticipant(
+  _prev: UpdateParticipantState,
+  formData: FormData,
+): Promise<UpdateParticipantState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const participantId = String(formData.get("participantId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const kundenNr = String(formData.get("kundenNr") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+
+  if (!courseId || !participantId) {
+    return { error: "Kurs oder Teilnehmer fehlt." };
+  }
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  if (!name || !email || !kundenNr) {
+    return { error: "Name, E-Mail und Kunden-Nr. sind Pflicht." };
+  }
+  if (!looksLikeEmail(email)) {
+    return { error: "Ungültige E-Mail-Adresse." };
+  }
+
+  // Phone optional + E.164 erzwingen wenn gesetzt — selbe Logik wie in
+  // addParticipant, hier aber explizit gegen leeren String zu NULL
+  // unterscheiden, damit Coach eine Nummer auch wieder entfernen kann.
+  let phone: string | null = null;
+  if (phoneRaw.length > 0) {
+    const normalized = normalizePhoneInput(phoneRaw);
+    if (!isValidE164(normalized)) {
+      return {
+        error:
+          "Mobilnummer ist ungültig — bitte im Format +4915712345678 eingeben (oder Feld leer lassen).",
+      };
+    }
+    phone = normalized;
+  }
+
+  // TN muss tatsächlich in diesem Kurs eingeschrieben sein — verhindert,
+  // dass ein Coach einen TN aus einem fremden Kurs ändert. tenant_id
+  // filtert zusätzlich gegen Cross-Tenant-Zugriffe (Defense-in-Depth).
+  const [enrollment] = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(
+      and(
+        eq(schema.courseParticipants.courseId, ownedCourseId),
+        eq(schema.courseParticipants.participantId, participantId),
+        eq(schema.participants.tenantId, tenantId),
+      ),
+    )
+    .limit(1);
+  if (!enrollment) {
+    return { error: "Teilnehmer ist nicht in diesem Kurs." };
+  }
+
+  try {
+    await db
+      .update(schema.participants)
+      .set({ name, email, kundenNr, phone })
+      .where(eq(schema.participants.id, participantId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Unique-Verletzung auf (tenant_id, email) — Coach hat versucht
+    // die Email auf eine im selben Tenant bereits genutzte zu setzen.
+    if (/unique/i.test(message) || /duplicate/i.test(message)) {
+      return {
+        error:
+          "Diese E-Mail-Adresse ist im Bildungsträger bereits einem anderen Teilnehmer zugeordnet.",
+      };
+    }
+    return { error: `Aktualisierung fehlgeschlagen (${message}).` };
+  }
+
+  redirect(`/coach/courses/${ownedCourseId}`);
+}
+
 export type NotifyState =
   | { success?: number; failedEmails?: string[]; error?: string }
   | undefined;
