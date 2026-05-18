@@ -13,7 +13,13 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "coach") {
+  // Coach + Bildungsträger nutzen beide den Azure-Check (Coach im Editor,
+  // BT im Review-Checker). Beide Rollen sind authentifiziert und sehen nur
+  // das anonymisierte Input — Azure bekommt nie Klartext.
+  if (
+    session.user.role !== "coach" &&
+    session.user.role !== "bildungstraeger"
+  ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (isImpersonating(session)) {

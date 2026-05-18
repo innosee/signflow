@@ -25,7 +25,14 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "coach") {
+  // Coach nutzt den Token für den Coach-Editor, Bildungsträger für den
+  // BT-Review-Checker (PR #54). Beide Rollen sind authentifiziert und
+  // berechtigt, den Anonymizer zu nutzen — der Anonymizer selbst hält
+  // keine sensiblen Daten, er gibt nur Klartext anonymisiert zurück.
+  if (
+    session.user.role !== "coach" &&
+    session.user.role !== "bildungstraeger"
+  ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (isImpersonating(session)) {
