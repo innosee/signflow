@@ -72,6 +72,17 @@ export function ReviewSidebar({
 
   return (
     <aside aria-label="Prüfungsergebnis" className="sticky top-4 space-y-4">
+      {result.massnahmeMismatch?.detected && (
+        <section className="rounded-xl border-2 border-orange-400 bg-orange-50 p-4">
+          <h3 className="text-sm font-semibold text-orange-900">
+            ⚠ Maßnahme-Inhalts-Mismatch
+          </h3>
+          <p className="mt-1.5 text-xs leading-relaxed text-orange-900">
+            {result.massnahmeMismatch.hint}
+          </p>
+        </section>
+      )}
+
       <StatusPill
         openCount={openCount}
         status={result.status}

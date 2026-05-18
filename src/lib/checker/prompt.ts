@@ -151,6 +151,27 @@ ${mustHaveList}
 
 **Nutze ausschließlich die oben gelisteten Topic-IDs** — keine Topics aus anderen Maßnahmetypen, keine erfundenen IDs.
 
+### C.1. Maßnahme-Inhalts-Konsistenz
+
+Prüfe, ob die im Bericht beschriebenen Inhalte zur gewählten Maßnahme **${massnahmeTyp}** passen.
+
+**Erwartete Schwerpunkte pro Maßnahme:**
+- **EKC** (Karriere-Coaching): Standortbestimmung, Bewerbungsstrategie, Vermittlung in Anstellung, Stellenmarkt-Analyse, Selbstmarketing
+- **ESC** (Standort-Coaching): wie EKC, Schwerpunkt liegt auf der Klärungsphase
+- **EGC** (Gründungs-Coaching): Geschäfts-Idee, Businessplan, Markt-Analyse, Finanzierung, Rechtsform, Gewerbeanmeldung, Tragfähigkeit — TN strebt **Selbständigkeit** an, NICHT Anstellung
+- **ESCA** (Ausbildungs-Coaching): Lernziele, Ausbildungs-Etappen, Prüfungsvorbereitung, Konflikte im Ausbildungs-Verhältnis — TN ist in **laufender Ausbildung**
+
+**Mismatch-Erkennung:** wenn der Bericht **überwiegend** (nicht nur am Rand erwähnt) Themen einer ANDEREN Maßnahme beschreibt, setze \`massnahmeMismatch.detected = true\` und gib in \`massnahmeMismatch.hint\` einen sachlichen Hinweis: welche Themen dominieren, zu welcher Maßnahme die eher passen würden, und ein Lösungs-Vorschlag (Maßnahmetyp korrigieren ODER Bericht-Inhalt auf den passenden Fokus umstellen).
+
+**Beispiele:**
+- EKC ausgewählt, Bericht beschreibt überwiegend Businessplan/Liquiditätsplanung/Tragfähigkeit/Gewerbeanmeldung → \`detected=true\`, hint = „Bericht beschreibt überwiegend Gründungs-Themen, gewählter Maßnahmetyp ist aber EKC (Karriere-Coaching). Entweder Maßnahmetyp auf EGC korrigieren oder Bericht inhaltlich auf Karriere-/Bewerbungs-Fokus ausrichten."
+- EGC ausgewählt, Bericht beschreibt überwiegend Bewerbungs-Strategien für Anstellung → \`detected=true\`
+- EKC ausgewählt, Bericht streift Selbständigkeit am Rand (z.B. „TN überlegt langfristig auch Gründung") → \`detected=false\` (nur erwähnt, nicht dominant)
+
+**Konservativ sein:** im Zweifel \`detected=false\`. Wir wollen Coaches nicht für jedes themen-grenzwertige Wort flaggen. Nur wenn ein neutraler Außenstehender klar sagen würde „das ist eigentlich ein anderer Maßnahme-Bericht".
+
+Wenn kein Mismatch: \`detected=false\`, \`hint=""\`.
+
 ### D. Tonalität — NUR bei klarem Muster
 
 Setze \`tonalityFeedback\` nur, wenn der **Gesamteindruck** stark wertend, kalt oder pathologisierend ist. Bei einem normalen, sachlichen Bericht: leer lassen. Einzelne stilistische Auffälligkeiten gehören NICHT hierher.
@@ -162,7 +183,7 @@ Prüfe folgende Probes mit einer 3-Wege-Antwort. Adressiert die häufige Lücke 
 - \`bewerbungsunterlagen\` — wurden Bewerbungsunterlagen überarbeitet/optimiert?
 - \`bewerbungen_konkret\` — wurden Bewerbungen während der Maßnahme verschickt? Wenn ja, an welche konkreten Arbeitgeber/Positionen?
 - \`vorstellungsgespraeche\` — wurden Vorstellungsgespräche vorbereitet/geübt?
-- \`methoden_erklaert\` — wenn der Coach Methoden nennt (z.B. ZRM, IKIGAI, EMDR): hat er sie in 1 Satz für Vermittlungs-Laien erklärt?
+- \`methoden_erklaert\` — wenn der Coach **benannte etablierte Methoden** nennt (Marken-Methoden wie ZRM, IKIGAI, EMDR, MBTI, NLP, Big-Five, GROW-Modell, Reiss-Profile, DISG, Werte-Quadrat, Inneres Team, …): hat er sie in 1 Satz für Vermittlungs-Laien erklärt? **WICHTIG:** allgemeine Coaching-Themen/Aktivitäten wie „Selbstmarketing", „Netzwerkaufbau", „Bewerbungstraining", „Reflexion", „Zielarbeit", „Standortbestimmung", „Strategie" sind KEINE Methoden in diesem Sinne — bei diesen Aktivitäten erwartet niemand eine Erklärung. Setze dann \`not_relevant\` mit Hinweis „keine benannten Methoden im Bericht", NICHT \`missing\`.
 - \`anstellung_konkret\` — falls eine Anstellung erreicht wurde: wird Arbeitgeber + Position konkret benannt?
 - \`weiterbildung_zielposition\` — falls eine Weiterbildung empfohlen wird: für welche konkrete Berufsposition?
 
@@ -208,7 +229,11 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
       "hint": "nur bei answer=missing oder not_relevant: kurze sachliche Begründung"
     }
   ],
-  "positiveAspects": ["1–3 sehr kurze Stichworte, optional — leer lassen wenn nichts substanziell positiv ist"]
+  "positiveAspects": ["1–3 sehr kurze Stichworte, optional — leer lassen wenn nichts substanziell positiv ist"],
+  "massnahmeMismatch": {
+    "detected": true | false,
+    "hint": "nur bei detected=true: welche Themen aus welcher anderen Maßnahme dominieren + Lösungs-Vorschlag (Maßnahmetyp korrigieren ODER Bericht-Fokus umstellen). Bei detected=false: leerer String."
+  }
 }
 
 ## Beispiele für Umformulierungen

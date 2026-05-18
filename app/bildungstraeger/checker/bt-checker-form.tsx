@@ -498,6 +498,17 @@ function FindingsPanel({
 
   return (
     <div className="space-y-4">
+      {result.massnahmeMismatch?.detected && (
+        <div className="rounded-xl border-2 border-orange-400 bg-orange-50 p-4 text-sm text-orange-900">
+          <p className="font-semibold">
+            ⚠ Maßnahme-Inhalts-Mismatch erkannt
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed">
+            {result.massnahmeMismatch.hint}
+          </p>
+        </div>
+      )}
+
       <div
         className={`rounded-xl border p-4 text-sm ${
           okBadge

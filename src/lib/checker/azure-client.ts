@@ -6,6 +6,7 @@ import {
   resolveMassnahmeTyp,
   type CheckerInput,
   type CheckerResult,
+  type MassnahmeMismatch,
   type MustHaveCoverage,
   type MustHaveTopic,
   type ProbeAnswer,
@@ -201,8 +202,25 @@ function parseAndValidate(
     .map((s) => s.trim())
     .filter((s) => s.length <= 200);
 
+  // Maßnahme-Inhalts-Mismatch (Stage 2.1). Nur durchreichen wenn das LLM
+  // explizit `detected=true` UND eine Begründung geliefert hat — sonst
+  // weglassen, damit die UI keine leere Warnbox rendert.
+  let massnahmeMismatch: MassnahmeMismatch | undefined;
+  if (obj.massnahmeMismatch && typeof obj.massnahmeMismatch === "object") {
+    const mm = obj.massnahmeMismatch as Record<string, unknown>;
+    if (mm.detected === true) {
+      const hint = typeof mm.hint === "string" ? mm.hint.trim() : "";
+      if (hint.length > 0) {
+        massnahmeMismatch = { detected: true, hint };
+      }
+    }
+  }
+
   // Canonicaler Status: pass nur wenn KEIN hard_block UND alle Must-Haves
   // covered. soft_flags sind Hinweise und blockieren Submit nicht.
+  // Maßnahme-Mismatch ist ein eigener Kanal — blockt das Pass nicht
+  // automatisch, weil's konzeptionell „falsche Maßnahme gewählt" sein
+  // könnte und nicht „Bericht-Mangel". Der Coach/BT entscheidet manuell.
   const hasHardBlock = violations.some((v) => v.severity === "hard_block");
   const allMustHavesCovered = mustHaves.every((m) => m.covered);
   const status: CheckerResult["status"] =
@@ -215,6 +233,7 @@ function parseAndValidate(
     tonalityFeedback,
     konkretheit,
     positiveAspects: positiveAspects.length > 0 ? positiveAspects : undefined,
+    massnahmeMismatch,
   };
 }
 

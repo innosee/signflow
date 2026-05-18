@@ -302,6 +302,27 @@ export type ProbeResult = {
   hint?: string;
 };
 
+/**
+ * Maßnahme-Inhalts-Konsistenz (Stage 2.1). Adressiert Victorias
+ * Beobachtung, dass Coaches die Maßnahmen-Inhalte oft mischen — z.B.
+ * EKC (Karriere-Coaching) ausgewählt, aber überwiegend Gründungs-
+ * Themen bearbeitet. Der Checker erkennt das jetzt explizit und
+ * meldet einen Mismatch.
+ *
+ * `detected=false` → leer in der UI (kein Lärm bei sauberen Berichten).
+ * `detected=true` → prominentes Banner oben in BT-Form + Coach-Sidebar,
+ * Mail beginnt mit der Mismatch-Warnung VOR den positiven Aspekten.
+ */
+export type MassnahmeMismatch = {
+  detected: boolean;
+  /**
+   * Bei `detected=true`: konkreter Hinweis welche Themen aus welcher
+   * anderen Maßnahme der Bericht beschreibt + Vorschlag (anderen Typ
+   * wählen ODER Bericht-Inhalt umstellen). Bei `false` leer.
+   */
+  hint: string;
+};
+
 export type CheckerResult = {
   status: "pass" | "needs_revision";
   mustHaves: MustHaveCoverage[];
@@ -320,6 +341,12 @@ export type CheckerResult = {
    * Mängel-Mail).
    */
   positiveAspects?: string[];
+  /**
+   * Maßnahme-Inhalts-Mismatch — Stage 2.1. Optional aus Backwards-Compat
+   * mit Snapshots vor Stage 2.1; wenn vorhanden + detected=true rendert
+   * die UI ein prominentes Warnbanner.
+   */
+  massnahmeMismatch?: MassnahmeMismatch;
 };
 
 /**
@@ -347,6 +374,13 @@ export function isCheckerResult(value: unknown): value is CheckerResult {
   if (v.positiveAspects !== undefined) {
     if (!Array.isArray(v.positiveAspects)) return false;
     if (v.positiveAspects.some((s) => typeof s !== "string")) return false;
+  }
+  if (v.massnahmeMismatch !== undefined) {
+    const m = v.massnahmeMismatch;
+    if (!m || typeof m !== "object") return false;
+    const mr = m as Record<string, unknown>;
+    if (typeof mr.detected !== "boolean") return false;
+    if (typeof mr.hint !== "string") return false;
   }
   return true;
 }
