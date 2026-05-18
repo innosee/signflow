@@ -13,7 +13,9 @@ import { auth } from "@/lib/auth";
 import {
   getCurrentSession,
   getTenantId,
+  getTenantOwnerId,
   isImpersonating,
+  isTenantOwner,
   requireBildungstraeger,
 } from "@/lib/dal";
 
@@ -155,6 +157,13 @@ function backToBildungstraegerWithError(code: string): never {
 export async function impersonateCoach(formData: FormData): Promise<void> {
   const session = await requireBildungstraeger();
   const tenantId = getTenantId(session);
+  // Owner-Gate: nur der älteste aktive BT-User des Tenants darf Coaches
+  // impersonaten. Eingeladene Kolleg:innen kriegen sonst zwar Datenbank-
+  // Zugriff auf Berichte, aber keinen Coach-Identitäts-Wechsel — der ist
+  // beweisrechtlich sensibel und bleibt am Owner.
+  if (!(await isTenantOwner(session))) {
+    backToBildungstraegerWithError("not_owner");
+  }
   const userId = String(formData.get("userId") ?? "");
   if (!userId) backToBildungstraegerWithError("invalid");
 
@@ -488,4 +497,199 @@ export async function submitCourseToAfa(
 
   revalidatePath("/bildungstraeger/submissions");
   return { submitted: true };
+}
+
+/**
+ * Lädt eine weitere Person als BT-Mitarbeiter:in in den eigenen Tenant ein.
+ * Eingeladene haben dieselben Rechte wie der einladende User (Coaches
+ * verwalten, Berichte prüfen, weitere BT-Personen einladen) — Ausnahme
+ * ist Impersonation, die per Owner-Gate nur dem ältesten aktiven BT-User
+ * vorbehalten ist (siehe `impersonateCoach`).
+ *
+ * Während Impersonation hart blockiert: ein Coach-Account, das gerade
+ * impersonated wird, darf keine neuen BT-Personen ins System holen.
+ */
+export async function inviteBildungstraeger(
+  _prev: InviteFormState,
+  formData: FormData,
+): Promise<InviteFormState> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    return { error: "Während Impersonation nicht möglich." };
+  }
+  const tenantId = getTenantId(session);
+
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const name = String(formData.get("name") ?? "").trim();
+
+  if (!email || !name) {
+    return { error: "Name und E-Mail sind erforderlich." };
+  }
+
+  const placeholderPassword = crypto.randomBytes(32).toString("hex");
+
+  const h = await headers();
+
+  // Existence-Check tenant-scoped — siehe `inviteCoach` für die ausführliche
+  // Begründung. Resurrect-Pfad analog, nur dass die wiederbelebte Zeile als
+  // `bildungstraeger` markiert wird.
+  const [existing] = await db
+    .select({
+      id: schema.users.id,
+      deletedAt: schema.users.deletedAt,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.email, email),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    )
+    .limit(1);
+
+  let createdUserId: string | null = null;
+  if (existing && existing.deletedAt) {
+    await db
+      .update(schema.users)
+      .set({
+        tenantId,
+        deletedAt: null,
+        banned: false,
+        banReason: null,
+        banExpires: null,
+        emailVerified: false,
+        name,
+        role: "bildungstraeger",
+        // BT-User brauchen den signing-Flag nicht — der gilt nur für
+        // Coaches und steuert dort den Signatur-Modus.
+        signingEnabled: false,
+      })
+      .where(eq(schema.users.id, existing.id));
+    createdUserId = existing.id;
+  } else if (existing && !existing.deletedAt) {
+    return {
+      error:
+        "Einladung fehlgeschlagen: Diese E-Mail-Adresse ist bereits in deinem Tenant aktiv.",
+    };
+  } else {
+    try {
+      const result = await auth.api.createUser({
+        body: {
+          email,
+          name,
+          password: placeholderPassword,
+          role: "bildungstraeger",
+          data: { tenantId },
+        },
+        headers: h,
+      });
+      createdUserId = result.user?.id ?? null;
+    } catch (err) {
+      if (err instanceof APIError) {
+        return { error: `Einladung fehlgeschlagen: ${err.message}` };
+      }
+      throw err;
+    }
+  }
+
+  try {
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "/reset-password" },
+      headers: h,
+    });
+  } catch (err) {
+    // Reset-Mail fehlgeschlagen → Cleanup analog `inviteCoach`.
+    if (createdUserId) {
+      await db
+        .update(schema.users)
+        .set({ deletedAt: new Date(), banned: true })
+        .where(eq(schema.users.id, createdUserId))
+        .catch(() => {
+          /* best-effort */
+        });
+    }
+    if (err instanceof APIError) {
+      return {
+        error: `Einladungs-E-Mail fehlgeschlagen (${err.message}). Der User wurde rückgängig gemacht, bitte erneut einladen.`,
+      };
+    }
+    throw err;
+  }
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: "bildungstraeger.invite",
+    resourceType: "user",
+    resourceId: createdUserId ?? "unknown",
+  });
+
+  revalidatePath("/bildungstraeger/team");
+  return { success: `Einladung an ${email} versendet.` };
+}
+
+/**
+ * Deaktiviert (soft-delete) eine BT-Kolleg:in. Mehrere Sicherheits-Schranken:
+ *
+ * - Impersonation blockiert (rollen-mutierende Aktion)
+ * - Eigener Account kann nicht deaktiviert werden → kein Self-Lockout
+ * - Owner-Account kann nicht deaktiviert werden → schützt vor versehentlichem
+ *   Verlust des Impersonation-Rechts. Owner-Übergabe geht implizit: wenn der
+ *   Owner sich selber löschen wollte, müsste vorher manuell jemand anderes
+ *   älter werden (heute nicht über die UI möglich — bewusst).
+ */
+export async function deactivateBildungstraeger(
+  formData: FormData,
+): Promise<void> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    redirect("/bildungstraeger/team?team_error=invalid");
+  }
+  const tenantId = getTenantId(session);
+
+  const targetUserId = String(formData.get("userId") ?? "").trim();
+  if (!targetUserId) {
+    redirect("/bildungstraeger/team?team_error=invalid");
+  }
+  if (targetUserId === session.user.id) {
+    redirect("/bildungstraeger/team?team_error=self");
+  }
+
+  const ownerId = await getTenantOwnerId(tenantId);
+  if (ownerId === targetUserId) {
+    redirect("/bildungstraeger/team?team_error=owner_locked");
+  }
+
+  const [target] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, targetUserId),
+        eq(schema.users.tenantId, tenantId),
+        eq(schema.users.role, "bildungstraeger"),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!target) {
+    redirect("/bildungstraeger/team?team_error=unknown");
+  }
+
+  await db
+    .update(schema.users)
+    .set({ deletedAt: new Date(), banned: true })
+    .where(eq(schema.users.id, targetUserId));
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: "bildungstraeger.deactivate",
+    resourceType: "user",
+    resourceId: targetUserId,
+  });
+
+  revalidatePath("/bildungstraeger/team");
 }

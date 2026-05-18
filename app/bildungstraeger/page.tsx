@@ -2,7 +2,11 @@ import Link from "next/link";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import {
+  getTenantId,
+  isTenantOwner,
+  requireBildungstraeger,
+} from "@/lib/dal";
 
 import { BerProgressList } from "./ber-progress-list";
 import { CoachListItem } from "./coach-list-item";
@@ -18,6 +22,8 @@ const IMP_ERRORS: Record<string, string> = {
   has_courses:
     "Coach hat noch nicht-archivierte Kurse — diese zuerst abschließen oder archivieren.",
   delete_failed: "Coach konnte nicht gelöscht werden.",
+  not_owner:
+    "Impersonation ist dem Owner-Account vorbehalten — bitte den Owner deines Tenants bitten zu übernehmen.",
 };
 
 type Props = {
@@ -27,6 +33,7 @@ type Props = {
 export default async function BildungstraegerDashboard({ searchParams }: Props) {
   const session = await requireBildungstraeger();
   const tenantId = getTenantId(session);
+  const isOwner = await isTenantOwner(session);
   const { imp_error } = await searchParams;
   const impErrorMsg = imp_error ? IMP_ERRORS[imp_error] : undefined;
 
@@ -208,7 +215,7 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
         ) : (
           <ul className="divide-y divide-black/5">
             {coaches.map((c) => (
-              <CoachListItem key={c.id} coach={c} />
+              <CoachListItem key={c.id} coach={c} canImpersonate={isOwner} />
             ))}
           </ul>
         )}
