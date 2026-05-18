@@ -1,6 +1,7 @@
 import {
   CHECKER_SECTIONS,
   MUST_HAVE_LABELS,
+  PROBE_TOPIC_LABELS,
   VIOLATION_CATEGORY_LABELS,
   type CheckerResult,
   type CheckerSection,
@@ -52,6 +53,20 @@ export function composeBtFeedbackEmail(params: EmailComposerInput): string {
   lines.push(`vielen Dank für den Abschlussbericht. ${capitalize(tnRef)} sind mir folgende Punkte aufgefallen:`);
   lines.push("");
 
+  // Positive Aspekte zuerst — gibt der Mail einen wohlwollenden
+  // Einstieg, auch wenn Korrekturen folgen.
+  const positives = (result.positiveAspects ?? []).filter(
+    (s) => s.trim().length > 0,
+  );
+  if (positives.length > 0) {
+    lines.push("Vorab kurz, was schon gut gelaufen ist:");
+    lines.push("");
+    positives.forEach((p) => {
+      lines.push(`    - ${p.trim()}`);
+    });
+    lines.push("");
+  }
+
   // Violations: nach Sektion gruppiert, hard_block zuerst, soft_flag danach.
   const ordered = [...result.violations].sort((a, b) => {
     if (a.severity !== b.severity) {
@@ -85,12 +100,36 @@ export function composeBtFeedbackEmail(params: EmailComposerInput): string {
     lines.push("");
   }
 
+  // Konkretheits-Lücken: nur `missing`-Probes in die Mail aufnehmen.
+  // `not_relevant` und `yes` sind nicht der Punkt — der Coach soll
+  // sehen WO Substanz fehlt, nicht WAS schon okay ist (das sieht er
+  // im positiveAspects-Block).
+  const missingProbes = (result.konkretheit ?? []).filter(
+    (p) => p.answer === "missing",
+  );
+  if (missingProbes.length > 0) {
+    lines.push(
+      `Folgende konkrete Angabe${missingProbes.length === 1 ? "" : "n"} fehl${missingProbes.length === 1 ? "t" : "en"} mir noch im Bericht:`,
+    );
+    lines.push("");
+    missingProbes.forEach((p) => {
+      const label = PROBE_TOPIC_LABELS[p.topic];
+      lines.push(`    - ${label}${p.hint ? ` ${p.hint}` : ""}`);
+    });
+    lines.push("");
+  }
+
   if (result.tonalityFeedback) {
     lines.push(`Tonalität / Stil-Hinweis: ${result.tonalityFeedback}`);
     lines.push("");
   }
 
-  if (ordered.length === 0 && missing.length === 0 && !result.tonalityFeedback) {
+  const allClean =
+    ordered.length === 0 &&
+    missing.length === 0 &&
+    missingProbes.length === 0 &&
+    !result.tonalityFeedback;
+  if (allClean) {
     lines.push(
       "Aus Sicht des Checkers passt der Bericht inhaltlich und formal — danke für die saubere Ausarbeitung!",
     );

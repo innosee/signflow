@@ -101,11 +101,74 @@ export type Violation = {
   previouslyAddressed?: boolean;
 };
 
+/**
+ * Konkretheits-Probes — 3. Prüfdimension neben Pflichtbausteine +
+ * Violations. Adressiert Victorias 2026-05-06-Feedback: Strukturprüfung
+ * sagt „6/6 OK", aber das WO und ALS WAS fehlt (Bewerbungen-Wohin,
+ * Anstellung-Welche-Position, Bewerbungsunterlagen-überarbeitet-ja-nein).
+ *
+ * Format ist „Absence-Detection mit Kontext-Awareness": die KI gibt
+ * pro Probe drei mögliche Antworten zurück. „not_relevant" mit
+ * Begründung verhindert False-Positives bei Use-Cases wo die Probe
+ * nicht passt (z.B. TN wird selbstständig → Bewerbungs-Probes
+ * irrelevant).
+ *
+ * Initial-Set deckt EKC/Karrierecoaching ab. Wird in späteren
+ * Stufen pro Maßnahmetyp gezielt erweitert (siehe Memory
+ * `project_checker_prompt_plan` + `project_checker_konkretheit`).
+ */
+export type ProbeAnswer = "yes" | "missing" | "not_relevant";
+
+export type ProbeTopic =
+  | "bewerbungsunterlagen"
+  | "bewerbungen_konkret"
+  | "vorstellungsgespraeche"
+  | "methoden_erklaert"
+  | "anstellung_konkret"
+  | "weiterbildung_zielposition";
+
+export const PROBE_TOPIC_LABELS: Record<ProbeTopic, string> = {
+  bewerbungsunterlagen: "Bewerbungsunterlagen überarbeitet?",
+  bewerbungen_konkret: "Bewerbungen konkret (Arbeitgeber + Position)?",
+  vorstellungsgespraeche: "Vorstellungsgespräche vorbereitet/geübt?",
+  methoden_erklaert: "Genannte Methoden in 1 Satz erklärt?",
+  anstellung_konkret: "Bei Anstellung: AG + Position konkret?",
+  weiterbildung_zielposition: "Bei Weiterbildungs-Empfehlung: Zielposition?",
+};
+
+export type ProbeResult = {
+  topic: ProbeTopic;
+  answer: ProbeAnswer;
+  /**
+   * Bei `answer === "yes"`: Quote-Snippet aus dem Bericht, das die
+   * Probe belegt. Bei `missing`/`not_relevant`: leer.
+   */
+  quote?: string;
+  /**
+   * Bei `missing`: was fehlt. Bei `not_relevant`: warum die Probe
+   * in diesem Fall nicht passt. Bei `yes`: leer.
+   */
+  hint?: string;
+};
+
 export type CheckerResult = {
   status: "pass" | "needs_revision";
   mustHaves: MustHaveCoverage[];
   violations: Violation[];
   tonalityFeedback?: string;
+  /**
+   * Optional bei Bestands-Daten — Backwards-Compat für persistierte
+   * Results aus der Zeit vor Stage 1. Neue Checks befüllen das Feld
+   * immer. Wenn leer/undefined: UI rendert die Sektion nicht.
+   */
+  konkretheit?: ProbeResult[];
+  /**
+   * Kurze, ressourcenorientierte Aufzählung was im Bericht schon gut
+   * gemacht ist — 1–3 Stichworte. UX-Boost für Coach-Editor (nicht nur
+   * Tadel sehen) und Email-Template (positiver Auftakt für die Coach-
+   * Mängel-Mail).
+   */
+  positiveAspects?: string[];
 };
 
 /**
@@ -123,6 +186,16 @@ export function isCheckerResult(value: unknown): value is CheckerResult {
     typeof v.tonalityFeedback !== "string"
   ) {
     return false;
+  }
+  // konkretheit + positiveAspects sind optional (Backwards-Compat mit
+  // persistierten Results vor Stage 1). Wenn vorhanden: Form prüfen,
+  // sonst silently durchlassen.
+  if (v.konkretheit !== undefined && !Array.isArray(v.konkretheit)) {
+    return false;
+  }
+  if (v.positiveAspects !== undefined) {
+    if (!Array.isArray(v.positiveAspects)) return false;
+    if (v.positiveAspects.some((s) => typeof s !== "string")) return false;
   }
   return true;
 }
