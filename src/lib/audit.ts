@@ -31,7 +31,9 @@ export type AuditAction =
   | "coach.signing_enabled.on"
   | "coach.signing_enabled.off"
   | "coach.delete"
-  | "ber.soft_flags.acknowledged";
+  | "ber.soft_flags.acknowledged"
+  | "bildungstraeger.invite"
+  | "bildungstraeger.deactivate";
 
 export type AuditActorType =
   | "bildungstraeger"

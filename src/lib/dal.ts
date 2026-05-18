@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
@@ -105,4 +105,42 @@ export async function requireSigningEnabled() {
   const enabled = await getSigningEnabled(session.user.id);
   if (!enabled) redirect("/coach/checker");
   return session;
+}
+
+/**
+ * Owner-Konvention für BT-User: der **älteste aktive BT-User** eines
+ * Tenants ist Owner. Implizit über `createdAt ASC LIMIT 1`, kein
+ * explizites Schema-Feld — wenn der Owner gelöscht wird, rückt
+ * automatisch der nächst-älteste nach. Reicht solange Owner-Status
+ * nur ein Berechtigungs-Schalter ist und kein Settlement / Audit-
+ * Marker (dann später explizites `tenants.owner_user_id` einführen).
+ *
+ * Cached pro Render, damit die Page nicht 2× dieselbe Query rauslässt
+ * (Owner-Check + List-Item-Owner-Markierung).
+ */
+export const getTenantOwnerId = cache(
+  async (tenantId: string): Promise<string | null> => {
+    const [row] = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(
+        and(
+          eq(schema.users.tenantId, tenantId),
+          eq(schema.users.role, "bildungstraeger"),
+          isNull(schema.users.deletedAt),
+        ),
+      )
+      .orderBy(asc(schema.users.createdAt))
+      .limit(1);
+    return row?.id ?? null;
+  },
+);
+
+export async function isTenantOwner(session: SessionData): Promise<boolean> {
+  if (!session || session.user.role !== "bildungstraeger") return false;
+  if (isImpersonating(session)) return false;
+  const tenantId = (session.user as { tenantId?: string }).tenantId;
+  if (!tenantId) return false;
+  const ownerId = await getTenantOwnerId(tenantId);
+  return ownerId === session.user.id;
 }
