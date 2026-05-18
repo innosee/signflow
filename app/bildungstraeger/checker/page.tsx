@@ -20,7 +20,7 @@ export default async function BtCheckerPage() {
         </p>
       </header>
 
-      <BtCheckerForm btName={session.user.name} />
+      <BtCheckerForm btName={session.user.name} userId={session.user.id} />
     </div>
   );
 }
