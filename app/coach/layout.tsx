@@ -1,4 +1,9 @@
 import { AppHeader } from "@/components/app-header";
+import {
+  CoachToolAccentStrip,
+  CoachToolNav,
+  CoachToolSubBrand,
+} from "@/components/coach-tool-nav";
 import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
 
 import { stopImpersonating } from "../bildungstraeger/actions";
@@ -14,20 +19,6 @@ export default async function CoachLayout({
   const session = await requireCoach();
   const signingEnabled = await getSigningEnabled(session.user.id);
 
-  // Checker ist für alle Coaches sichtbar. „Kurse" (Signatur-Flow) nur
-  // für Pilot-Coaches mit `signing_enabled`, sonst führt der Link ins Leere
-  // (Layout redirected).
-  const navLinks = signingEnabled
-    ? [
-        { href: "/coach", label: "Kurse" },
-        { href: "/coach/checker", label: "Berichts-Checker" },
-        { href: "/coach/checker/check", label: "Schnell-Check" },
-      ]
-    : [
-        { href: "/coach/checker", label: "Berichts-Checker" },
-        { href: "/coach/checker/check", label: "Schnell-Check" },
-      ];
-
   return (
     <>
       {/* Im Print-Modus (Ctrl+P oder Puppeteer → PDF) wird der AppHeader
@@ -35,7 +26,11 @@ export default async function CoachLayout({
       <div className="print:hidden">
         <AppHeader
           brandHref={signingEnabled ? "/coach" : "/coach/checker"}
-          navLinks={navLinks}
+          brandSubText={<CoachToolSubBrand signingEnabled={signingEnabled} />}
+          customNav={<CoachToolNav signingEnabled={signingEnabled} />}
+          accentStrip={
+            <CoachToolAccentStrip signingEnabled={signingEnabled} />
+          }
           userName={session.user.name}
           userEmail={session.user.email}
           settingsHref="/coach/settings"
