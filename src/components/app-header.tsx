@@ -4,7 +4,29 @@ type NavLink = { href: string; label: string };
 
 type Props = {
   brandHref: string;
-  navLinks: NavLink[];
+  /**
+   * Klassische Flat-Nav-Liste. Wird gerendert, wenn `customNav` nicht
+   * gesetzt ist. BT-Layout nutzt das weiter unverändert.
+   */
+  navLinks?: NavLink[];
+  /**
+   * Alternative zum `navLinks`-Pattern: ein komplett vom Layout
+   * geliefertes Nav-Element. Coach-Layout setzt hier den Tool-Switcher
+   * inkl. tool-spezifischer Sub-Nav rein. Wenn gesetzt, überschreibt
+   * es `navLinks`.
+   */
+  customNav?: React.ReactNode;
+  /**
+   * Optionaler Subtext direkt neben „Signflow" — z.B. „· Signatur"
+   * oder „· Checker". Client-rendered (pathname-abhängig).
+   */
+  brandSubText?: React.ReactNode;
+  /**
+   * Optionale Accent-Strip-Komponente, die direkt unter dem Header
+   * rendert. Coach-Layout setzt hier den tool-spezifischen Farbstreifen
+   * rein. BT-Layout kann das weglassen.
+   */
+  accentStrip?: React.ReactNode;
   userName: string;
   userEmail: string;
   /** Optionaler Link zur Einstellungs-Seite (Profil/Passwort/Branding/Billing). */
@@ -17,6 +39,9 @@ type Props = {
 export function AppHeader({
   brandHref,
   navLinks,
+  customNav,
+  brandSubText,
+  accentStrip,
   userName,
   userEmail,
   settingsHref,
@@ -49,23 +74,33 @@ export function AppHeader({
       <header className="border-b border-zinc-300 bg-white">
         <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-6 px-6 py-3">
           <div className="flex items-center gap-6">
-            <Link href={brandHref} className="text-base font-semibold tracking-tight">
-              Signflow
-            </Link>
-            <nav
-              aria-label="Hauptnavigation"
-              className="flex items-center gap-4 text-sm"
+            <Link
+              href={brandHref}
+              className="flex items-baseline gap-1.5 text-base font-semibold tracking-tight"
             >
-              {navLinks.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className="text-zinc-700 underline-offset-4 hover:text-zinc-950 hover:underline"
+              <span>Signflow</span>
+              {brandSubText}
+            </Link>
+            {customNav ? (
+              customNav
+            ) : (
+              navLinks && (
+                <nav
+                  aria-label="Hauptnavigation"
+                  className="flex items-center gap-4 text-sm"
                 >
-                  {l.label}
-                </Link>
-              ))}
-            </nav>
+                  {navLinks.map((l) => (
+                    <Link
+                      key={l.href}
+                      href={l.href}
+                      className="text-zinc-700 underline-offset-4 hover:text-zinc-950 hover:underline"
+                    >
+                      {l.label}
+                    </Link>
+                  ))}
+                </nav>
+              )
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -93,6 +128,7 @@ export function AppHeader({
             )}
           </div>
         </div>
+        {accentStrip}
       </header>
     </>
   );
