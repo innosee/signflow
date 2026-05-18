@@ -55,6 +55,18 @@ export function composeBtFeedbackEmail(params: EmailComposerInput): string {
   lines.push(`vielen Dank für den Abschlussbericht. ${capitalize(tnRef)} sind mir folgende Punkte aufgefallen:`);
   lines.push("");
 
+  // Maßnahme-Mismatch (Stage 2.1): wenn detected, ganz oben in die Mail
+  // setzen — DAS ist der wichtigste Hinweis, weil er den Bericht ggf.
+  // konzeptionell in Frage stellt (Coach hat die falsche Maßnahme
+  // ausgewählt oder den Bericht inhaltlich am Maßnahmen-Auftrag vorbei
+  // geschrieben).
+  if (result.massnahmeMismatch?.detected && result.massnahmeMismatch.hint) {
+    lines.push("Wichtiger Hinweis vorab — Maßnahme-Inhalts-Mismatch:");
+    lines.push("");
+    lines.push(`    ${result.massnahmeMismatch.hint}`);
+    lines.push("");
+  }
+
   // Positive Aspekte zuerst — gibt der Mail einen wohlwollenden
   // Einstieg, auch wenn Korrekturen folgen.
   const positives = (result.positiveAspects ?? []).filter(
@@ -130,7 +142,8 @@ export function composeBtFeedbackEmail(params: EmailComposerInput): string {
     ordered.length === 0 &&
     missing.length === 0 &&
     missingProbes.length === 0 &&
-    !result.tonalityFeedback;
+    !result.tonalityFeedback &&
+    !result.massnahmeMismatch?.detected;
   if (allClean) {
     lines.push(
       "Aus Sicht des Checkers passt der Bericht inhaltlich und formal — danke für die saubere Ausarbeitung!",
