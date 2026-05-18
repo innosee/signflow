@@ -10,6 +10,7 @@ import {
   type CheckerStep,
 } from "@/components/checker/checker-progress";
 import { LiveFeedback } from "@/components/checker/live-feedback";
+import { MassnahmetypPicker } from "@/components/checker/massnahmetyp-picker";
 import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
 import { locateQuote } from "@/lib/checker/locate-quote";
@@ -23,11 +24,14 @@ import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
 import {
   CHECKER_SECTIONS,
+  DEFAULT_MASSNAHME_TYP,
   isCheckerInput,
   isCheckerResult,
+  resolveMassnahmeTyp,
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
+  type MassnahmeTyp,
   type Violation,
 } from "@/lib/checker/types";
 
@@ -89,7 +93,12 @@ const INITIAL_STEPS: CheckerStep[] = [
   },
 ];
 
-const EMPTY_INPUT: CheckerInput = { teilnahme: "", ablauf: "", fazit: "" };
+const EMPTY_INPUT: CheckerInput = {
+  teilnahme: "",
+  ablauf: "",
+  fazit: "",
+  massnahmeTyp: DEFAULT_MASSNAHME_TYP,
+};
 
 export function CheckerForm({
   userId,
@@ -527,6 +536,16 @@ export function CheckerForm({
               deine Daten verlassen nie Deutschland.
             </span>
           </p>
+        </div>
+
+        <div className="rounded-xl border border-zinc-300 bg-white p-5">
+          <MassnahmetypPicker
+            id="coach-checker-massnahmetyp"
+            value={resolveMassnahmeTyp(input.massnahmeTyp)}
+            onChange={(next: MassnahmeTyp) =>
+              setInput((prev) => ({ ...prev, massnahmeTyp: next }))
+            }
+          />
         </div>
 
         {CHECKER_SECTIONS.map((section) => (

@@ -5,6 +5,8 @@ import { useMemo } from "react";
 import { generateDummyResult } from "@/lib/checker/dummy-response";
 import {
   MUST_HAVE_LABELS,
+  MUST_HAVES_BY_MASSNAHMETYP,
+  resolveMassnahmeTyp,
   type CheckerInput,
   type MustHaveTopic,
 } from "@/lib/checker/types";
@@ -30,7 +32,10 @@ export function LiveFeedback({ input }: { input: CheckerInput }) {
     return map;
   }, [result]);
 
-  const topics = Object.keys(MUST_HAVE_LABELS) as MustHaveTopic[];
+  // Topics werden je nach Maßnahmetyp gefiltert — sonst sähe der EKC-
+  // Coach plötzlich auch Gründungs-Bausteine in seiner Live-Sidebar.
+  const massnahmeTyp = resolveMassnahmeTyp(input.massnahmeTyp);
+  const topics = MUST_HAVES_BY_MASSNAHMETYP[massnahmeTyp];
   const coveredCount = topics.filter((t) => mustHavesMap.get(t) === true).length;
 
   const violationCount = result?.violations.length ?? 0;

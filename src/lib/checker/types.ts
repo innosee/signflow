@@ -22,41 +22,192 @@ export const CHECKER_SECTIONS: {
   },
 ];
 
+/**
+ * Maßnahmetyp — steuert seit Stage 2 die Pflichtbaustein-Liste sowie die
+ * Sprache der Prompt-Sektion C. EKC/ESC teilen das klassische 6-Baustein-
+ * Set (Karriere-/Standortbestimmungs-Coachings), EGC adressiert Gründungs-
+ * Coachings und ESCA die ausbildungs-spezifischen Anteile.
+ *
+ * Default ist `EKC`, weil das die historische Standard-Maßnahme ist und
+ * persistierte Snapshots vor Stage 2 keine Typ-Information mitführen.
+ */
+export type MassnahmeTyp = "EKC" | "ESC" | "EGC" | "ESCA";
+
+export const MASSNAHME_TYPEN: { id: MassnahmeTyp; label: string; hint: string }[] = [
+  {
+    id: "EKC",
+    label: "EKC — Erango Karriere-Coaching",
+    hint: "Klassisches Karriere-Coaching (Standort/Ziele/Strategie/Markt)",
+  },
+  {
+    id: "ESC",
+    label: "ESC — Erango Standort-Coaching",
+    hint: "Standortbestimmungs-Coaching (gleiches Baustein-Set wie EKC)",
+  },
+  {
+    id: "EGC",
+    label: "EGC — Erango Gründungs-Coaching",
+    hint: "Gründungs-Coaching (Idee/Plan/Markt/Finanzierung/Recht)",
+  },
+  {
+    id: "ESCA",
+    label: "ESCA — Erango Ausbildungs-Coaching",
+    hint: "Ausbildungs-/Auszubildenden-Coaching",
+  },
+];
+
+export const DEFAULT_MASSNAHME_TYP: MassnahmeTyp = "EKC";
+
+function isMassnahmeTyp(value: unknown): value is MassnahmeTyp {
+  return (
+    value === "EKC" || value === "ESC" || value === "EGC" || value === "ESCA"
+  );
+}
+
 export type CheckerInput = {
   teilnahme: string;
   ablauf: string;
   fazit: string;
+  /**
+   * Optional aus Backwards-Compat-Gründen — persistierte Snapshots vor
+   * Stage 2 haben kein Feld. Aufrufer normalisieren via
+   * `resolveMassnahmeTyp()` auf `DEFAULT_MASSNAHME_TYP`.
+   */
+  massnahmeTyp?: MassnahmeTyp;
 };
+
+export function resolveMassnahmeTyp(
+  value: MassnahmeTyp | undefined | null,
+): MassnahmeTyp {
+  return isMassnahmeTyp(value) ? value : DEFAULT_MASSNAHME_TYP;
+}
 
 /**
  * Type-Guard für storage-persistierte Werte (localStorage / sessionStorage).
  * Verhindert, dass manipuliertes oder altformatiges JSON die Form crasht.
+ *
+ * `massnahmeTyp` ist optional — pre-Stage-2-Drafts/Snapshots dürfen
+ * weiterhin durchgelassen werden.
  */
 export function isCheckerInput(value: unknown): value is CheckerInput {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  return (
-    typeof v.teilnahme === "string" &&
-    typeof v.ablauf === "string" &&
-    typeof v.fazit === "string"
-  );
+  if (
+    typeof v.teilnahme !== "string" ||
+    typeof v.ablauf !== "string" ||
+    typeof v.fazit !== "string"
+  ) {
+    return false;
+  }
+  if (v.massnahmeTyp !== undefined && !isMassnahmeTyp(v.massnahmeTyp)) {
+    return false;
+  }
+  return true;
 }
 
+/**
+ * Pflichtbausteine quer über alle Maßnahmetypen. Pro Maßnahme wird nur
+ * ein Teilset erwartet (siehe `MUST_HAVES_BY_MASSNAHMETYP`) — Azure
+ * bekommt im Prompt immer nur das passende Subset zu sehen.
+ */
 export type MustHaveTopic =
+  // EKC + ESC (klassisches Karriere-/Standort-Set)
   | "profiling"
   | "zielarbeit"
   | "strategie"
   | "umsetzung"
   | "marktorientierung"
-  | "prozessbegleitung";
+  | "prozessbegleitung"
+  // EGC (Gründungs-Coaching)
+  | "egc_persoenlichkeit"
+  | "egc_idee_analyse"
+  | "egc_businessplan"
+  | "egc_marketing"
+  | "egc_infrastruktur"
+  | "egc_finanzierung"
+  | "egc_absicherung"
+  | "egc_recht"
+  | "egc_individualitaet"
+  // ESCA (Ausbildungs-Coaching)
+  | "esca_analyse"
+  | "esca_planung"
+  | "esca_strategie"
+  | "esca_begleitung"
+  | "esca_problemloesung"
+  | "esca_entwicklung"
+  | "esca_reflexion";
 
 export const MUST_HAVE_LABELS: Record<MustHaveTopic, string> = {
+  // EKC + ESC
   profiling: "Profiling / Potentialanalyse / Standortbestimmung",
   zielarbeit: "Zielarbeit (berufliche Wünsche + Ziele)",
   strategie: "Strategie + Handlungsperspektiven",
   umsetzung: "Umsetzung (Unterlagen, Selbstmarketing)",
   marktorientierung: "Marktorientierung + Netzwerke",
   prozessbegleitung: "Prozessbegleitung + Feedback",
+  // EGC
+  egc_persoenlichkeit: "Persönlichkeit / Eignung für Selbständigkeit",
+  egc_idee_analyse: "Geschäfts-Idee + Analyse",
+  egc_businessplan: "Businessplan / Markt-Einschätzung",
+  egc_marketing: "Marketing + Vertrieb",
+  egc_infrastruktur: "Infrastruktur + Netzwerk",
+  egc_finanzierung: "Finanzierung + Tragfähigkeit",
+  egc_absicherung: "Soziale Absicherung",
+  egc_recht: "Recht + Formalien",
+  egc_individualitaet: "Individualität der Beratung",
+  // ESCA
+  esca_analyse: "Analyse + Start in die Maßnahme",
+  esca_planung: "Planung der Ausbildung",
+  esca_strategie: "Strategie für den Ausbildungs-Weg",
+  esca_begleitung: "Begleitung im Prozess",
+  esca_problemloesung: "Problemlösung in akuten Situationen",
+  esca_entwicklung: "Entwicklung von Kompetenzen",
+  esca_reflexion: "Reflexion + Lerntransfer",
+};
+
+/**
+ * Welche Pflichtbausteine sind pro Maßnahmetyp zu prüfen? Wird sowohl
+ * für den Prompt (Sektion C — was Azure überhaupt fragt) als auch für
+ * die Azure-Antwort-Validierung verwendet (unbekannte Topics für den
+ * aktiven Typ werden verworfen).
+ */
+export const MUST_HAVES_BY_MASSNAHMETYP: Record<MassnahmeTyp, MustHaveTopic[]> = {
+  EKC: [
+    "profiling",
+    "zielarbeit",
+    "strategie",
+    "umsetzung",
+    "marktorientierung",
+    "prozessbegleitung",
+  ],
+  ESC: [
+    "profiling",
+    "zielarbeit",
+    "strategie",
+    "umsetzung",
+    "marktorientierung",
+    "prozessbegleitung",
+  ],
+  EGC: [
+    "egc_persoenlichkeit",
+    "egc_idee_analyse",
+    "egc_businessplan",
+    "egc_marketing",
+    "egc_infrastruktur",
+    "egc_finanzierung",
+    "egc_absicherung",
+    "egc_recht",
+    "egc_individualitaet",
+  ],
+  ESCA: [
+    "esca_analyse",
+    "esca_planung",
+    "esca_strategie",
+    "esca_begleitung",
+    "esca_problemloesung",
+    "esca_entwicklung",
+    "esca_reflexion",
+  ],
 };
 
 export type MustHaveCoverage = {

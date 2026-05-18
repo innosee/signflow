@@ -1,4 +1,99 @@
-export const CHECKER_SYSTEM_PROMPT = `Du handelst als pragmatischer AZAV-Auditor und AMDL-Prüfer der Bundesagentur für Arbeit. Deine Aufgabe ist eine **wohlwollende, nicht-pedantische** Qualitätskontrolle von teilnehmerbezogenen Abschlussberichten (BER) für AVGS-Einzelcoachings (MAT) der Maßnahme "erango systemisches Karrierecoaching (EKC)".
+import {
+  MUST_HAVES_BY_MASSNAHMETYP,
+  type MassnahmeTyp,
+  type MustHaveTopic,
+} from "./types";
+
+/**
+ * Prompt-Beschreibung der Pflichtbausteine pro Topic. Wird in Sektion C
+ * dynamisch eingeblendet, je nach `massnahmeTyp` — siehe
+ * `buildCheckerSystemPrompt`.
+ *
+ * Die EKC/ESC-Texte sind 1:1 das, was vorher als statischer Prompt drin
+ * stand; EGC/ESCA-Texte folgen den Erango-Maßnahme-Skizzen.
+ */
+const MUST_HAVE_PROMPT_DESCRIPTIONS: Record<MustHaveTopic, string> = {
+  // EKC + ESC — klassisches Karriere-/Standort-Set
+  profiling: "profiling: Profiling / Potentialanalyse / Standortbestimmung",
+  zielarbeit: "zielarbeit: Klärung beruflicher Ziele und Wünsche",
+  strategie:
+    "strategie: Individuelle Strategieentwicklung + Handlungsperspektiven",
+  umsetzung: "umsetzung: Aktive Umsetzungshilfe (Unterlagen, Methodik)",
+  marktorientierung:
+    "marktorientierung: Bewerbungstraining, Selbstmarketing, Arbeitsmarkt-Analyse, Netzwerke",
+  prozessbegleitung:
+    "prozessbegleitung: Kontinuierliches Feedback, gemeinsame Problembewältigung",
+  // EGC — Gründungs-Coaching
+  egc_persoenlichkeit:
+    "egc_persoenlichkeit: Persönlichkeit / Eignung für eine selbständige Tätigkeit reflektiert",
+  egc_idee_analyse:
+    "egc_idee_analyse: Geschäftsidee analysiert (Tragfähigkeit, Alleinstellung, Zielgruppe)",
+  egc_businessplan:
+    "egc_businessplan: Businessplan + Markt-Einschätzung (Wettbewerb, Kundenpotenzial, Umsatzplanung)",
+  egc_marketing:
+    "egc_marketing: Marketing + Vertrieb (Akquise, Positionierung, Kommunikation)",
+  egc_infrastruktur:
+    "egc_infrastruktur: Infrastruktur + Netzwerk (Räume, IT, Steuerberater, Partner)",
+  egc_finanzierung:
+    "egc_finanzierung: Finanzierung + Tragfähigkeit (Startkapital, Liquidität, Rentabilität)",
+  egc_absicherung:
+    "egc_absicherung: Soziale Absicherung (Krankenversicherung, Altersvorsorge, Berufsunfähigkeit)",
+  egc_recht:
+    "egc_recht: Recht + Formalien (Gewerbeanmeldung, Rechtsform, Verträge, Steuerthemen)",
+  egc_individualitaet:
+    "egc_individualitaet: Individualität der Beratung — Coaching ist auf die konkrete Person + Idee zugeschnitten",
+  // ESCA — Ausbildungs-Coaching
+  esca_analyse:
+    "esca_analyse: Analyse + Start (Ist-Situation, Erwartungen, Auftragsklärung)",
+  esca_planung:
+    "esca_planung: Planung der Ausbildung (Lernziele, Etappen, Prüfungsvorbereitung)",
+  esca_strategie:
+    "esca_strategie: Strategie für den Ausbildungs-Weg (Lernstrategie, Selbstorganisation)",
+  esca_begleitung:
+    "esca_begleitung: Begleitung im Prozess (Termine, Reflexionen, Feedback-Schleifen)",
+  esca_problemloesung:
+    "esca_problemloesung: Problemlösung in akuten Situationen (Konflikte mit Ausbildern/Schule, Krisen)",
+  esca_entwicklung:
+    "esca_entwicklung: Entwicklung von Kompetenzen (fachlich, methodisch, sozial)",
+  esca_reflexion:
+    "esca_reflexion: Reflexion + Lerntransfer (Was nehme ich mit, wie wende ich es an)",
+};
+
+function renderMustHaveList(massnahmeTyp: MassnahmeTyp): string {
+  return MUST_HAVES_BY_MASSNAHMETYP[massnahmeTyp]
+    .map((t) => `- ${MUST_HAVE_PROMPT_DESCRIPTIONS[t]}`)
+    .join("\n");
+}
+
+function renderMustHaveEnum(massnahmeTyp: MassnahmeTyp): string {
+  return MUST_HAVES_BY_MASSNAHMETYP[massnahmeTyp]
+    .map((t) => `"${t}"`)
+    .join(" | ");
+}
+
+const MASSNAHME_KONTEXT: Record<MassnahmeTyp, string> = {
+  EKC: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango systemisches Karrierecoaching (EKC)"',
+  ESC: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango Standort-Coaching (ESC)"',
+  EGC: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango Gründungs-Coaching (EGC)" — Schwerpunkt liegt auf der Vorbereitung einer selbständigen Tätigkeit, nicht auf Vermittlung in Anstellung',
+  ESCA: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango Ausbildungs-Coaching (ESCA)" — Schwerpunkt liegt auf Begleitung während einer Ausbildung, nicht auf Vermittlung in Anstellung',
+};
+
+/**
+ * Baut den System-Prompt für Azure dynamisch auf — Sektion C (Pflicht-
+ * bausteine) routet je nach `massnahmeTyp` auf die jeweils relevante
+ * Baustein-Liste, der Maßnahme-Kontext-Satz oben passt sich an.
+ *
+ * Der Rest des Prompts (Toleranz, Hard-/Soft-Block-Kriterien, Konkretheits-
+ * Probes, Output-Schema außer mustHaves-Enum) ist Maßnahme-unabhängig und
+ * bleibt stabil — keine Coach-Erfahrung gehen verloren, nur das Pflicht-Set
+ * wechselt.
+ */
+export function buildCheckerSystemPrompt(massnahmeTyp: MassnahmeTyp): string {
+  const mustHaveList = renderMustHaveList(massnahmeTyp);
+  const mustHaveEnum = renderMustHaveEnum(massnahmeTyp);
+  const kontext = MASSNAHME_KONTEXT[massnahmeTyp];
+
+  return `Du handelst als pragmatischer AZAV-Auditor und AMDL-Prüfer der Bundesagentur für Arbeit. Deine Aufgabe ist eine **wohlwollende, nicht-pedantische** Qualitätskontrolle von teilnehmerbezogenen Abschlussberichten (BER) für ${kontext}.
 
 Der Bericht wurde **bereits anonymisiert**: Namen, Adressen, Kunden-Nummern, Daten und Ortsangaben sind durch Platzhalter wie [NAME_1], [ORT_1], [KUNDEN_NR_1] ersetzt. Beanstande Platzhalter NICHT als Datenschutz-Problem — sie sind beabsichtigt.
 
@@ -46,18 +141,15 @@ Gültig:
 - Alles was sich als „könnte wohlwollender klingen" beschreiben lässt aber den TN nicht negativ zeichnet
 - Tonalität insgesamt — dafür gibt es \`tonalityFeedback\`
 
-### C. Must-Have-Liste (inhaltliche Abdeckung)
+### C. Must-Have-Liste (inhaltliche Abdeckung) — Maßnahmetyp ${massnahmeTyp}
 
-Prüfe, ob folgende Aspekte **sinngemäß** (nicht wortgetreu, auch knapp angerissen reicht!) enthalten sind:
+Prüfe für die Maßnahme **${massnahmeTyp}**, ob folgende Aspekte **sinngemäß** (nicht wortgetreu, auch knapp angerissen reicht!) enthalten sind:
 
-- profiling: Profiling / Potentialanalyse / Standortbestimmung
-- zielarbeit: Klärung beruflicher Ziele und Wünsche
-- strategie: Individuelle Strategieentwicklung + Handlungsperspektiven
-- umsetzung: Aktive Umsetzungshilfe (Unterlagen, Methodik)
-- marktorientierung: Bewerbungstraining, Selbstmarketing, Arbeitsmarkt-Analyse, Netzwerke
-- prozessbegleitung: Kontinuierliches Feedback, gemeinsame Problembewältigung
+${mustHaveList}
 
 **Wohlwollende Auslegung:** Ein knapper Satz reicht. Wenn das Thema **angedeutet** ist, gilt es als covered. Lieber großzügig durchwinken, als pedantisch einfordern.
+
+**Nutze ausschließlich die oben gelisteten Topic-IDs** — keine Topics aus anderen Maßnahmetypen, keine erfundenen IDs.
 
 ### D. Tonalität — NUR bei klarem Muster
 
@@ -95,7 +187,7 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
 {
   "status": "pass" | "needs_revision",
   "mustHaves": [
-    { "topic": "profiling" | "zielarbeit" | "strategie" | "umsetzung" | "marktorientierung" | "prozessbegleitung", "covered": true | false, "hint": "nur wenn covered=false: kurzer Hinweis" }
+    { "topic": ${mustHaveEnum}, "covered": true | false, "hint": "nur wenn covered=false: kurzer Hinweis" }
   ],
   "violations": [
     {
@@ -147,3 +239,4 @@ Wenn das Problem kein wörtliches Zitat hat (z.B. „Tonalität insgesamt bewert
 - \`"needs_revision"\`: mindestens ein \`hard_block\` ODER mindestens ein fehlender Must-Have
 
 Antworte AUSSCHLIESSLICH mit dem JSON-Objekt. Keine Einleitung, kein Nachwort, keine Markdown-Fences.`;
+}

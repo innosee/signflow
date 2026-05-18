@@ -1,10 +1,13 @@
-import type {
-  CheckerInput,
-  CheckerResult,
-  MustHaveCoverage,
-  MustHaveTopic,
-  Violation,
-  ViolationCategory,
+import {
+  MUST_HAVES_BY_MASSNAHMETYP,
+  resolveMassnahmeTyp,
+  type CheckerInput,
+  type CheckerResult,
+  type CheckerSection,
+  type MustHaveCoverage,
+  type MustHaveTopic,
+  type Violation,
+  type ViolationCategory,
 } from "./types";
 
 type ForbiddenTerm = {
@@ -152,7 +155,13 @@ const FORBIDDEN_TERMS: ForbiddenTerm[] = [
   },
 ];
 
-const MUST_HAVE_KEYWORDS: Record<MustHaveTopic, RegExp> = {
+// Heuristik nur für die EKC/ESC-Bausteine — Live-Feedback ist absichtlich
+// kein vollständiger Checker, sondern ein schneller Daumenwert beim
+// Tippen. Für EGC/ESCA-Topics gibt es bewusst keine Keyword-Map: dort
+// erscheinen alle Bausteine im LiveFeedback als „noch nicht erkannt" bis
+// der echte Azure-Check läuft. Erweitern, wenn die Maßnahmetypen mehr
+// produktive Last bekommen.
+const MUST_HAVE_KEYWORDS: Partial<Record<MustHaveTopic, RegExp>> = {
   profiling: /profil(ing|analyse)|potential|potenzial|standortbestimmung|ausgangslage|st(ä|ae)rken\s+und\s+schw(ä|ae)chen/i,
   zielarbeit: /beruflich\w*\s+ziel|zielarbeit|ziele?\s+definier|zielgruppe|berufswünsche|reise(route|plan)/i,
   strategie: /strategie|bewerbungsstrategie|handlungsperspektiv|konzept|geschäftsmodell/i,
@@ -163,7 +172,7 @@ const MUST_HAVE_KEYWORDS: Record<MustHaveTopic, RegExp> = {
 
 export function generateDummyResult(input: CheckerInput): CheckerResult {
   const violations: Violation[] = [];
-  const sections: (keyof CheckerInput)[] = ["teilnahme", "ablauf", "fazit"];
+  const sections: CheckerSection[] = ["teilnahme", "ablauf", "fazit"];
 
   for (const section of sections) {
     const text = input[section];
@@ -191,10 +200,11 @@ export function generateDummyResult(input: CheckerInput): CheckerResult {
   }
 
   const combined = [input.teilnahme, input.ablauf, input.fazit].join(" ");
-  const mustHaves: MustHaveCoverage[] = (
-    Object.keys(MUST_HAVE_KEYWORDS) as MustHaveTopic[]
-  ).map((topic) => {
-    const covered = MUST_HAVE_KEYWORDS[topic].test(combined);
+  const massnahmeTyp = resolveMassnahmeTyp(input.massnahmeTyp);
+  const expectedTopics = MUST_HAVES_BY_MASSNAHMETYP[massnahmeTyp];
+  const mustHaves: MustHaveCoverage[] = expectedTopics.map((topic) => {
+    const re = MUST_HAVE_KEYWORDS[topic];
+    const covered = re ? re.test(combined) : false;
     return {
       topic,
       covered,
