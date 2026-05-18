@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { CheckerCoolLoader } from "@/components/checker/checker-cool-loader";
 import { MassnahmetypPicker } from "@/components/checker/massnahmetyp-picker";
 import { anonymize } from "@/lib/checker/anonymize";
 import {
@@ -377,7 +378,7 @@ export function BtCheckerForm({
 
       <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
         {state.phase === "idle" && <IdleHint />}
-        {state.phase === "running" && <RunningIndicator stage={state.stage} />}
+        {state.phase === "running" && <CheckerCoolLoader stage={state.stage} />}
         {state.phase === "error" && <ErrorBox message={state.message} />}
         {state.phase === "done" && (
           <FindingsPanel
@@ -402,22 +403,6 @@ function IdleHint() {
         <li>Ein versandfertiger E-Mail-Text mit allem zusammen</li>
         <li>Per-Finding-Copy für einzelne Mängel in laufende Konversationen</li>
       </ul>
-    </div>
-  );
-}
-
-function RunningIndicator({ stage }: { stage: "anon" | "azure" }) {
-  return (
-    <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-900">
-      <p className="font-medium">
-        {stage === "anon"
-          ? "Anonymisierung läuft (IONOS Frankfurt)…"
-          : "Regelprüfung läuft (Azure EU)…"}
-      </p>
-      <p className="mt-1 text-xs text-indigo-800">
-        Klartext-Berichts-Daten verlassen den Browser nur in pseudonymisierter
-        Form. Keine Rohtexte auf US-Servern.
-      </p>
     </div>
   );
 }
