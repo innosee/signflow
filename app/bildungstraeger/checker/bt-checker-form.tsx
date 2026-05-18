@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { anonymize } from "@/lib/checker/anonymize";
 import {
@@ -14,6 +14,8 @@ import {
   MUST_HAVE_LABELS,
   PROBE_TOPIC_LABELS,
   VIOLATION_CATEGORY_LABELS,
+  isCheckerInput,
+  isCheckerResult,
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
@@ -27,17 +29,140 @@ const SECTION_LABEL: Record<CheckerSection, string> = Object.fromEntries(
   CHECKER_SECTIONS.map((s) => [s.id, s.label]),
 ) as Record<CheckerSection, string>;
 
+// User-scoped Keys — gleiches Pattern wie der Coach-Checker, damit Drafts
+// auf Shared-Devices nicht zwischen BT-Accounts leaken.
+const draftStorageKey = (userId: string) =>
+  `signflow:bt-checker-draft:${userId}`;
+const resultStorageKey = (userId: string) =>
+  `signflow:bt-checker-result:${userId}`;
+const DRAFT_DEBOUNCE_MS = 800;
+
+function hasAnyContent(input: CheckerInput): boolean {
+  return (
+    input.teilnahme.trim().length > 0 ||
+    input.ablauf.trim().length > 0 ||
+    input.fazit.trim().length > 0
+  );
+}
+
+type DraftPayload = {
+  input: CheckerInput;
+  coachName: string;
+  tnKuerzel: string;
+};
+
+function isDraftPayload(value: unknown): value is DraftPayload {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    isCheckerInput(v.input) &&
+    typeof v.coachName === "string" &&
+    typeof v.tnKuerzel === "string"
+  );
+}
+
 type State =
   | { phase: "idle" }
   | { phase: "running"; stage: "anon" | "azure" }
   | { phase: "done"; result: CheckerResult }
   | { phase: "error"; message: string };
 
-export function BtCheckerForm({ btName }: { btName: string }) {
+export function BtCheckerForm({
+  btName,
+  userId,
+}: {
+  btName: string;
+  userId: string;
+}) {
+  const draftKey = draftStorageKey(userId);
+  const resultKey = resultStorageKey(userId);
   const [input, setInput] = useState<CheckerInput>(EMPTY);
   const [coachName, setCoachName] = useState("");
   const [tnKuerzel, setTnKuerzel] = useState("");
   const [state, setState] = useState<State>({ phase: "idle" });
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const maybe: unknown = JSON.parse(raw);
+        if (isDraftPayload(maybe) && hasAnyContent(maybe.input)) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage ist External State, per Design nur client-seitig lesbar; einmaliges Sync beim Mount
+          setInput(maybe.input);
+          setCoachName(maybe.coachName);
+          setTnKuerzel(maybe.tnKuerzel);
+        }
+      }
+    } catch {
+      // corrupted — ignore
+    }
+
+    // Letztes Check-Ergebnis wiederherstellen, damit nach Reload der
+    // Email-Output erhalten bleibt — der BT soll nicht erneut Tokens
+    // verbrennen müssen.
+    try {
+      const raw = localStorage.getItem(resultKey);
+      if (raw) {
+        const maybe: unknown = JSON.parse(raw);
+        if (
+          maybe &&
+          typeof maybe === "object" &&
+          isCheckerResult((maybe as { result?: unknown }).result)
+        ) {
+          const payload = maybe as { result: CheckerResult };
+          setState({ phase: "done", result: payload.result });
+        }
+      }
+    } catch {
+      // corrupted — ignore
+    }
+
+    setDraftLoaded(true);
+  }, [draftKey, resultKey]);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    const handle = setTimeout(() => {
+      try {
+        if (
+          hasAnyContent(input) ||
+          coachName.trim().length > 0 ||
+          tnKuerzel.trim().length > 0
+        ) {
+          const payload: DraftPayload = { input, coachName, tnKuerzel };
+          localStorage.setItem(draftKey, JSON.stringify(payload));
+          setSavedAt(new Date());
+        } else {
+          localStorage.removeItem(draftKey);
+          setSavedAt(null);
+        }
+      } catch {
+        // quota / blocked — silent fall-back
+      }
+    }, DRAFT_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [input, coachName, tnKuerzel, draftLoaded, draftKey]);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    try {
+      if (state.phase === "done") {
+        localStorage.setItem(
+          resultKey,
+          JSON.stringify({ result: state.result }),
+        );
+      } else if (state.phase === "idle") {
+        localStorage.removeItem(resultKey);
+      }
+      // Bei "running"/"error" lassen wir den letzten Stand bewusst stehen —
+      // ein fehlgeschlagener Re-Check soll das vorherige Ergebnis nicht
+      // aus dem Storage werfen.
+    } catch {
+      // quota / blocked — silent fall-back
+    }
+  }, [state, draftLoaded, resultKey]);
 
   const hasInput = useMemo(
     () =>
@@ -82,12 +207,29 @@ export function BtCheckerForm({ btName }: { btName: string }) {
     setState({ phase: "done", result: mapped });
   }
 
-  function reset() {
+  function discardDraft() {
+    const confirmed = window.confirm(
+      "Entwurf wirklich verwerfen? Alle eingegebenen Texte und das Check-Ergebnis gehen verloren.",
+    );
+    if (!confirmed) return;
+    try {
+      localStorage.removeItem(draftKey);
+      localStorage.removeItem(resultKey);
+    } catch {
+      /* noop */
+    }
     setInput(EMPTY);
     setCoachName("");
     setTnKuerzel("");
     setState({ phase: "idle" });
+    setSavedAt(null);
   }
+
+  const hasResetableContent =
+    hasAnyContent(input) ||
+    coachName.trim().length > 0 ||
+    tnKuerzel.trim().length > 0 ||
+    state.phase === "done";
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_420px]">
@@ -164,14 +306,36 @@ export function BtCheckerForm({ btName }: { btName: string }) {
         </fieldset>
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <p className="text-xs text-zinc-500">
-            Prüfung dauert ca. 6 Sekunden (Anonymisierung + Azure-Regelprüfung).
-          </p>
+          <div className="min-w-0 text-xs text-zinc-500">
+            <p>
+              Prüfung dauert ca. 6 Sekunden (Anonymisierung +
+              Azure-Regelprüfung).
+            </p>
+            {savedAt ? (
+              <p className="mt-1">
+                <span aria-hidden className="text-emerald-600">
+                  ●
+                </span>{" "}
+                Entwurf automatisch im Browser gespeichert (zuletzt{" "}
+                {savedAt.toLocaleTimeString("de-DE", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+                ).
+              </p>
+            ) : (
+              <p className="mt-1 text-zinc-400">
+                Entwurf wird automatisch im Browser gespeichert, sobald du
+                schreibst — Refresh ist ungefährlich.
+              </p>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            {state.phase === "done" && (
+            {hasResetableContent && (
               <button
                 type="button"
-                onClick={reset}
+                onClick={discardDraft}
                 className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
               >
                 Neuer Bericht
