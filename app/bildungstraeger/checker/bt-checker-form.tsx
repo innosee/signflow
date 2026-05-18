@@ -59,16 +59,25 @@ type DraftPayload = {
   input: CheckerInput;
   coachName: string;
   tnKuerzel: string;
+  /**
+   * Editierbare BT-Signatur unter der Email. Optional im Payload, damit
+   * Drafts aus der Version vor dem Edit-Feld kompatibel bleiben.
+   */
+  btName?: string;
 };
 
 function isDraftPayload(value: unknown): value is DraftPayload {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  return (
-    isCheckerInput(v.input) &&
-    typeof v.coachName === "string" &&
-    typeof v.tnKuerzel === "string"
-  );
+  if (
+    !isCheckerInput(v.input) ||
+    typeof v.coachName !== "string" ||
+    typeof v.tnKuerzel !== "string"
+  ) {
+    return false;
+  }
+  if (v.btName !== undefined && typeof v.btName !== "string") return false;
+  return true;
 }
 
 type State =
@@ -78,7 +87,7 @@ type State =
   | { phase: "error"; message: string };
 
 export function BtCheckerForm({
-  btName,
+  btName: btNameDefault,
   userId,
 }: {
   btName: string;
@@ -89,6 +98,11 @@ export function BtCheckerForm({
   const [input, setInput] = useState<CheckerInput>(EMPTY);
   const [coachName, setCoachName] = useState("");
   const [tnKuerzel, setTnKuerzel] = useState("");
+  // Editierbare BT-Signatur — Default ist `session.user.name`, der BT
+  // kann den Wert pro Bericht überschreiben (z.B. wenn die Email aus
+  // einem Funktions-Postfach versendet wird oder für mehrere Personen
+  // im selben User-Account gearbeitet wird).
+  const [btName, setBtName] = useState(btNameDefault);
   const [state, setState] = useState<State>({ phase: "idle" });
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -103,6 +117,9 @@ export function BtCheckerForm({
           setInput(maybe.input);
           setCoachName(maybe.coachName);
           setTnKuerzel(maybe.tnKuerzel);
+          if (typeof maybe.btName === "string" && maybe.btName.length > 0) {
+            setBtName(maybe.btName);
+          }
         }
       }
     } catch {
@@ -136,12 +153,24 @@ export function BtCheckerForm({
     if (!draftLoaded) return;
     const handle = setTimeout(() => {
       try {
-        if (
+        // btName-Override nur persistieren, wenn der BT was anderes als
+        // den Default gesetzt hat — sonst quillt der Storage mit Defaults.
+        const btNameOverride =
+          btName.trim().length > 0 && btName !== btNameDefault
+            ? btName
+            : undefined;
+        const hasAnyDraft =
           hasAnyContent(input) ||
           coachName.trim().length > 0 ||
-          tnKuerzel.trim().length > 0
-        ) {
-          const payload: DraftPayload = { input, coachName, tnKuerzel };
+          tnKuerzel.trim().length > 0 ||
+          btNameOverride !== undefined;
+        if (hasAnyDraft) {
+          const payload: DraftPayload = {
+            input,
+            coachName,
+            tnKuerzel,
+            ...(btNameOverride ? { btName: btNameOverride } : {}),
+          };
           localStorage.setItem(draftKey, JSON.stringify(payload));
           setSavedAt(new Date());
         } else {
@@ -153,7 +182,7 @@ export function BtCheckerForm({
       }
     }, DRAFT_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [input, coachName, tnKuerzel, draftLoaded, draftKey]);
+  }, [input, coachName, tnKuerzel, btName, btNameDefault, draftLoaded, draftKey]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -231,6 +260,7 @@ export function BtCheckerForm({
     setInput(EMPTY);
     setCoachName("");
     setTnKuerzel("");
+    setBtName(btNameDefault);
     setState({ phase: "idle" });
     setSavedAt(null);
   }
@@ -239,6 +269,7 @@ export function BtCheckerForm({
     hasAnyContent(input) ||
     coachName.trim().length > 0 ||
     tnKuerzel.trim().length > 0 ||
+    btName !== btNameDefault ||
     state.phase === "done";
 
   return (
@@ -318,10 +349,34 @@ export function BtCheckerForm({
               />
             </label>
           </div>
+
+          <label className="block space-y-1.5">
+            <span className="flex items-center justify-between text-xs text-zinc-600">
+              <span>Unterschrift unter der E-Mail</span>
+              {btName !== btNameDefault && (
+                <button
+                  type="button"
+                  onClick={() => setBtName(btNameDefault)}
+                  className="text-[11px] text-indigo-600 underline-offset-2 hover:underline"
+                >
+                  Auf &bdquo;{btNameDefault}&ldquo; zurücksetzen
+                </button>
+              )}
+            </span>
+            <input
+              type="text"
+              value={btName}
+              onChange={(e) => setBtName(e.target.value)}
+              placeholder={btNameDefault}
+              className="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-600"
+            />
+          </label>
+
           <p className="text-xs text-zinc-500">
-            Beide Felder sind optional. Wenn leer, baut der Komposer eine
-            generische Anrede und Einleitung — du kannst die Anrede in der
-            Email-Vorschau auch manuell anpassen, bevor du sie kopierst.
+            Coach-Name + TN-Kürzel sind optional. Die Unterschrift ist auf
+            deinen Account-Namen voreingestellt — überschreib sie z.B. wenn
+            die Email aus einem Funktions-Postfach raus geht oder ihr euch
+            einen Account zu mehrt teilt.
           </p>
         </fieldset>
 

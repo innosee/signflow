@@ -41,9 +41,11 @@ export function composeBtFeedbackEmail(params: EmailComposerInput): string {
   const { coachName, tnKuerzel, btName, result } = params;
   const lines: string[] = [];
 
-  const greeting = coachName.trim().length > 0
-    ? `Liebe${endsWithUmlautA(coachName.trim()) ? "" : "r"} ${coachName.trim().split(/\s+/)[0]},`
-    : "Hallo,";
+  const firstName = extractFirstName(coachName);
+  const greeting =
+    firstName.length > 0
+      ? `Liebe${endsWithUmlautA(firstName) ? "" : "r"} ${firstName},`
+      : "Hallo,";
   lines.push(greeting);
   lines.push("");
 
@@ -182,13 +184,71 @@ function renderFeedback(v: Violation): string {
   return parts.join(" ");
 }
 
-function endsWithUmlautA(name: string): boolean {
+// Akademische Titel + Anreden, die im Feld „Coach-Name" oft mit-getippt
+// werden („Dr. Irene", „Prof. Schneider", „Frau Müller", …). Beim Bauen
+// der Anrede überspringen wir die, damit nicht „Lieber Dr.," steht.
+// Liste vorsichtig konservativ — bei Zweifel lieber durchlassen.
+const TITLE_TOKENS = new Set([
+  "dr",
+  "dr.",
+  "prof",
+  "prof.",
+  "dipl",
+  "dipl.",
+  "dipl.-ing",
+  "dipl.-ing.",
+  "mag",
+  "mag.",
+  "mba",
+  "msc",
+  "msc.",
+  "m.sc",
+  "m.sc.",
+  "bsc",
+  "bsc.",
+  "b.sc",
+  "b.sc.",
+  "phd",
+  "ph.d",
+  "ph.d.",
+  "med",
+  "med.",
+  "rer",
+  "rer.",
+  "nat",
+  "nat.",
+  "phil",
+  "phil.",
+  "ing",
+  "ing.",
+  "herr",
+  "hr",
+  "hr.",
+  "frau",
+  "fr",
+  "fr.",
+]);
+
+/**
+ * Holt den ersten echten Vornamen aus einem Coach-Name-String, indem
+ * akademische Titel + Anreden überlesen werden. Liefert leeren String,
+ * wenn der ganze Name nur aus Titeln besteht — dann fällt der Komposer
+ * auf die generische „Hallo,"-Anrede zurück.
+ */
+function extractFirstName(coachName: string): string {
+  const tokens = coachName.trim().split(/\s+/).filter((t) => t.length > 0);
+  for (const token of tokens) {
+    if (!TITLE_TOKENS.has(token.toLowerCase())) return token;
+  }
+  return "";
+}
+
+function endsWithUmlautA(firstName: string): boolean {
   // Sehr grobe Heuristik zur „Liebe X" vs. „Lieber X"-Anrede: endet
   // der Vorname auf typische weibliche Endungen, kein "r" anhängen.
   // Bewusst konservativ — bei Unsicherheit dem User-Tipp folgen, dass
   // er die Anrede einfach manuell korrigiert.
-  const first = name.split(/\s+/)[0]?.toLowerCase() ?? "";
-  return /(a|e|i|y|ia|tte|ine|line|na)$/.test(first);
+  return /(a|e|i|y|ia|tte|ine|line|na)$/.test(firstName.toLowerCase());
 }
 
 function capitalize(s: string): string {
