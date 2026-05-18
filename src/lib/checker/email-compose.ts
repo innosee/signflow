@@ -69,6 +69,27 @@ export function composeBtFeedbackEmail(params: EmailComposerInput): string {
     lines.push("");
   }
 
+  // Konkretheits-Probes mit `not_relevant`-Antwort — Audit-Trail nach oben:
+  // zeigt dem Coach, dass der Checker bestimmte Aspekte BEWUSST nicht
+  // moniert hat (z.B. Bewerbungs-Probes irrelevant weil TN gründet). Ohne
+  // diesen Block wirkt's so als wäre der Bericht ungeprüft durchgewunken.
+  // Steht VOR den Findings, damit der Coach den Kontext hat, bevor die
+  // Korrekturen kommen.
+  const notRelevantProbes = (result.konkretheit ?? []).filter(
+    (p) => p.answer === "not_relevant",
+  );
+  if (notRelevantProbes.length > 0) {
+    lines.push(
+      "Folgende Aspekte habe ich geprüft und im Kontext dieses Berichts bewusst nicht moniert:",
+    );
+    lines.push("");
+    notRelevantProbes.forEach((p) => {
+      const label = PROBE_TOPIC_LABELS[p.topic];
+      lines.push(`    - ${label}${p.hint ? ` — ${p.hint}` : ""}`);
+    });
+    lines.push("");
+  }
+
   // Violations: nach Sektion gruppiert, hard_block zuerst, soft_flag danach.
   const ordered = [...result.violations].sort((a, b) => {
     if (a.severity !== b.severity) {
@@ -102,10 +123,9 @@ export function composeBtFeedbackEmail(params: EmailComposerInput): string {
     lines.push("");
   }
 
-  // Konkretheits-Lücken: nur `missing`-Probes in die Mail aufnehmen.
-  // `not_relevant` und `yes` sind nicht der Punkt — der Coach soll
-  // sehen WO Substanz fehlt, nicht WAS schon okay ist (das sieht er
-  // im positiveAspects-Block).
+  // Echte Konkretheits-Lücken (missing). `yes`-Probes lassen wir hier weg
+  // — der positiveAspects-Block deckt das ab. `not_relevant` ist schon im
+  // oberen Audit-Trail-Block.
   const missingProbes = (result.konkretheit ?? []).filter(
     (p) => p.answer === "missing",
   );
