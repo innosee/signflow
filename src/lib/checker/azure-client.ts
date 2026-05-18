@@ -1,14 +1,34 @@
 import { AzureOpenAI } from "openai";
 
-import { CHECKER_SYSTEM_PROMPT } from "./prompt";
-import type {
-  CheckerInput,
-  CheckerResult,
-  MustHaveCoverage,
-  MustHaveTopic,
-  Violation,
-  ViolationCategory,
+import { buildCheckerSystemPrompt } from "./prompt";
+import {
+  MUST_HAVES_BY_MASSNAHMETYP,
+  resolveMassnahmeTyp,
+  type CheckerInput,
+  type CheckerResult,
+  type MustHaveCoverage,
+  type MustHaveTopic,
+  type ProbeAnswer,
+  type ProbeResult,
+  type ProbeTopic,
+  type Violation,
+  type ViolationCategory,
 } from "./types";
+
+const VALID_PROBE_TOPICS = new Set<ProbeTopic>([
+  "bewerbungsunterlagen",
+  "bewerbungen_konkret",
+  "vorstellungsgespraeche",
+  "methoden_erklaert",
+  "anstellung_konkret",
+  "weiterbildung_zielposition",
+]);
+
+const VALID_PROBE_ANSWERS = new Set<ProbeAnswer>([
+  "yes",
+  "missing",
+  "not_relevant",
+]);
 
 const API_VERSION = "2024-10-21";
 
@@ -51,15 +71,6 @@ function buildUserMessage(input: CheckerInput): string {
   ].join("\n");
 }
 
-const VALID_TOPICS = new Set<MustHaveTopic>([
-  "profiling",
-  "zielarbeit",
-  "strategie",
-  "umsetzung",
-  "marktorientierung",
-  "prozessbegleitung",
-]);
-
 const VALID_CATEGORIES = new Set<ViolationCategory>([
   "medizin",
   "diagnostik",
@@ -72,7 +83,10 @@ const VALID_CATEGORIES = new Set<ViolationCategory>([
 
 const VALID_SECTIONS = new Set(["teilnahme", "ablauf", "fazit"]);
 
-function parseAndValidate(raw: string): CheckerResult {
+function parseAndValidate(
+  raw: string,
+  expectedTopics: ReadonlySet<MustHaveTopic>,
+): CheckerResult {
   // Tolerant gegen Markdown-Fences, falls das Modell sich nicht ans Prompt hält.
   const stripped = raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
   const data: unknown = JSON.parse(stripped);
@@ -91,17 +105,38 @@ function parseAndValidate(raw: string): CheckerResult {
     throw new Error(`Ungültiger status: ${String(rawStatus)}`);
   }
 
+  // mustHaves: nur Topics akzeptieren, die für den aktiven Maßnahmetyp
+  // erwartet sind. Wenn das LLM versehentlich Topics aus einem anderen
+  // Typ erfindet, fallen sie hier raus (statt die UI mit unbekannten
+  // Topic-Keys crashen zu lassen).
   const mustHavesRaw = Array.isArray(obj.mustHaves) ? obj.mustHaves : [];
-  const mustHaves: MustHaveCoverage[] = mustHavesRaw
-    .filter(
-      (m): m is Record<string, unknown> =>
-        !!m && typeof m === "object" && VALID_TOPICS.has((m as { topic: MustHaveTopic }).topic),
-    )
-    .map((m) => ({
-      topic: m.topic as MustHaveTopic,
-      covered: Boolean(m.covered),
-      hint: typeof m.hint === "string" ? m.hint : undefined,
-    }));
+  const fromAzure = new Map<MustHaveTopic, MustHaveCoverage>();
+  for (const m of mustHavesRaw) {
+    if (!m || typeof m !== "object") continue;
+    const topic = (m as { topic?: unknown }).topic;
+    if (typeof topic !== "string" || !expectedTopics.has(topic as MustHaveTopic)) {
+      continue;
+    }
+    const rec = m as Record<string, unknown>;
+    fromAzure.set(topic as MustHaveTopic, {
+      topic: topic as MustHaveTopic,
+      covered: Boolean(rec.covered),
+      hint: typeof rec.hint === "string" ? rec.hint : undefined,
+    });
+  }
+  // Fehlende Topics auffüllen — wenn Azure einen erwarteten Baustein
+  // einfach nicht zurückgegeben hat (z.B. weil das Modell das Schema
+  // verkürzt hat), werten wir das als `covered: false`. Lieber den Coach
+  // einen Hinweis zu viel sehen lassen, als stillschweigend einen
+  // Pflicht-Baustein zu überspringen.
+  const mustHaves: MustHaveCoverage[] = Array.from(expectedTopics).map(
+    (topic) =>
+      fromAzure.get(topic) ?? {
+        topic,
+        covered: false,
+        hint: "Vom Checker nicht beantwortet — bitte im Bericht ergänzen.",
+      },
+  );
 
   const violationsRaw = Array.isArray(obj.violations) ? obj.violations : [];
   const violations: Violation[] = violationsRaw
@@ -127,6 +162,45 @@ function parseAndValidate(raw: string): CheckerResult {
       ? obj.tonalityFeedback
       : undefined;
 
+  // Konkretheits-Probes (Stage 1, prompt-seitig schon live): kontrolliert
+  // an die UI durchreichen. Pro Topic darf das LLM maximal einen Eintrag
+  // schicken — Dupes werden via Map dedupliziert.
+  const probesRaw = Array.isArray(obj.konkretheit) ? obj.konkretheit : [];
+  const probesMap = new Map<ProbeTopic, ProbeResult>();
+  for (const p of probesRaw) {
+    if (!p || typeof p !== "object") continue;
+    const rec = p as Record<string, unknown>;
+    const topic = rec.topic;
+    const answer = rec.answer;
+    if (
+      typeof topic !== "string" ||
+      !VALID_PROBE_TOPICS.has(topic as ProbeTopic) ||
+      typeof answer !== "string" ||
+      !VALID_PROBE_ANSWERS.has(answer as ProbeAnswer)
+    ) {
+      continue;
+    }
+    probesMap.set(topic as ProbeTopic, {
+      topic: topic as ProbeTopic,
+      answer: answer as ProbeAnswer,
+      quote: typeof rec.quote === "string" ? rec.quote : undefined,
+      hint: typeof rec.hint === "string" ? rec.hint : undefined,
+    });
+  }
+  const konkretheit: ProbeResult[] | undefined =
+    probesMap.size > 0 ? Array.from(probesMap.values()) : undefined;
+
+  // Positive Aspekte — sehr kurze Stichworte. Strings über 200 Zeichen
+  // verwerfen, das wäre kein "kurzer Stich­wort"-Eintrag mehr und passt
+  // nicht ins UI-Layout.
+  const positiveRaw = Array.isArray(obj.positiveAspects)
+    ? obj.positiveAspects
+    : [];
+  const positiveAspects: string[] | undefined = positiveRaw
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    .map((s) => s.trim())
+    .filter((s) => s.length <= 200);
+
   // Canonicaler Status: pass nur wenn KEIN hard_block UND alle Must-Haves
   // covered. soft_flags sind Hinweise und blockieren Submit nicht.
   const hasHardBlock = violations.some((v) => v.severity === "hard_block");
@@ -134,11 +208,23 @@ function parseAndValidate(raw: string): CheckerResult {
   const status: CheckerResult["status"] =
     !hasHardBlock && allMustHavesCovered ? "pass" : "needs_revision";
 
-  return { status, mustHaves, violations, tonalityFeedback };
+  return {
+    status,
+    mustHaves,
+    violations,
+    tonalityFeedback,
+    konkretheit,
+    positiveAspects: positiveAspects.length > 0 ? positiveAspects : undefined,
+  };
 }
 
 export async function runAzureCheck(input: CheckerInput): Promise<CheckerResult> {
   const { client: c, deployment: d } = getClient();
+
+  const massnahmeTyp = resolveMassnahmeTyp(input.massnahmeTyp);
+  const expectedTopics = new Set<MustHaveTopic>(
+    MUST_HAVES_BY_MASSNAHMETYP[massnahmeTyp],
+  );
 
   const completion = await c.chat.completions.create({
     model: d,
@@ -150,7 +236,7 @@ export async function runAzureCheck(input: CheckerInput): Promise<CheckerResult>
     seed: 42,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: CHECKER_SYSTEM_PROMPT },
+      { role: "system", content: buildCheckerSystemPrompt(massnahmeTyp) },
       { role: "user", content: buildUserMessage(input) },
     ],
   });
@@ -159,5 +245,5 @@ export async function runAzureCheck(input: CheckerInput): Promise<CheckerResult>
   if (!raw) {
     throw new Error("Azure-Antwort enthielt keinen Inhalt");
   }
-  return parseAndValidate(raw);
+  return parseAndValidate(raw, expectedTopics);
 }

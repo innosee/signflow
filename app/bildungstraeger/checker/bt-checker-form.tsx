@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { MassnahmetypPicker } from "@/components/checker/massnahmetyp-picker";
 import { anonymize } from "@/lib/checker/anonymize";
 import {
   composeBtFeedbackEmail,
@@ -11,19 +12,27 @@ import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
 import {
   CHECKER_SECTIONS,
+  DEFAULT_MASSNAHME_TYP,
   MUST_HAVE_LABELS,
   PROBE_TOPIC_LABELS,
   VIOLATION_CATEGORY_LABELS,
   isCheckerInput,
   isCheckerResult,
+  resolveMassnahmeTyp,
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
+  type MassnahmeTyp,
   type ProbeResult,
   type Violation,
 } from "@/lib/checker/types";
 
-const EMPTY: CheckerInput = { teilnahme: "", ablauf: "", fazit: "" };
+const EMPTY: CheckerInput = {
+  teilnahme: "",
+  ablauf: "",
+  fazit: "",
+  massnahmeTyp: DEFAULT_MASSNAHME_TYP,
+};
 
 const SECTION_LABEL: Record<CheckerSection, string> = Object.fromEntries(
   CHECKER_SECTIONS.map((s) => [s.id, s.label]),
@@ -241,6 +250,16 @@ export function BtCheckerForm({
             in Frankfurt durch Platzhalter ersetzt — der Klartext verlässt nie
             den Browser.
           </p>
+        </div>
+
+        <div className="rounded-xl border border-zinc-300 bg-white p-5">
+          <MassnahmetypPicker
+            id="bt-checker-massnahmetyp"
+            value={resolveMassnahmeTyp(input.massnahmeTyp)}
+            onChange={(next: MassnahmeTyp) =>
+              setInput((prev) => ({ ...prev, massnahmeTyp: next }))
+            }
+          />
         </div>
 
         {CHECKER_SECTIONS.map((section) => (
