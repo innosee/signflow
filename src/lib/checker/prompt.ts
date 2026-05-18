@@ -63,6 +63,33 @@ Prüfe, ob folgende Aspekte **sinngemäß** (nicht wortgetreu, auch knapp angeri
 
 Setze \`tonalityFeedback\` nur, wenn der **Gesamteindruck** stark wertend, kalt oder pathologisierend ist. Bei einem normalen, sachlichen Bericht: leer lassen. Einzelne stilistische Auffälligkeiten gehören NICHT hierher.
 
+### E. Konkretheit — WO und ALS WAS, nicht nur WIE
+
+Prüfe folgende Probes mit einer 3-Wege-Antwort. Adressiert die häufige Lücke „der Bericht beschreibt den PROZESS gut (das WIE), nennt aber kein ERGEBNIS (das WO und ALS WAS)":
+
+- \`bewerbungsunterlagen\` — wurden Bewerbungsunterlagen überarbeitet/optimiert?
+- \`bewerbungen_konkret\` — wurden Bewerbungen während der Maßnahme verschickt? Wenn ja, an welche konkreten Arbeitgeber/Positionen?
+- \`vorstellungsgespraeche\` — wurden Vorstellungsgespräche vorbereitet/geübt?
+- \`methoden_erklaert\` — wenn der Coach Methoden nennt (z.B. ZRM, IKIGAI, EMDR): hat er sie in 1 Satz für Vermittlungs-Laien erklärt?
+- \`anstellung_konkret\` — falls eine Anstellung erreicht wurde: wird Arbeitgeber + Position konkret benannt?
+- \`weiterbildung_zielposition\` — falls eine Weiterbildung empfohlen wird: für welche konkrete Berufsposition?
+
+**Antwort pro Probe — drei mögliche Werte:**
+
+- \`yes\` mit \`quote\` (Snippet aus Bericht): die Probe ist substanziell beantwortet
+- \`missing\` mit \`hint\` (kurz, ohne Schimpfton): die Probe ist relevant aber nicht beantwortet
+- \`not_relevant\` mit \`hint\` (kurze Begründung): die Probe passt in diesem Fall nicht (z.B. „TN macht sich selbständig — Bewerbungs-Probes irrelevant", „kein Erstgespräch, sondern Verlängerung", „keine Weiterbildungs-Empfehlung im Bericht")
+
+**Anonymisierungs-Tokens (\`[ARBEITGEBER_1]\`, \`[POSITION_2]\` etc.) gelten als KONKRET** — der Coach hat den AG/die Position benannt, unser Anonymizer hat sie nur maskiert. Floskeln wie „bei verschiedenen Firmen", „in unterschiedlichen Branchen", „eine passende Position" gelten dagegen weiter als **nicht konkret**.
+
+Im Zweifel \`not_relevant\` statt \`missing\` — wir wollen Coaches nicht mit Vorwürfen bombardieren, wo Use-Case-bedingt nichts zu erwarten war.
+
+### F. Positive Aspekte
+
+Optional 1–3 sehr kurze Stichworte, was im Bericht schon gut gelaufen ist (z.B. „Methoden klar beschrieben", „Coaching-Verlauf nachvollziehbar", „Tonalität wertschätzend"). UX-Boost für den Coach beim Korrekturlesen — nicht nur Tadel sehen.
+
+Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber stehen lassen als hohle Floskeln zu produzieren.
+
 ## Ausgabe — STRIKT dieses JSON-Schema:
 
 {
@@ -80,7 +107,16 @@ Setze \`tonalityFeedback\` nur, wenn der **Gesamteindruck** stark wertend, kalt 
       "suggestion": "konkrete Umformulierung nach erango-Standard: wohlwollend, ressourcenorientiert, ohne verbotene Begriffe — UND selbst keine neuen Regelverstöße"
     }
   ],
-  "tonalityFeedback": "optional: nur bei klarem Gesamtmuster, sonst leer/weglassen"
+  "tonalityFeedback": "optional: nur bei klarem Gesamtmuster, sonst leer/weglassen",
+  "konkretheit": [
+    {
+      "topic": "bewerbungsunterlagen" | "bewerbungen_konkret" | "vorstellungsgespraeche" | "methoden_erklaert" | "anstellung_konkret" | "weiterbildung_zielposition",
+      "answer": "yes" | "missing" | "not_relevant",
+      "quote": "nur bei answer=yes: Snippet aus dem Bericht, buchstabengetreu wie bei violations",
+      "hint": "nur bei answer=missing oder not_relevant: kurze sachliche Begründung"
+    }
+  ],
+  "positiveAspects": ["1–3 sehr kurze Stichworte, optional — leer lassen wenn nichts substanziell positiv ist"]
 }
 
 ## Beispiele für Umformulierungen

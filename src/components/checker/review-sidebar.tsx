@@ -4,9 +4,11 @@ import { useState } from "react";
 
 import {
   MUST_HAVE_LABELS,
+  PROBE_TOPIC_LABELS,
   VIOLATION_CATEGORY_LABELS,
   type CheckerResult,
   type CheckerSection,
+  type ProbeResult,
   type Violation,
 } from "@/lib/checker/types";
 
@@ -110,6 +112,14 @@ export function ReviewSidebar({
         </section>
       )}
 
+      {result.konkretheit && result.konkretheit.length > 0 && (
+        <KonkretheitCard probes={result.konkretheit} />
+      )}
+
+      {result.positiveAspects && result.positiveAspects.length > 0 && (
+        <PositiveAspectsCard aspects={result.positiveAspects} />
+      )}
+
       {result.tonalityFeedback && (
         <section className="rounded-xl border border-zinc-300 bg-zinc-50 p-4">
           <h3 className="text-sm font-semibold text-zinc-900">Tonalität</h3>
@@ -119,6 +129,73 @@ export function ReviewSidebar({
         </section>
       )}
     </aside>
+  );
+}
+
+function KonkretheitCard({ probes }: { probes: ProbeResult[] }) {
+  // Zähler oben: nur die echt offenen Probes hervorheben — `not_relevant`
+  // und `yes` sind keine Aktionspunkte für den Coach.
+  const missing = probes.filter((p) => p.answer === "missing");
+  return (
+    <section className="rounded-xl border border-zinc-300 bg-white">
+      <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+        <h3 className="text-sm font-semibold text-zinc-900">Konkretheit</h3>
+        <span className="text-xs text-zinc-500">
+          {missing.length} offen
+        </span>
+      </header>
+      <ul className="divide-y divide-zinc-100 text-xs">
+        {probes.map((p) => (
+          <li key={p.topic} className="flex items-start gap-2 px-4 py-2.5">
+            <span
+              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
+                p.answer === "yes"
+                  ? "bg-emerald-500 text-white"
+                  : p.answer === "missing"
+                    ? "border border-amber-400 bg-amber-50"
+                    : "border border-dashed border-zinc-300"
+              }`}
+            >
+              {p.answer === "yes" && <CheckIcon size={10} />}
+            </span>
+            <span
+              className={
+                p.answer === "missing"
+                  ? "text-amber-900"
+                  : p.answer === "yes"
+                    ? "text-zinc-700"
+                    : "text-zinc-500"
+              }
+            >
+              {PROBE_TOPIC_LABELS[p.topic]}
+              {p.hint && (
+                <span className="block text-[11px] text-zinc-500">
+                  — {p.hint}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function PositiveAspectsCard({ aspects }: { aspects: string[] }) {
+  return (
+    <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+      <h3 className="text-sm font-semibold text-emerald-900">
+        Was schon gut ist
+      </h3>
+      <ul className="mt-2 space-y-1 text-xs text-emerald-900">
+        {aspects.map((a, i) => (
+          <li key={i} className="flex items-start gap-1.5">
+            <span aria-hidden className="mt-0.5">✓</span>
+            <span>{a}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

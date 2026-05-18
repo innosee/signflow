@@ -12,10 +12,12 @@ import { runCheck } from "@/lib/checker/run-check";
 import {
   CHECKER_SECTIONS,
   MUST_HAVE_LABELS,
+  PROBE_TOPIC_LABELS,
   VIOLATION_CATEGORY_LABELS,
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
+  type ProbeResult,
   type Violation,
 } from "@/lib/checker/types";
 
@@ -327,6 +329,86 @@ function FindingsPanel({
           </ul>
         </div>
       )}
+
+      {result.konkretheit && result.konkretheit.length > 0 && (
+        <KonkretheitBlock probes={result.konkretheit} />
+      )}
+
+      {result.positiveAspects && result.positiveAspects.length > 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
+          <p className="font-medium text-emerald-900">Was schon gut ist</p>
+          <ul className="mt-2 space-y-1 text-xs text-emerald-900">
+            {result.positiveAspects.map((a, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <span aria-hidden className="mt-0.5">
+                  ✓
+                </span>
+                <span>{a}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KonkretheitBlock({ probes }: { probes: ProbeResult[] }) {
+  // Nach Antwort-Typ gruppiert: erst die offenen Lücken (missing) — die
+  // landen auch im Email-Body. Dann „passt", dann „nicht relevant".
+  const missing = probes.filter((p) => p.answer === "missing");
+  const yes = probes.filter((p) => p.answer === "yes");
+  const notRelevant = probes.filter((p) => p.answer === "not_relevant");
+
+  return (
+    <div className="rounded-xl border border-zinc-300 bg-white text-sm">
+      <p className="border-b border-zinc-200 px-4 py-3 font-medium text-zinc-900">
+        Konkretheit
+      </p>
+      <div className="space-y-3 px-4 py-3 text-xs">
+        {missing.length > 0 && (
+          <div>
+            <p className="font-medium text-amber-900">
+              Fehlt im Bericht ({missing.length})
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-amber-900">
+              {missing.map((p) => (
+                <li key={p.topic}>
+                  {PROBE_TOPIC_LABELS[p.topic]}
+                  {p.hint && <span className="text-amber-700"> — {p.hint}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {yes.length > 0 && (
+          <div>
+            <p className="font-medium text-emerald-900">
+              Substantiell beantwortet ({yes.length})
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-zinc-700">
+              {yes.map((p) => (
+                <li key={p.topic}>{PROBE_TOPIC_LABELS[p.topic]}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {notRelevant.length > 0 && (
+          <div>
+            <p className="font-medium text-zinc-700">
+              In diesem Fall nicht relevant ({notRelevant.length})
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-zinc-500">
+              {notRelevant.map((p) => (
+                <li key={p.topic}>
+                  {PROBE_TOPIC_LABELS[p.topic]}
+                  {p.hint && <span> — {p.hint}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
