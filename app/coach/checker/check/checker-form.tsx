@@ -13,6 +13,7 @@ import { LiveFeedback } from "@/components/checker/live-feedback";
 import { MassnahmetypPicker } from "@/components/checker/massnahmetyp-picker";
 import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
+import { AuthRequiredError } from "@/lib/checker/errors";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import {
   fingerprintApplied,
@@ -306,6 +307,30 @@ export function CheckerForm({
     );
   }
 
+  /**
+   * Setzt alle laufenden Steps auf einen klaren „Session abgelaufen"-Stand
+   * mit Login-Action. Wird von beiden Phasen (anon, validate) aufgerufen
+   * wenn das Backend 401 liefert — typisch nach 12h Hard-Cap (Tab über
+   * Nacht offen). Draft im localStorage bleibt erhalten, weil wir hier
+   * KEIN setInput aufrufen.
+   */
+  function renderAuthRequired() {
+    updateStep("anon", {
+      state: "error",
+      detail:
+        "Session abgelaufen — bitte neu einloggen. Deine Eingaben oben bleiben erhalten.",
+      actionHref: "/login",
+      actionLabel: "Zum Login",
+    });
+    updateStep("validate", { state: "pending", detail: undefined });
+    updateStep("feedback", { state: "pending", detail: undefined });
+    updateStep("verdict", {
+      state: "error",
+      detail: "Prüfung wegen abgelaufener Session abgebrochen.",
+    });
+    setIsProcessing(false);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     // Short-circuit: gleicher Input wie beim letzten Check → kein neuer
@@ -332,6 +357,10 @@ export function CheckerForm({
     try {
       anonResult = await anonymize(input);
     } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        renderAuthRequired();
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       updateStep("anon", {
         state: "error",
@@ -371,6 +400,10 @@ export function CheckerForm({
     try {
       azureResult = await runCheck(anonResult.anonymized);
     } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        renderAuthRequired();
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       updateStep("validate", { state: "error", detail: message });
       updateStep("verdict", {

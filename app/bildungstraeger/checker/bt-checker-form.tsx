@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckerCoolLoader } from "@/components/checker/checker-cool-loader";
 import { MassnahmetypPicker } from "@/components/checker/massnahmetyp-picker";
 import { anonymize } from "@/lib/checker/anonymize";
+import { AuthRequiredError } from "@/lib/checker/errors";
 import {
   composeBtFeedbackEmail,
   composeSingleFinding,
@@ -84,7 +85,8 @@ type State =
   | { phase: "idle" }
   | { phase: "running"; stage: "anon" | "azure" }
   | { phase: "done"; result: CheckerResult }
-  | { phase: "error"; message: string };
+  | { phase: "error"; message: string }
+  | { phase: "auth_required" };
 
 export function BtCheckerForm({
   btName: btNameDefault,
@@ -221,6 +223,10 @@ export function BtCheckerForm({
     try {
       anonResult = await anonymize(input);
     } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        setState({ phase: "auth_required" });
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       setState({
         phase: "error",
@@ -234,6 +240,10 @@ export function BtCheckerForm({
     try {
       azureResult = await runCheck(anonResult.anonymized);
     } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        setState({ phase: "auth_required" });
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       setState({
         phase: "error",
@@ -434,6 +444,7 @@ export function BtCheckerForm({
       <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
         {state.phase === "idle" && <IdleHint />}
         {state.phase === "running" && <CheckerCoolLoader stage={state.stage} />}
+        {state.phase === "auth_required" && <AuthRequiredBox />}
         {state.phase === "error" && <ErrorBox message={state.message} />}
         {state.phase === "done" && (
           <FindingsPanel
@@ -467,6 +478,28 @@ function ErrorBox({ message }: { message: string }) {
     <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
       <p className="font-medium">Prüfung fehlgeschlagen</p>
       <p className="mt-1 text-xs">{message}</p>
+    </div>
+  );
+}
+
+function AuthRequiredBox() {
+  // Full-Page-Reload via `<a>` (kein next/Link), damit die abgelaufene
+  // Session-Cookie sauber neu gesetzt wird und kein stale Auth-State im
+  // Client-State hängen bleibt.
+  return (
+    <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
+      <p className="font-medium">Session abgelaufen</p>
+      <p className="mt-1 text-xs leading-relaxed">
+        Aus DSGVO-Gründen melden wir dich nach 12 Stunden automatisch ab.
+        Bitte einmal neu einloggen — deine Eingaben sind im Browser
+        gespeichert und nach dem Login sofort wieder da.
+      </p>
+      <a
+        href="/login"
+        className="mt-3 inline-block rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-700"
+      >
+        Zum Login →
+      </a>
     </div>
   );
 }
