@@ -1,3 +1,4 @@
+import { AuthRequiredError } from "./errors";
 import type { CheckerInput } from "./types";
 
 export type AnonEntity = {
@@ -57,6 +58,9 @@ export async function anonymize(input: CheckerInput): Promise<AnonResult> {
     );
   }
 
+  if (tokenRes.status === 401) {
+    throw new AuthRequiredError();
+  }
   if (tokenRes.status === 503) {
     // Proxy nicht konfiguriert — Bypass mit Klartext
     return {
