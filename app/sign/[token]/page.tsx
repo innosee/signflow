@@ -113,6 +113,7 @@ export default async function ParticipantSignPage({ params }: Props) {
             coach={sheet.coach}
             participant={sheet.participant}
             sessions={sheet.sessions}
+            audit={sheet.audit}
           />
         </div>
         <div className="preview-cta">

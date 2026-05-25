@@ -98,10 +98,12 @@ export async function loadStundennachweisSheet(params: {
   // würden TN-Signaturen anderer Teilnehmer das Sheet verzerren.
   const signatures = await db
     .select({
+      id: schema.signatures.id,
       sessionId: schema.signatures.sessionId,
       signerType: schema.signatures.signerType,
       signatureUrl: schema.signatures.signatureUrl,
       signedAt: schema.signatures.signedAt,
+      ipAddress: schema.signatures.ipAddress,
     })
     .from(schema.signatures)
     .innerJoin(
@@ -120,6 +122,23 @@ export async function loadStundennachweisSheet(params: {
         ),
       ),
     );
+
+  // Final-Approval des TN (CLAUDE.md Schritt 8) — wird unter den Signaturen
+  // im Audit-Trail als eigene Zeile gerendert. Höchstens 1 Eintrag (Unique-
+  // Index auf (course_id, participant_id)).
+  const [approval] = await db
+    .select({
+      approvedAt: schema.participantApprovals.approvedAt,
+      ipAddress: schema.participantApprovals.ipAddress,
+    })
+    .from(schema.participantApprovals)
+    .where(
+      and(
+        eq(schema.participantApprovals.courseId, params.courseId),
+        eq(schema.participantApprovals.participantId, params.participantId),
+      ),
+    )
+    .limit(1);
 
   const sigBySession = new Map<
     string,
@@ -151,6 +170,40 @@ export async function loadStundennachweisSheet(params: {
     }
     sigBySession.set(sig.sessionId, slot);
   }
+
+  const sessionDateById = new Map(sessions.map((s) => [s.id, s.sessionDate]));
+
+  // Audit-Trail aufbauen: alle Signaturen + (max. 1) Approval, chronologisch
+  // sortiert. Coach-Signaturen werden mit dem Coach-Namen gelabelt; TN-
+  // Signaturen + Approval mit dem TN-Namen. Andere TN-Namen (wenn mehrere
+  // im Kurs sind) tauchen hier bewusst NICHT auf — dieses Sheet ist pro
+  // (Kurs × TN) und der Audit muss exakt dem Sheet entsprechen.
+  type AuditEntry = StundennachweisSheet["audit"][number];
+  const auditEntries: AuditEntry[] = [];
+  for (const sig of signatures) {
+    auditEntries.push({
+      key: `sig-${sig.id}`,
+      kind: sig.signerType === "coach" ? "coach-sign" : "participant-sign",
+      at: sig.signedAt.toISOString(),
+      signerName:
+        sig.signerType === "coach"
+          ? ctx.coachName
+          : enrollment.participantName,
+      sessionDate: sessionDateById.get(sig.sessionId) ?? null,
+      ip: sig.ipAddress,
+    });
+  }
+  if (approval) {
+    auditEntries.push({
+      key: `approval-${params.participantId}`,
+      kind: "participant-approval",
+      at: approval.approvedAt.toISOString(),
+      signerName: enrollment.participantName,
+      sessionDate: null,
+      ip: approval.ipAddress,
+    });
+  }
+  auditEntries.sort((a, b) => a.at.localeCompare(b.at));
 
   return {
     course: {
@@ -189,5 +242,6 @@ export async function loadStundennachweisSheet(params: {
         participantSignedAt: sig?.participantSignedAt ?? null,
       };
     }),
+    audit: auditEntries,
   };
 }

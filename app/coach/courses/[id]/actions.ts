@@ -481,7 +481,18 @@ export async function createParticipantQrLink(params: {
 }
 
 export type NotifyState =
-  | { success?: number; failedEmails?: string[]; error?: string }
+  | {
+      success?: number;
+      /**
+       * Aufschlüsselung der erfolgreich verschickten Magic-Links nach
+       * tatsächlich verwendetem Kanal. Weicht von der Coach-Auswahl ab,
+       * wenn ein TN keine Mobilnummer hat (Auto-Fallback Email) oder der
+       * globale SMS-Flag aus ist (alle Email). Nur bei `success > 0` gesetzt.
+       */
+      sentByChannel?: { email: number; sms: number };
+      failedEmails?: string[];
+      error?: string;
+    }
   | undefined;
 
 /**
@@ -534,6 +545,8 @@ export async function notifyParticipants(
 
   const failedEmails: string[] = [];
   let success = 0;
+  let smsCount = 0;
+  let emailCount = 0;
   for (const p of participants) {
     // Channel-Auswahl pro TN: preferred=SMS nur wenn Phone vorhanden,
     // sonst silent fallback auf Email — sonst hätte ein TN ohne Phone
@@ -542,12 +555,17 @@ export async function notifyParticipants(
       preferredChannel === "sms" && p.phone ? "sms" : "email";
 
     try {
-      await sendParticipantInvite({
+      // `usedChannel` ist die Wahrheit aus dem Lib-Layer (inkl. globalem
+      // SMS_ENABLED-Gate), nicht unsere lokale Vorab-Entscheidung. So
+      // bleibt die UI-Statistik ehrlich, falls der Flag mid-flight ausgeht.
+      const { usedChannel } = await sendParticipantInvite({
         courseId: ownedCourseId,
         participantId: p.participantId,
         channel,
       });
       success++;
+      if (usedChannel === "sms") smsCount++;
+      else emailCount++;
     } catch (err) {
       console.error(`notifyParticipants failed for ${p.email}:`, err);
       failedEmails.push(p.email);
@@ -557,6 +575,8 @@ export async function notifyParticipants(
   revalidatePath(`/coach/courses/${ownedCourseId}`);
   return {
     success,
+    sentByChannel:
+      success > 0 ? { email: emailCount, sms: smsCount } : undefined,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
 }

@@ -84,6 +84,9 @@ export function NotifyParticipantsButton({
         <p className="text-xs text-green-700">
           {state.success}{" "}
           {state.success === 1 ? "Magic-Link verschickt" : "Magic-Links verschickt"}
+          {state.sentByChannel && state.sentByChannel.sms > 0
+            ? ` (${state.sentByChannel.email} per E-Mail, ${state.sentByChannel.sms} per SMS)`
+            : ""}
           {state.failedEmails?.length
             ? ` · Fehler bei: ${state.failedEmails.join(", ")}`
             : ""}
