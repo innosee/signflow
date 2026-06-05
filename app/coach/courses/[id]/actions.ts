@@ -376,7 +376,12 @@ export async function reopenSession(
   }
 
   revalidatePath(`/coach/courses/${ownedCourseId}`);
-  return { success: true };
+  // Direkt ins Edit-Form schicken — der User klickt „Wieder öffnen"
+  // praktisch immer weil er den Inhalt korrigieren will. Zwei Klicks
+  // (reopen → manuell Bearbeiten) ergeben keinen Mehrwert.
+  redirect(
+    `/coach/courses/${ownedCourseId}/sessions/${sessionId}/edit?reopened=1`,
+  );
 }
 
 export type AddParticipantState =

@@ -44,10 +44,12 @@ export function ReopenSessionButton({
         type="submit"
         disabled={pending}
         className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900 transition hover:bg-amber-100 disabled:opacity-40"
-        title="Session zurücksetzen — Signaturen + TN-Freigaben werden gelöscht"
+        title="Session bearbeiten — bestehende Signaturen + TN-Freigaben werden dabei zurückgesetzt"
       >
         <span aria-hidden="true">↻</span>
-        {pending ? "Wird zurückgesetzt…" : "Wieder öffnen"}
+        {pending
+          ? "Wird zurückgesetzt…"
+          : "Bearbeiten (Signaturen zurücksetzen)"}
       </button>
       {state?.error && (
         <span role="alert" className="text-[10px] text-red-700">
