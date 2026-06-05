@@ -864,6 +864,32 @@ export async function sendPreviewToParticipants(
     };
   }
 
+  // Pflicht-Gates vor TN-Freigabe-Aufforderung: ANW-Check muss durch und
+  // der Coach muss die Maßnahme aktiv als abgeschlossen markiert haben.
+  // Sonst landet beim TN eine Freigabe-Aufforderung an die Agentur für
+  // Arbeit, während der Coach gedanklich noch mitten im Kurs ist und
+  // weitere Sessions plant.
+  const [gates] = await db
+    .select({
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      abgeschlossenAt: schema.courses.abgeschlossenAt,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!gates?.abgeschlossenAt) {
+    return {
+      error:
+        "Vor dem Versand der Freigabe-Aufforderung muss die Maßnahme als abgeschlossen markiert werden (Schritt davor).",
+    };
+  }
+  if (!gates.anwCheckPassedAt) {
+    return {
+      error:
+        "Vor dem Versand der Freigabe-Aufforderung muss der ANW-Compliance-Check mit Status „Freigabe“ durchlaufen sein.",
+    };
+  }
+
   const participants = await db
     .select({
       participantId: schema.participants.id,

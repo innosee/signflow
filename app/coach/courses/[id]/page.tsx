@@ -379,35 +379,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           />
           <Step
             index={2}
-            title="Freigabe der Teilnehmer einholen"
-            done={allApproved}
-            subtitle={
-              participants.length === 0
-                ? "Noch keine Teilnehmer im Kurs."
-                : `${approvalByParticipant.size} von ${participants.length} Teilnehmern haben freigegeben.`
-            }
-          >
-            {!impersonating && (
-              <SendPreviewButton
-                courseId={course.id}
-                disabled={
-                  participants.length === 0 ||
-                  !allSessionsCompleted ||
-                  allApproved
-                }
-                disabledReason={
-                  participants.length === 0
-                    ? "Keine Teilnehmer im Kurs"
-                    : !allSessionsCompleted
-                      ? "Erst wenn alle Sessions signiert sind"
-                      : "Alle Teilnehmer haben bereits freigegeben"
-                }
-                alreadySent={previewSent}
-              />
-            )}
-          </Step>
-          <Step
-            index={3}
             title="ANW-Compliance-Check"
             done={!!course.anwCheckPassedAt}
             subtitle={
@@ -429,7 +400,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             )}
           </Step>
           <Step
-            index={4}
+            index={3}
             title="Maßnahme als abgeschlossen markieren"
             done={!!course.abgeschlossenAt}
             subtitle={
@@ -440,6 +411,43 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           >
             {!impersonating && !course.abgeschlossenAt && (
               <MarkAbgeschlossenButton courseId={course.id} />
+            )}
+          </Step>
+          <Step
+            index={4}
+            title="Freigabe der Teilnehmer einholen"
+            done={allApproved}
+            subtitle={
+              participants.length === 0
+                ? "Noch keine Teilnehmer im Kurs."
+                : !course.abgeschlossenAt
+                  ? "Erst nach Markierung als abgeschlossen möglich."
+                  : `${approvalByParticipant.size} von ${participants.length} Teilnehmern haben freigegeben.`
+            }
+          >
+            {!impersonating && (
+              <SendPreviewButton
+                courseId={course.id}
+                disabled={
+                  participants.length === 0 ||
+                  !allSessionsCompleted ||
+                  !course.anwCheckPassedAt ||
+                  !course.abgeschlossenAt ||
+                  allApproved
+                }
+                disabledReason={
+                  participants.length === 0
+                    ? "Keine Teilnehmer im Kurs"
+                    : !allSessionsCompleted
+                      ? "Erst wenn alle Sessions signiert sind"
+                      : !course.anwCheckPassedAt
+                        ? "ANW-Compliance-Check muss durchlaufen sein"
+                        : !course.abgeschlossenAt
+                          ? "Maßnahme muss als abgeschlossen markiert sein"
+                          : "Alle Teilnehmer haben bereits freigegeben"
+                }
+                alreadySent={previewSent}
+              />
             )}
           </Step>
           <Step
