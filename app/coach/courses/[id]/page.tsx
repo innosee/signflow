@@ -8,6 +8,7 @@ import { isSmsEnabled } from "@/lib/sms";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 
+import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
 import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
@@ -344,22 +345,33 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             }
           >
             {!impersonating && (
-              <SendPreviewButton
-                courseId={course.id}
-                disabled={
-                  participants.length === 0 ||
-                  !allSessionsCompleted ||
-                  allApproved
-                }
-                disabledReason={
-                  participants.length === 0
-                    ? "Keine Teilnehmer im Kurs"
-                    : !allSessionsCompleted
-                      ? "Erst wenn alle Sessions signiert sind"
-                      : "Alle Teilnehmer haben bereits freigegeben"
-                }
-                alreadySent={previewSent}
-              />
+              <>
+                <AnwCheckButton
+                  courseId={course.id}
+                  disabled={sessions.length === 0}
+                  disabledReason={
+                    sessions.length === 0
+                      ? "Erst Sessions anlegen, dann prüfen"
+                      : undefined
+                  }
+                />
+                <SendPreviewButton
+                  courseId={course.id}
+                  disabled={
+                    participants.length === 0 ||
+                    !allSessionsCompleted ||
+                    allApproved
+                  }
+                  disabledReason={
+                    participants.length === 0
+                      ? "Keine Teilnehmer im Kurs"
+                      : !allSessionsCompleted
+                        ? "Erst wenn alle Sessions signiert sind"
+                        : "Alle Teilnehmer haben bereits freigegeben"
+                  }
+                  alreadySent={previewSent}
+                />
+              </>
             )}
           </Step>
           <Step

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -706,6 +706,99 @@ export async function sendPreviewToParticipants(
     success,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+export type AnwCheckState =
+  | {
+      error?: string;
+      result?: import("@/lib/checker/anw-check").AnwCheckResult;
+    }
+  | undefined;
+
+/**
+ * Server-Action für den ANW-Compliance-Check (KI-gestützte Prüfung der
+ * Stichwort-Einträge im Stundennachweis). Bewusst stateless — kein
+ * Persistieren des Ergebnisses, jeder Klick neuer Azure-Call. Memory
+ * `project_checker_konkretheit` etabliert das Pattern für KI-Checks
+ * im Signflow-Stack.
+ */
+export async function runAnwCheckAction(
+  _prev: AnwCheckState,
+  formData: FormData,
+): Promise<AnwCheckState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Tenant-Name + Kurs-Maßnahmentyp holen. `courses` hat keinen eigenen
+  // `tenantId` — der Mandant wird über den Coach (users.tenantId) abgeleitet,
+  // konsistent mit dem Multi-Tenant-Pattern an anderen Stellen.
+  const [meta] = await db
+    .select({
+      massnahmeTyp: schema.courses.massnahmeTyp,
+      tenantName: schema.tenants.name,
+    })
+    .from(schema.courses)
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.users.tenantId))
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!meta) return { error: "Kurs nicht auflösbar." };
+
+  // Schon-mal-Verteidigung: nur Sessions des eigenen Tenants laden —
+  // sollte durch das Course-Ownership bereits hart sein, aber explizit
+  // ist besser als implizit.
+  const entries = await db
+    .select({
+      sessionDate: schema.sessions.sessionDate,
+      topic: schema.sessions.topic,
+      anzahlUe: schema.sessions.anzahlUe,
+      isErstgespraech: schema.sessions.isErstgespraech,
+    })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .orderBy(asc(schema.sessions.sessionDate));
+
+  try {
+    const { runAnwCheck } = await import("@/lib/checker/anw-check");
+    const result = await runAnwCheck({
+      massnahmeTyp: meta.massnahmeTyp,
+      tenantName: meta.tenantName,
+      entries: entries.map((e) => ({
+        sessionDate: e.sessionDate,
+        topic: e.topic,
+        anzahlUe: Number.parseFloat(e.anzahlUe),
+        isErstgespraech: e.isErstgespraech,
+      })),
+    });
+    // Server-Log für Audit-Zwecke (siehe Memory project_checker_konkretheit).
+    // Tenant-ID statt -Name, weil ID stabiler ist.
+    console.log(
+      `anw-check: tenant=${tenantId} course=${ownedCourseId} status=${result.status} warnings=${result.warnings.length}`,
+    );
+    return { result };
+  } catch (err) {
+    console.error(
+      `anw-check failed for course ${ownedCourseId}:`,
+      err,
+    );
+    return {
+      error:
+        "ANW-Check fehlgeschlagen. Bitte später erneut versuchen oder den Support kontaktieren.",
+    };
+  }
 }
 
 export type SealState = { error?: string; sealed?: boolean } | undefined;

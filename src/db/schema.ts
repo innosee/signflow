@@ -56,6 +56,17 @@ export const bedarfstraegerType = pgEnum("bedarfstraeger_type", ["JC", "AA"]);
 /** Durchführungsmodus einer Kurseinheit. */
 export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
 /**
+ * AVGS-Maßnahmentyp gemäß § 45 SGB III. Werte-Set parallel zu
+ * `MassnahmeTyp` in `src/lib/checker/types.ts`:
+ *   - EKC = Erango Karriere-Coaching
+ *   - ESC = Erango Standort-Coaching (gleiches Baustein-Set wie EKC)
+ *   - EGC = Erango Gründungs-Coaching
+ *   - ESCA = Erango Ausbildungs-Coaching / Probezeitbegleitung
+ * Wird vom ANW-Compliance-Check gelesen, um den „roten Faden" der
+ * Sessions gegen die Phasen der gebuchten Maßnahme abzugleichen.
+ */
+export const massnahmeTyp = pgEnum("massnahme_typ", ["EKC", "ESC", "EGC", "ESCA"]);
+/**
  * Lebenszyklus eines Abschlussberichts.
  * `draft` = Coach arbeitet noch dran (Autosave); `submitted` = Coach hat an die Bildungsträgerin
  * abgegeben. Edit nach Submit bleibt erlaubt (Korrekturen); Status ändert sich dadurch nicht,
@@ -269,6 +280,15 @@ export const courses = pgTable("courses", {
   bedarfstraegerId: uuid("bedarfstraeger_id")
     .notNull()
     .references(() => bedarfstraeger.id, { onDelete: "restrict" }),
+  /**
+   * AVGS-Maßnahmentyp gemäß § 45 SGB III. Wird vom ANW-Compliance-Check
+   * gebraucht, um den „roten Faden" der Session-Themen gegen die
+   * Phasenbausteine der gebuchten Maßnahme abzugleichen (EKC-Startphase
+   * vs. EGC-Konzeptarbeit etc.). Default `EKC` weil das die historisch
+   * häufigste Maßnahme ist und beim Backfill der Bestandskurse die
+   * unschädlichste Annahme ist (Bausteine sehr ähnlich zu ESC).
+   */
+  massnahmeTyp: massnahmeTyp("massnahme_typ").notNull().default("EKC"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   status: courseStatus("status").notNull().default("active"),

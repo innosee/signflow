@@ -266,7 +266,7 @@ export default function DatenschutzPage() {
               />
               <ProcessorRow
                 name="Microsoft Ireland Operations Ltd. (Azure OpenAI)"
-                purpose="Regelprüfung auf anonymisiertem Text (nur Checker)"
+                purpose="Regelprüfung auf anonymisiertem Text (Abschlussbericht-Checker) sowie KI-gestützte Compliance-Prüfung der stichwortartigen Coach-Einträge in der Anwesenheitsliste (ANW-Check)"
                 region="EU (Sweden Central oder Germany West Central) — SCCs"
               />
             </tbody>
