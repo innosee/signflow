@@ -13,6 +13,7 @@ import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
 import { QrHandoverButton } from "./qr-handover-button";
 import { SealCourseButton } from "./seal-button";
+import { SmsResendButton } from "./sms-resend-button";
 
 export const dynamic = "force-dynamic";
 
@@ -90,10 +91,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .where(eq(schema.courseParticipants.courseId, id))
     .orderBy(asc(schema.participants.name));
 
+  // SMS ist Coach-getriggert per-TN (siehe SmsResendButton), nicht Bulk.
+  // Feature-Gate steuert nur, ob der Per-TN-Button überhaupt erscheint.
   const smsEnabled = isSmsEnabled();
-  const participantsWithPhone = smsEnabled
-    ? participants.filter((p) => !!p.phone).length
-    : 0;
 
   // Sessions + aggregierte Signatur-Counts pro Session in einer Query.
   // Spart N+1 und zeigt direkt "Coach ✓ · 2/3 TN", Status-Badge und ob
@@ -413,8 +413,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               <NotifyParticipantsButton
                 courseId={course.id}
                 participantCount={participants.length}
-                participantsWithPhone={participantsWithPhone}
-                smsEnabled={smsEnabled}
               />
             </div>
           )}
@@ -502,6 +500,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   </Link>
                   {!impersonating && (
                     <>
+                      {smsEnabled && p.phone && (
+                        <SmsResendButton
+                          courseId={course.id}
+                          participantId={p.id}
+                          phone={p.phone}
+                        />
+                      )}
                       <QrHandoverButton
                         courseId={course.id}
                         participantId={p.id}

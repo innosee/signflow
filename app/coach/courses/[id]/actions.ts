@@ -14,7 +14,6 @@ import {
 } from "@/lib/dal";
 import { sealWithFes } from "@/lib/firma";
 import {
-  type NotificationChannel,
   sendParticipantInvite,
   sendParticipantPreviewInvite,
 } from "@/lib/participant-tokens";
@@ -483,13 +482,6 @@ export async function createParticipantQrLink(params: {
 export type NotifyState =
   | {
       success?: number;
-      /**
-       * Aufschlüsselung der erfolgreich verschickten Magic-Links nach
-       * tatsächlich verwendetem Kanal. Weicht von der Coach-Auswahl ab,
-       * wenn ein TN keine Mobilnummer hat (Auto-Fallback Email) oder der
-       * globale SMS-Flag aus ist (alle Email). Nur bei `success > 0` gesetzt.
-       */
-      sentByChannel?: { email: number; sms: number };
       failedEmails?: string[];
       error?: string;
     }
@@ -515,14 +507,6 @@ export async function notifyParticipants(
   const courseId = String(formData.get("courseId") ?? "").trim();
   if (!courseId) return { error: "Kurs fehlt." };
 
-  // `channel` aus dem Form: "email" (Default, alle bekommen Mail) oder
-  // "sms" (jeder mit hinterlegter Nummer bekommt SMS, alle anderen
-  // fallen zurück auf E-Mail). Per-TN-Channel-Präferenz heben wir uns
-  // für später auf — der Bulk-Switch deckt 90 % der Fälle.
-  const channelRaw = String(formData.get("channel") ?? "email").trim();
-  const preferredChannel: NotificationChannel =
-    channelRaw === "sms" ? "sms" : "email";
-
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
@@ -530,7 +514,6 @@ export async function notifyParticipants(
     .select({
       participantId: schema.participants.id,
       email: schema.participants.email,
-      phone: schema.participants.phone,
     })
     .from(schema.courseParticipants)
     .innerJoin(
@@ -545,27 +528,18 @@ export async function notifyParticipants(
 
   const failedEmails: string[] = [];
   let success = 0;
-  let smsCount = 0;
-  let emailCount = 0;
   for (const p of participants) {
-    // Channel-Auswahl pro TN: preferred=SMS nur wenn Phone vorhanden,
-    // sonst silent fallback auf Email — sonst hätte ein TN ohne Phone
-    // gar keine Benachrichtigung bekommen.
-    const channel: NotificationChannel =
-      preferredChannel === "sms" && p.phone ? "sms" : "email";
-
     try {
-      // `usedChannel` ist die Wahrheit aus dem Lib-Layer (inkl. globalem
-      // SMS_ENABLED-Gate), nicht unsere lokale Vorab-Entscheidung. So
-      // bleibt die UI-Statistik ehrlich, falls der Flag mid-flight ausgeht.
-      const { usedChannel } = await sendParticipantInvite({
+      // Bulk-Notify ist hart auf Email verkabelt — SMS ist KEIN Bulk-Channel,
+      // sondern ausschließlich Coach-getriggerte Per-TN-Aktion über
+      // `resendInviteAsSms` (siehe unten). Damit bleiben die Kosten unter
+      // Kontrolle und der Coach hat die volle Entscheidungsgewalt.
+      await sendParticipantInvite({
         courseId: ownedCourseId,
         participantId: p.participantId,
-        channel,
+        channel: "email",
       });
       success++;
-      if (usedChannel === "sms") smsCount++;
-      else emailCount++;
     } catch (err) {
       console.error(`notifyParticipants failed for ${p.email}:`, err);
       failedEmails.push(p.email);
@@ -575,10 +549,74 @@ export async function notifyParticipants(
   revalidatePath(`/coach/courses/${ownedCourseId}`);
   return {
     success,
-    sentByChannel:
-      success > 0 ? { email: emailCount, sms: smsCount } : undefined,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+export type SmsResendState = { error?: string; success?: boolean } | undefined;
+
+/**
+ * Verschickt einen frischen Magic-Link per SMS an EINEN spezifischen TN.
+ * Bewusst getrennt vom Bulk-Notify, weil SMS pro Versand 7,5 Cent kostet
+ * und vom Coach nur als gezielte Reaktion auf einen TN gedacht ist, der
+ * auf die E-Mail nicht reagiert hat.
+ *
+ * Gate-Reihenfolge identisch zu `notifyParticipants`:
+ *   1. Signing-enabled-Flag des Coaches
+ *   2. Nicht unter Impersonation
+ *   3. Kurs gehört dem Coach
+ *   4. TN ist im Kurs eingeschrieben (über sendParticipantInvite)
+ *   5. SMS_ENABLED + Phone (über `effectiveChannel` im Lib-Layer)
+ *
+ * Wenn das Lib-Layer Email-Fallback auslöst (kein SMS_ENABLED oder kein
+ * Phone), werfen wir hart — sonst denkt der Coach er hätte eine SMS
+ * geschickt, der TN bekommt aber unsichtbar nochmal die Mail die schon
+ * im Spam liegt.
+ */
+export async function resendInviteAsSms(
+  _prev: SmsResendState,
+  formData: FormData,
+): Promise<SmsResendState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const participantId = String(formData.get("participantId") ?? "").trim();
+  if (!courseId || !participantId) {
+    return { error: "Kurs oder Teilnehmer fehlt." };
+  }
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  try {
+    const { usedChannel } = await sendParticipantInvite({
+      courseId: ownedCourseId,
+      participantId,
+      channel: "sms",
+    });
+    if (usedChannel !== "sms") {
+      // Lib-Layer hat auf Email umgeleitet (Flag aus oder Phone fehlt).
+      // Für diese Action ist das ein Fehlerfall, kein Silent-Fallback.
+      return {
+        error:
+          "SMS-Versand nicht möglich — entweder ist die Mobilnummer beim TN nicht hinterlegt oder das SMS-Feature ist nicht aktiv.",
+      };
+    }
+  } catch (err) {
+    console.error(
+      `resendInviteAsSms failed for participant ${participantId}:`,
+      err,
+    );
+    return {
+      error:
+        "SMS-Versand fehlgeschlagen. Bitte später erneut versuchen oder beim Support melden.",
+    };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
 }
 
 /**
