@@ -128,6 +128,11 @@ export default function DatenschutzPage() {
             <li>
               Signatur-Metadaten (IP-Adresse, Zeitstempel, Rolle) als Audit-Log
             </li>
+            <li>
+              Bei SMS-Zustellung zusätzlich: Mobilnummer (E.164), Vorname zur
+              Anrede, Kursbezeichnung sowie der Magic-Link selbst — als
+              Bestandteil des SMS-Textes an den Versanddienstleister
+            </li>
           </ul>
         </Subsection>
         <Subsection title="4.3 Rechtsgrundlagen">
@@ -251,7 +256,7 @@ export default function DatenschutzPage() {
               />
               <ProcessorRow
                 name="Sieben Communications GmbH (seven.io / sms77)"
-                purpose="Versand von Magic-Link-SMS an Teilnehmer:innen, sofern für diesen Zustellweg eine Mobilnummer hinterlegt und der Channel vom Coach gewählt wurde"
+                purpose="Versand von Magic-Link-SMS an Teilnehmer:innen, sofern für diesen Zustellweg eine Mobilnummer hinterlegt und der Channel vom Coach gewählt wurde. Auftragsverarbeitungsvertrag nach Art. 28 DSGVO geschlossen; Verarbeitung ausschließlich in einem ISO 27001 zertifizierten Rechenzentrum in Deutschland"
                 region="Deutschland (Köln)"
               />
               <ProcessorRow
@@ -291,6 +296,13 @@ export default function DatenschutzPage() {
           <li>
             Audit-Log-Einträge: in der Regel 12 Monate, soweit keine längere
             gesetzliche Aufbewahrungspflicht besteht
+          </li>
+          <li>
+            Versandprotokolle des SMS-Dienstleisters (Mobilnummer,
+            Zustellstatus, Zeitpunkt): beim Auftragsverarbeiter standardmäßig
+            bis zu 30 Tage, anschließend automatische Löschung; SMS-Inhalte
+            werden über den eigentlichen Versandvorgang hinaus nicht
+            gespeichert
           </li>
         </ul>
       </Section>
@@ -374,7 +386,7 @@ export default function DatenschutzPage() {
           unter dieser Adresse abrufbare Fassung.
         </p>
         <p className="text-xs text-zinc-500">
-          Stand: 12. Mai 2026 (Entwurf)
+          Stand: 5. Juni 2026 (Entwurf)
         </p>
       </Section>
     </article>

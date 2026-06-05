@@ -28,7 +28,7 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 | **Neon Inc.** | Datenbank-Hosting | EU (AWS Frankfurt) + US (Sitz) | ❌ Offen | Online-DPA über Neon-Konsole; SCCs für US-Sitz prüfen |
 | **Cloudflare, Inc.** | Objekt-Storage (R2) | EU-Jurisdiction + US (Sitz) | ❌ Offen | Cloudflare DPA online verfügbar; SCCs prüfen |
 | **Resend Inc.** | Transaktions-E-Mails | EU + US (Sitz) | ❌ Offen | Online-DPA über Resend-Dashboard |
-| **Sieben Communications GmbH (seven.io / sms77)** | SMS-Versand | Deutschland | ❌ Offen | AVV anfordern sobald Account angelegt; rein deutsch, keine SCCs nötig |
+| **Sieben Communications GmbH (seven.io / sms77)** | SMS-Versand | Deutschland | ✅ Signiert (2026-06-05) | Online-Signatur via dashboard.seven.io → Settings → Legal. PDF im seven.io-Kundenkonto dauerhaft abrufbar. ISO 27001 zertifiziertes RZ in Köln, keine SCCs nötig. |
 | **D-Trust GmbH (Bundesdruckerei)** | FES-Zertifikats-Aussteller (geplant) | Deutschland | ⚪ Nicht erforderlich | D-Trust sieht weder PDFs noch deren Inhalte. Reines Cert-Issuance-Verhältnis, AV nach Art. 28 nicht einschlägig. Doku-Hinweis statt AVV in Datenschutzerklärung §4.4. |
 
 ### Abschlussbericht-Checker
@@ -46,14 +46,12 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 
 ## Nächste Schritte
 
-1. **seven.io-AVV** anfordern, sobald der Account-Anlage-Prozess durch ist
-   (Benny, parallel zu den Live-SMS-Vorbereitungen)
-2. **Vercel + Neon + Cloudflare + Resend** Online-DPAs akzeptieren —
+1. **Vercel + Neon + Cloudflare + Resend** Online-DPAs akzeptieren —
    alle vier haben dafür ein Self-Service-Verfahren in den jeweiligen
    Dashboards. Sammelvorgang, kalkuliere ~30 Minuten.
-3. **IONOS + Azure**: AVV-Status bei IONOS prüfen (Kunden-Portal),
+2. **IONOS + Azure**: AVV-Status bei IONOS prüfen (Kunden-Portal),
    Microsoft-DPA über Azure-Subscription akzeptieren.
-4. **Sammlung ablegen** — empfohlen: ein einziger Doku-Vault (z.B.
+3. **Sammlung ablegen** — empfohlen: ein einziger Doku-Vault (z.B.
    Vercel-Drive, oder ein privates Repo `innosee/compliance` mit
    Subordnern pro Provider) mit den signierten PDF-Kopien.
 
