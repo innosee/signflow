@@ -287,6 +287,16 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         <span>
                           TN {tnSigned}/{tnTotal}
                         </span>
+                        {!impersonating &&
+                          !coachSigned &&
+                          tnSigned === 0 && (
+                            <Link
+                              href={`/coach/courses/${course.id}/sessions/${s.id}/edit`}
+                              className="text-zinc-700 underline-offset-2 hover:underline"
+                            >
+                              Bearbeiten
+                            </Link>
+                          )}
                       </div>
                     </div>
                   </div>
@@ -316,12 +326,33 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="border-b border-zinc-300 px-6 py-4">
-          <h2 className="text-lg font-semibold">Abschluss</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            Wenn alle Sessions signiert sind, sende den Teilnehmern die
-            Vorschau. Nach deren Freigabe kannst du das Dokument mit FES
-            versiegeln — die Übermittlung an die AfA übernimmt deine Firma.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Abschluss</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Wenn alle Sessions signiert sind, sende den Teilnehmern die
+                Vorschau. Nach deren Freigabe versiegelst du das Dokument mit
+                FES und übergibst es an deinen Bildungsträger zur Übermittlung
+                an die Agentur für Arbeit.
+              </p>
+            </div>
+            {participants.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {participants.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/coach/courses/${course.id}/print/${p.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 transition hover:bg-zinc-50"
+                    title={`PDF-Vorschau für ${p.name}`}
+                  >
+                    <span aria-hidden="true">📄</span> PDF: {p.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="divide-y divide-zinc-200">
           <Step

@@ -23,6 +23,90 @@ import { isValidE164, normalizePhoneInput } from "@/lib/sms";
 export type SessionFormState = { error?: string } | undefined;
 
 /**
+ * Gemeinsame Feld-Validierung für Create + Update einer Session — beide
+ * teilen exakt dieselben Regeln (Datum, Topic, Modus, UE, Erstgespräch-
+ * Konsistenz). Liefert entweder einen normalisierten Datensatz oder eine
+ * Fehlermeldung für die Server-Action.
+ */
+function validateSessionFormFields(formData: FormData):
+  | {
+      ok: true;
+      values: {
+        sessionDate: string;
+        topic: string;
+        modus: "praesenz" | "online";
+        anzahlUe: string;
+        isErstgespraech: boolean;
+        geeignet: boolean | null;
+      };
+    }
+  | { ok: false; error: string } {
+  const sessionDate = String(formData.get("sessionDate") ?? "").trim();
+  const topic = String(formData.get("topic") ?? "").trim();
+  const modus = String(formData.get("modus") ?? "").trim();
+  const isErstgespraech = formData.get("isErstgespraech") === "on";
+  const anzahlUeRaw = String(formData.get("anzahlUe") ?? "").trim();
+  const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
+
+  if (!sessionDate) return { ok: false, error: "Datum fehlt." };
+  if (!topic) return { ok: false, error: "Themen / Inhalte fehlen." };
+  if (modus !== "praesenz" && modus !== "online") {
+    return { ok: false, error: "Modus muss Präsenz oder Online sein." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    return { ok: false, error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
+  }
+  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  const isValidDate =
+    parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() === m - 1 &&
+    parsed.getUTCDate() === d;
+  if (!isValidDate) {
+    return { ok: false, error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
+  }
+  const weekday = parsed.getUTCDay();
+  if (weekday === 0 || weekday === 6) {
+    return {
+      ok: false,
+      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
+    };
+  }
+
+  let anzahlUe: string;
+  let geeignet: boolean | null;
+  if (isErstgespraech) {
+    anzahlUe = "0";
+    if (geeignetRaw !== "ja" && geeignetRaw !== "nein") {
+      return {
+        ok: false,
+        error:
+          "Beim Erstgespräch musst du angeben, ob die Teilnehmerin für die Maßnahme geeignet ist.",
+      };
+    }
+    geeignet = geeignetRaw === "ja";
+  } else {
+    const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
+    if (!Number.isFinite(ue) || ue <= 0) {
+      return { ok: false, error: "UE muss eine positive Zahl sein." };
+    }
+    if (Math.round(ue * 2) !== ue * 2) {
+      return { ok: false, error: "UE muss in 0,5er-Schritten angegeben werden." };
+    }
+    if (ue > 24) {
+      return { ok: false, error: "Eine Session darf 24 UE nicht überschreiten." };
+    }
+    anzahlUe = ue.toFixed(1);
+    geeignet = null;
+  }
+
+  return {
+    ok: true,
+    values: { sessionDate, topic, modus, anzahlUe, isErstgespraech, geeignet },
+  };
+}
+
+/**
  * Schickt bei jedem Coach-Sign einen frischen Magic-Link an alle
  * eingeschriebenen Teilnehmer des Kurses. Alte Tokens werden durch
  * `createParticipantMagicLink` (revoke + re-issue in einer Tx)
@@ -89,96 +173,102 @@ export async function createSession(
   const coachId = session.user.id;
 
   const courseId = String(formData.get("courseId") ?? "").trim();
-  const sessionDate = String(formData.get("sessionDate") ?? "").trim();
-  const topic = String(formData.get("topic") ?? "").trim();
-  const modus = String(formData.get("modus") ?? "").trim();
-  const isErstgespraech = formData.get("isErstgespraech") === "on";
-  const anzahlUeRaw = String(formData.get("anzahlUe") ?? "").trim();
-  const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
-
   if (!courseId) return { error: "Kurs fehlt." };
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
-  if (!sessionDate) return { error: "Datum fehlt." };
-  if (!topic) return { error: "Themen / Inhalte fehlen." };
-  if (modus !== "praesenz" && modus !== "online") {
-    return { error: "Modus muss Präsenz oder Online sein." };
-  }
-
-  // Wochenend-Sperre: Sa/So sind für Coachings nicht zulässig. Datum
-  // als pure Kalendertag interpretieren (sessionDate ist YYYY-MM-DD,
-  // nicht UTC-Midnight) — split statt new Date(), damit kein TZ-Schlag
-  // den Tag verschiebt. Malformed-Input wird hart abgelehnt statt
-  // stillschweigend die Validierung zu skippen.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
-    return { error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
-  }
-  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
-  // Date.UTC rollt Overflow-Werte still um (2026-02-30 → 2026-03-02).
-  // Wir prüfen per Round-Trip, dass die Eingabe auch ein echtes Kalenderdatum
-  // ist — sonst würde die Wochenend-Logik auf dem Ersatz-Datum rechnen und
-  // der Insert später an der date-Spalte der DB crashen.
-  const parsed = new Date(Date.UTC(y, m - 1, d));
-  const isValidDate =
-    parsed.getUTCFullYear() === y &&
-    parsed.getUTCMonth() === m - 1 &&
-    parsed.getUTCDate() === d;
-  if (!isValidDate) {
-    return { error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
-  }
-  const weekday = parsed.getUTCDay();
-  if (weekday === 0 || weekday === 6) {
-    return {
-      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
-    };
-  }
-
-  // UE + Geeignet hängen voneinander ab: beim Erstgespräch gilt UE=0 und
-  // geeignet wird zur Pflicht; bei regulärer Session ist UE>0 und geeignet
-  // wird gar nicht erfasst. Der DB-Check `sessions_erstgespraech_consistency`
-  // erzwingt dasselbe — wir validieren hier nochmal, um dem Coach eine
-  // klare Fehlermeldung zu geben statt eines Constraint-Violation-Stack.
-  let anzahlUe: string;
-  let geeignet: boolean | null;
-  if (isErstgespraech) {
-    anzahlUe = "0";
-    if (geeignetRaw !== "ja" && geeignetRaw !== "nein") {
-      return {
-        error:
-          "Beim Erstgespräch musst du angeben, ob die Teilnehmerin für die Maßnahme geeignet ist.",
-      };
-    }
-    geeignet = geeignetRaw === "ja";
-  } else {
-    const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
-    if (!Number.isFinite(ue) || ue <= 0) {
-      return { error: "UE muss eine positive Zahl sein." };
-    }
-    // numeric(3,1) → maximal 99.9, in 0,5er-Schritten (AfA-Konvention).
-    if (Math.round(ue * 2) !== ue * 2) {
-      return { error: "UE muss in 0,5er-Schritten angegeben werden." };
-    }
-    if (ue > 24) {
-      return { error: "Eine Session darf 24 UE nicht überschreiten." };
-    }
-    anzahlUe = ue.toFixed(1);
-    geeignet = null;
-  }
+  const validation = validateSessionFormFields(formData);
+  if (!validation.ok) return { error: validation.error };
+  const v = validation.values;
 
   try {
     await db.insert(schema.sessions).values({
       courseId: ownedCourseId,
-      sessionDate,
-      topic,
-      modus,
-      anzahlUe,
-      isErstgespraech,
-      geeignet,
+      sessionDate: v.sessionDate,
+      topic: v.topic,
+      modus: v.modus,
+      anzahlUe: v.anzahlUe,
+      isErstgespraech: v.isErstgespraech,
+      geeignet: v.geeignet,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { error: `Session konnte nicht angelegt werden (${message}).` };
+  }
+
+  redirect(`/coach/courses/${ownedCourseId}`);
+}
+
+/**
+ * Aktualisiert eine bestehende Session. Erlaubt nur solange weder Coach
+ * noch ein TN signiert hat — sobald eine Signatur dranhängt, würde die
+ * Änderung den Audit-Trail (signed_at, IP) und die rechtliche Beweiskraft
+ * der Signatur entwerten. Edit nach Sign muss über eine separate „Session
+ * wieder öffnen"-Action gehen (eigene Migration, nicht in dieser V1).
+ */
+export async function updateSession(
+  _prev: SessionFormState,
+  formData: FormData,
+): Promise<SessionFormState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  if (!courseId || !sessionId) return { error: "Kurs oder Session fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Pre-Check: gehört die Session zu diesem Kurs UND ist sie noch
+  // unsigniert? Wenn schon mindestens 1 Signatur existiert: hart blocken,
+  // weil ein Edit den Audit-Trail (signed_at, IP, Inhalts-Snapshot) gegen
+  // die Beweiskraft entwerten würde.
+  const [sess] = await db
+    .select({ id: schema.sessions.id, status: schema.sessions.status })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Session nicht gefunden." };
+
+  const [existingSig] = await db
+    .select({ id: schema.signatures.id })
+    .from(schema.signatures)
+    .where(eq(schema.signatures.sessionId, sessionId))
+    .limit(1);
+  if (existingSig) {
+    return {
+      error:
+        "Diese Session ist bereits signiert und lässt sich so nicht mehr bearbeiten. Um zu korrigieren, muss die Session erst wieder geöffnet werden (Coach- und TN-Signaturen werden dabei entfernt).",
+    };
+  }
+
+  const validation = validateSessionFormFields(formData);
+  if (!validation.ok) return { error: validation.error };
+  const v = validation.values;
+
+  try {
+    await db
+      .update(schema.sessions)
+      .set({
+        sessionDate: v.sessionDate,
+        topic: v.topic,
+        modus: v.modus,
+        anzahlUe: v.anzahlUe,
+        isErstgespraech: v.isErstgespraech,
+        geeignet: v.geeignet,
+      })
+      .where(eq(schema.sessions.id, sessionId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Session konnte nicht aktualisiert werden (${message}).` };
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
