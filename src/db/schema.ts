@@ -301,6 +301,20 @@ export const courses = pgTable("courses", {
     .notNull()
     .default(false),
   begruendungText: text("begruendung_text"),
+  /**
+   * FES-Gate (1/2): Coach-Klick „Maßnahme als abgeschlossen markieren".
+   * Der Coach bestätigt damit aktiv, dass keine weiteren Sessions mehr
+   * kommen. Bei jeder Session-Änderung (create/update/reopen) wird das
+   * Feld zurückgesetzt → der Coach muss neu bestätigen.
+   */
+  abgeschlossenAt: timestamp("abgeschlossen_at", { withTimezone: true }),
+  /**
+   * FES-Gate (2/2): Zeitpunkt, an dem der ANW-Compliance-Check zuletzt
+   * mit Status „freigabe" lief. Bei jeder Session-Änderung zurückgesetzt
+   * — das Dokument hat sich geändert, alter Check-Status nicht mehr
+   * aussagekräftig.
+   */
+  anwCheckPassedAt: timestamp("anw_check_passed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
