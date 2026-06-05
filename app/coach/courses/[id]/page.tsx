@@ -10,6 +10,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 
 import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
+import { MarkAbgeschlossenButton } from "./mark-abgeschlossen-button";
 import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
 import { QrHandoverButton } from "./qr-handover-button";
@@ -51,6 +52,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
+      flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      begruendungText: schema.courses.begruendungText,
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      abgeschlossenAt: schema.courses.abgeschlossenAt,
       bedarfstraegerName: schema.bedarfstraeger.name,
       bedarfstraegerType: schema.bedarfstraeger.type,
     })
@@ -383,53 +388,89 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             }
           >
             {!impersonating && (
-              <>
-                <AnwCheckButton
-                  courseId={course.id}
-                  disabled={sessions.length === 0}
-                  disabledReason={
-                    sessions.length === 0
-                      ? "Erst Sessions anlegen, dann prüfen"
-                      : undefined
-                  }
-                />
-                <SendPreviewButton
-                  courseId={course.id}
-                  disabled={
-                    participants.length === 0 ||
-                    !allSessionsCompleted ||
-                    allApproved
-                  }
-                  disabledReason={
-                    participants.length === 0
-                      ? "Keine Teilnehmer im Kurs"
-                      : !allSessionsCompleted
-                        ? "Erst wenn alle Sessions signiert sind"
-                        : "Alle Teilnehmer haben bereits freigegeben"
-                  }
-                  alreadySent={previewSent}
-                />
-              </>
+              <SendPreviewButton
+                courseId={course.id}
+                disabled={
+                  participants.length === 0 ||
+                  !allSessionsCompleted ||
+                  allApproved
+                }
+                disabledReason={
+                  participants.length === 0
+                    ? "Keine Teilnehmer im Kurs"
+                    : !allSessionsCompleted
+                      ? "Erst wenn alle Sessions signiert sind"
+                      : "Alle Teilnehmer haben bereits freigegeben"
+                }
+                alreadySent={previewSent}
+              />
             )}
           </Step>
           <Step
             index={3}
+            title="ANW-Compliance-Check"
+            done={!!course.anwCheckPassedAt}
+            subtitle={
+              course.anwCheckPassedAt
+                ? `Freigegeben am ${new Date(course.anwCheckPassedAt).toLocaleString("de-DE")}.`
+                : "KI-Prüfung der Stichwort-Einträge gegen AZAV-Vorgaben."
+            }
+          >
+            {!impersonating && (
+              <AnwCheckButton
+                courseId={course.id}
+                disabled={sessions.length === 0}
+                disabledReason={
+                  sessions.length === 0
+                    ? "Erst Sessions anlegen, dann prüfen"
+                    : undefined
+                }
+              />
+            )}
+          </Step>
+          <Step
+            index={4}
+            title="Maßnahme als abgeschlossen markieren"
+            done={!!course.abgeschlossenAt}
+            subtitle={
+              course.abgeschlossenAt
+                ? `Abgeschlossen am ${new Date(course.abgeschlossenAt).toLocaleString("de-DE")}.`
+                : `${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Coach-Bestätigung nötig: keine weiteren Sessions kommen mehr.`
+            }
+          >
+            {!impersonating && !course.abgeschlossenAt && (
+              <MarkAbgeschlossenButton courseId={course.id} />
+            )}
+          </Step>
+          <Step
+            index={5}
             title="Mit FES versiegeln"
             done={isSealed}
             subtitle={
               isSealed
                 ? `Gesiegelt am ${finalDoc?.completedAt ? new Date(finalDoc.completedAt).toLocaleString("de-DE") : "—"}.`
-                : "Nach der Freigabe aller Teilnehmer."
+                : "Letzter Schritt vor der Übergabe an den Bildungsträger."
             }
           >
             {!impersonating && !isSealed && (
               <SealCourseButton
                 courseId={course.id}
-                disabled={!allApproved}
+                disabled={
+                  !allSessionsCompleted ||
+                  !allApproved ||
+                  !course.anwCheckPassedAt ||
+                  !course.abgeschlossenAt
+                }
                 disabledReason={
                   !allSessionsCompleted
                     ? "Erst wenn alle Sessions signiert sind"
-                    : "Mindestens ein Teilnehmer hat noch nicht freigegeben"
+                    : !allApproved
+                      ? "Mindestens ein Teilnehmer hat noch nicht freigegeben"
+                      : !course.anwCheckPassedAt
+                        ? "ANW-Compliance-Check muss durchlaufen sein"
+                        : !course.abgeschlossenAt
+                          ? "Maßnahme muss als abgeschlossen markiert sein"
+                          : undefined
                 }
               />
             )}

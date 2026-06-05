@@ -182,14 +182,23 @@ export async function createSession(
   const v = validation.values;
 
   try {
-    await db.insert(schema.sessions).values({
-      courseId: ownedCourseId,
-      sessionDate: v.sessionDate,
-      topic: v.topic,
-      modus: v.modus,
-      anzahlUe: v.anzahlUe,
-      isErstgespraech: v.isErstgespraech,
-      geeignet: v.geeignet,
+    await db.transaction(async (tx) => {
+      await tx.insert(schema.sessions).values({
+        courseId: ownedCourseId,
+        sessionDate: v.sessionDate,
+        topic: v.topic,
+        modus: v.modus,
+        anzahlUe: v.anzahlUe,
+        isErstgespraech: v.isErstgespraech,
+        geeignet: v.geeignet,
+      });
+      // FES-Gates resetten: neue Session ändert den Stand → alte
+      // Maßnahme-Abschluss-Bestätigung + ANW-Check-Status sind nicht
+      // mehr aussagekräftig.
+      await tx
+        .update(schema.courses)
+        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .where(eq(schema.courses.id, ownedCourseId));
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -255,17 +264,24 @@ export async function updateSession(
   const v = validation.values;
 
   try {
-    await db
-      .update(schema.sessions)
-      .set({
-        sessionDate: v.sessionDate,
-        topic: v.topic,
-        modus: v.modus,
-        anzahlUe: v.anzahlUe,
-        isErstgespraech: v.isErstgespraech,
-        geeignet: v.geeignet,
-      })
-      .where(eq(schema.sessions.id, sessionId));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.sessions)
+        .set({
+          sessionDate: v.sessionDate,
+          topic: v.topic,
+          modus: v.modus,
+          anzahlUe: v.anzahlUe,
+          isErstgespraech: v.isErstgespraech,
+          geeignet: v.geeignet,
+        })
+        .where(eq(schema.sessions.id, sessionId));
+      // FES-Gates resetten — Inhalts-Edit ändert den Stand.
+      await tx
+        .update(schema.courses)
+        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .where(eq(schema.courses.id, ownedCourseId));
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { error: `Session konnte nicht aktualisiert werden (${message}).` };
@@ -347,6 +363,12 @@ export async function reopenSession(
       await tx
         .delete(schema.participantApprovals)
         .where(eq(schema.participantApprovals.courseId, ownedCourseId));
+      // 4. FES-Gates resetten — Maßnahme-Abschluss und ANW-Check müssen
+      //    nach dem Edit neu bestätigt werden.
+      await tx
+        .update(schema.courses)
+        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .where(eq(schema.courses.id, ownedCourseId));
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -961,6 +983,17 @@ export async function runAnwCheckAction(
     console.log(
       `anw-check: tenant=${tenantId} course=${ownedCourseId} status=${result.status} warnings=${result.warnings.length}`,
     );
+    // FES-Gate: bei `freigabe` Timestamp setzen, sonst löschen. So bleibt
+    // das Gate nicht auf einem alten „freigabe" stehen, wenn der Coach
+    // nach einer Änderung den Check nochmal laufen lässt und er jetzt
+    // „nacharbeit" sagt.
+    await db
+      .update(schema.courses)
+      .set({
+        anwCheckPassedAt: result.status === "freigabe" ? new Date() : null,
+      })
+      .where(eq(schema.courses.id, ownedCourseId));
+    revalidatePath(`/coach/courses/${ownedCourseId}`);
     return { result };
   } catch (err) {
     console.error(
@@ -972,6 +1005,88 @@ export async function runAnwCheckAction(
         "ANW-Check fehlgeschlagen. Bitte später erneut versuchen oder den Support kontaktieren.",
     };
   }
+}
+
+export type MarkAbgeschlossenState =
+  | { error?: string; success?: boolean }
+  | undefined;
+
+/**
+ * Coach bestätigt: keine weiteren Sessions kommen. Erst nach diesem Klick
+ * darf FES-Sealing laufen. Der Klick wird zugelassen wenn ENTWEDER 80%
+ * der bewilligten UE geleistet sind ODER der Kurs als vorzeitig beendet
+ * gekennzeichnet ist (`flagVorzeitigesEnde=true`) mit Begründung.
+ *
+ * Beim nächsten Session-Edit/Create/Reopen wird das Feld wieder gelöscht,
+ * der Coach muss neu bestätigen.
+ */
+export async function markCourseAbgeschlossen(
+  _prev: MarkAbgeschlossenState,
+  formData: FormData,
+): Promise<MarkAbgeschlossenState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Gate-Berechnung serverseitig — Client-UI kann den Button zwar grayen,
+  // aber die Wahrheit liegt hier.
+  const [course] = await db
+    .select({
+      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      begruendungText: schema.courses.begruendungText,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!course) return { error: "Kurs nicht auflösbar." };
+
+  // Summe der geleisteten UE (nur completed Sessions zählen, Erstgespräche
+  // wie im Sheet UE-frei).
+  const completedSessions = await db
+    .select({
+      anzahlUe: schema.sessions.anzahlUe,
+      isErstgespraech: schema.sessions.isErstgespraech,
+    })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        eq(schema.sessions.status, "completed"),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+  const geleisteteUe = completedSessions
+    .filter((s) => !s.isErstgespraech)
+    .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
+  const erfuellungQuote = geleisteteUe / course.anzahlBewilligteUe;
+  const hatVorzeitigesEndeBegruendung =
+    course.flagVorzeitigesEnde && (course.begruendungText?.trim().length ?? 0) > 0;
+
+  if (erfuellungQuote < 0.8 && !hatVorzeitigesEndeBegruendung) {
+    return {
+      error: `Maßnahme kann erst abgeschlossen werden, wenn ≥80% der bewilligten UE geleistet sind (aktuell ${geleisteteUe} von ${course.anzahlBewilligteUe} = ${Math.round(erfuellungQuote * 100)}%). Bei vorzeitigem Ende: Kurs-Stammdaten → „vorzeitig beendet" + Begründung setzen.`,
+    };
+  }
+
+  try {
+    await db
+      .update(schema.courses)
+      .set({ abgeschlossenAt: new Date() })
+      .where(eq(schema.courses.id, ownedCourseId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Markierung fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
 }
 
 export type SealState = { error?: string; sealed?: boolean } | undefined;
@@ -1023,6 +1138,31 @@ export async function sealCourse(
   }
   if (existingDoc?.fesStatus === "sent") {
     return { error: "Siegelung läuft bereits — bitte warten." };
+  }
+
+  // FES-Gates (zusätzlich zu Sessions/Approval): ANW-Check muss durch
+  // und Coach muss „Maßnahme abgeschlossen" aktiv bestätigt haben. Beide
+  // Gates werden bei jedem Session-Edit zurückgesetzt → der Coach kann
+  // nicht versehentlich auf einem alten Stand siegeln.
+  const [courseGates] = await db
+    .select({
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      abgeschlossenAt: schema.courses.abgeschlossenAt,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!courseGates?.anwCheckPassedAt) {
+    return {
+      error:
+        "ANW-Compliance-Check muss vor der Versiegelung mit Status „Freigabe“ durchlaufen sein.",
+    };
+  }
+  if (!courseGates.abgeschlossenAt) {
+    return {
+      error:
+        "Maßnahme muss vor der Versiegelung aktiv als abgeschlossen markiert werden.",
+    };
   }
 
   // Sessions-Gate: jede nicht-gelöschte Session muss vollständig signiert sein.
