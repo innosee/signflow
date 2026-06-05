@@ -5,6 +5,39 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { sendParticipantMagicLink, sendParticipantPreview } from "@/lib/email";
+import {
+  composeMagicLinkSms,
+  composePreviewSms,
+  isSmsEnabled,
+  isValidE164,
+  sendSms,
+} from "@/lib/sms";
+
+export type NotificationChannel = "email" | "sms";
+
+/**
+ * Reduziert den vom Caller gewünschten Channel auf das, was tatsächlich
+ * zustellbar ist. Zwei Filter:
+ *  1. **Feature-Gate**: ist `SMS_ENABLED=true` nicht gesetzt, wird egal
+ *     was der Caller will, immer Email zurückgegeben — Defense-in-Depth
+ *     gegen UI-Bypass durch veraltete Tabs / direkte Action-Aufrufe.
+ *  2. **Deliverability**: SMS ohne gültige Nummer fällt still auf Email
+ *     zurück. (Strikteres Verhalten — Throw — kann der Caller bei Bedarf
+ *     selbst per Vorab-Check umsetzen.)
+ */
+function effectiveChannel(
+  requested: NotificationChannel,
+  participantPhone: string | null,
+): NotificationChannel {
+  if (!isSmsEnabled()) return "email";
+  if (
+    requested === "sms" &&
+    (!participantPhone || !isValidE164(participantPhone))
+  ) {
+    return "email";
+  }
+  return requested;
+}
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h per CLAUDE.md
 
@@ -70,11 +103,20 @@ export async function createParticipantMagicLink(params: {
 export async function sendParticipantInvite(params: {
   courseId: string;
   participantId: string;
-}): Promise<void> {
+  /**
+   * Zustellkanal. Default `"email"` für Bestandsverhalten. SMS ist
+   * Fallback für Teilnehmer, die mit Email-Clients/Spam-Ordnern
+   * überfordert sind — siehe Auto-Memory `project_participant_delivery_channels`.
+   */
+  channel?: NotificationChannel;
+}): Promise<{ usedChannel: NotificationChannel }> {
+  const requested: NotificationChannel = params.channel ?? "email";
+
   const rows = await db
     .select({
       participantName: schema.participants.name,
       participantEmail: schema.participants.email,
+      participantPhone: schema.participants.phone,
       courseTitle: schema.courses.title,
     })
     .from(schema.courseParticipants)
@@ -97,7 +139,26 @@ export async function sendParticipantInvite(params: {
   const row = rows[0];
   if (!row) throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
 
+  // Channel-Resolution VOR dem Token-Insert: Feature-Gate + Deliverability
+  // werden hier zentral entschieden, sodass ein SMS-Wunsch ohne aktivierten
+  // Flag (oder ohne Phone) still auf Email umgeleitet wird, statt an einer
+  // Mid-Flight-Validierung zu sterben — wäre fatal, weil der Token-Insert
+  // den vorherigen Magic-Link bereits invalidiert hat.
+  const channel = effectiveChannel(requested, row.participantPhone);
+
   const { url } = await createParticipantMagicLink(params);
+
+  if (channel === "sms") {
+    await sendSms({
+      to: row.participantPhone!,
+      body: composeMagicLinkSms({
+        participantName: row.participantName,
+        courseTitle: row.courseTitle,
+        url,
+      }),
+    });
+    return { usedChannel: "sms" };
+  }
 
   await sendParticipantMagicLink({
     to: row.participantEmail,
@@ -109,6 +170,7 @@ export async function sendParticipantInvite(params: {
     sessionDate: "laufender Kurs",
     url,
   });
+  return { usedChannel: "email" };
 }
 
 /**
@@ -127,11 +189,15 @@ export async function sendParticipantInvite(params: {
 export async function sendParticipantPreviewInvite(params: {
   courseId: string;
   participantId: string;
+  channel?: NotificationChannel;
 }): Promise<void> {
+  const requested: NotificationChannel = params.channel ?? "email";
+
   const rows = await db
     .select({
       participantName: schema.participants.name,
       participantEmail: schema.participants.email,
+      participantPhone: schema.participants.phone,
       courseTitle: schema.courses.title,
     })
     .from(schema.courseParticipants)
@@ -156,7 +222,21 @@ export async function sendParticipantPreviewInvite(params: {
     throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
   }
 
+  const channel = effectiveChannel(requested, row.participantPhone);
+
   const { url } = await createParticipantMagicLink(params);
+
+  if (channel === "sms") {
+    await sendSms({
+      to: row.participantPhone!,
+      body: composePreviewSms({
+        participantName: row.participantName,
+        courseTitle: row.courseTitle,
+        url,
+      }),
+    });
+    return;
+  }
 
   await sendParticipantPreview({
     to: row.participantEmail,

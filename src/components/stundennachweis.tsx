@@ -46,6 +46,28 @@ export type StundennachweisSheet = {
     participantSignatureUrl: string | null;
     participantSignedAt: string | null;
   }>;
+  /**
+   * Chronologischer Audit-Trail aller signaturrelevanten Ereignisse für
+   * dieses (Kurs × Teilnehmer)-Sheet — Coach-Signatur pro Session, TN-
+   * Signatur pro Session, TN-Final-Approval. Wird unter dem Dokument als
+   * eigener „Audit-Trail"-Block gerendert, damit IP + Zeitstempel auf
+   * dem PDF sichtbar sind (CLAUDE.md Schritt 8). Reihenfolge: aufsteigend
+   * nach `at`. Leer = noch nichts unterschrieben (z.B. bei TN-Preview vor
+   * dem allerersten Sign).
+   */
+  audit: Array<{
+    /** Eindeutig pro Zeile — Composite aus session+signer reicht. */
+    key: string;
+    kind: "coach-sign" | "participant-sign" | "participant-approval";
+    /** ISO-Zeitstempel des Ereignisses. */
+    at: string;
+    /** Anzeigename (Coach: Coach-Name, TN: TN-Name, Approval: TN-Name). */
+    signerName: string;
+    /** Datum der betroffenen Session — null beim TN-Approval (kursweit). */
+    sessionDate: string | null;
+    /** IP-Adresse zum Zeitpunkt des Ereignisses. */
+    ip: string;
+  }>;
 };
 
 const BEDARFSTRAEGER_LABEL = { JC: "Jobcenter", AA: "Arbeitsagentur" } as const;
@@ -71,7 +93,7 @@ function formatDateTime(iso: string | null): string {
 }
 
 export function Stundennachweis(props: StundennachweisSheet) {
-  const { course, bedarfstraeger, coach, participant, sessions } = props;
+  const { course, bedarfstraeger, coach, participant, sessions, audit } = props;
 
   const geleisteteUe = sessions
     .filter((s) => !s.isErstgespraech)
@@ -214,6 +236,42 @@ export function Stundennachweis(props: StundennachweisSheet) {
           </section>
         )}
 
+        {audit.length > 0 && (
+          <section className="sheet-audit">
+            <h2>Audit-Trail</h2>
+            <p className="sheet-audit-intro">
+              Chronologische Aufzeichnung der Signatur- und Freigabe-Ereignisse
+              gemäß §126a BGB / eIDAS Art. 26.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: "28%" }}>Zeitstempel</th>
+                  <th style={{ width: "22%" }}>Ereignis</th>
+                  <th>Beteiligte:r</th>
+                  <th style={{ width: "20%" }}>Termin</th>
+                  <th style={{ width: "18%" }}>IP-Adresse</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audit.map((entry) => (
+                  <tr key={entry.key}>
+                    <td>{formatDateTime(entry.at)}</td>
+                    <td>{auditKindLabel(entry.kind)}</td>
+                    <td>{entry.signerName}</td>
+                    <td>
+                      {entry.sessionDate
+                        ? formatDate(entry.sessionDate)
+                        : "—"}
+                    </td>
+                    <td className="mono">{entry.ip}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
         <footer className="sheet-footer">
           Erzeugt via Signflow. Finale Versiegelung via fortgeschrittener
           elektronischer Signatur (FES) durch den Coach nach Freigabe der
@@ -222,6 +280,17 @@ export function Stundennachweis(props: StundennachweisSheet) {
       </article>
     </>
   );
+}
+
+function auditKindLabel(kind: StundennachweisSheet["audit"][number]["kind"]): string {
+  switch (kind) {
+    case "coach-sign":
+      return "Coach-Signatur";
+    case "participant-sign":
+      return "TN-Signatur";
+    case "participant-approval":
+      return "TN-Freigabe";
+  }
 }
 
 function MetaRow({ label, value }: { label: string; value: string }) {
@@ -276,6 +345,12 @@ const printCss = `
     background: #fff;
     font-size: 10pt;
     line-height: 1.35;
+    /* Chrome druckt Hintergrundfarben standardmäßig nicht, was den Tabellen-
+       Header (#f3f3f3) und Audit-Stripes unsichtbar machen würde — beides
+       trägt zur Lesbarkeit des Nachweises bei. 'exact' zwingt Puppeteer +
+       Print-Engines, das CSS-Color treu zu rendern. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
   .sheet h1 { font-size: 18pt; margin: 0 0 2mm 0; }
   .sheet h2 {
@@ -333,9 +408,16 @@ const printCss = `
   .sig-box { display: block; }
   .sig-box img {
     display: block;
-    max-height: 12mm;
+    /* 14mm gibt der getrimmten Signatur (siehe signature-canvas.tsx)
+       genug Höhe, um klar lesbar zu sein. Vorher 12mm wirkte mit
+       ungetrimmten PNGs vertretbar; mit Trim wäre 12mm verschenkt. */
+    max-height: 14mm;
     max-width: 100%;
     object-fit: contain;
+    /* Image-Rendering hint: Browser sollen die Signatur nicht
+       weichzeichnen — eine handschriftliche Linie verträgt Pixel-Schärfe
+       besser als Anti-Aliasing-Blur. */
+    image-rendering: -webkit-optimize-contrast;
   }
   .sig-timestamp {
     display: block;
@@ -344,6 +426,22 @@ const printCss = `
     color: #555;
   }
   .sig-pending { color: #999; font-style: italic; font-size: 9pt; }
+  .sheet-audit {
+    margin-top: 6mm;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .sheet-audit table { margin-top: 1mm; }
+  .sheet-audit th, .sheet-audit td { font-size: 8pt; padding: 1.5mm; }
+  .sheet-audit-intro {
+    margin: 0 0 1mm 0;
+    color: #555;
+    font-size: 8.5pt;
+  }
+  .sheet .mono {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 7.5pt;
+  }
   .checkbox { font-size: 12pt; margin-right: 2mm; }
   .sheet-notes ul { list-style: none; margin: 2mm 0; padding: 0; }
   .sheet-notes li { margin: 0 0 1.5mm 0; display: flex; align-items: center; }

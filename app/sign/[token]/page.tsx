@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Stundennachweis } from "@/components/stundennachweis";
 import { loadStundennachweisSheet } from "@/lib/sheet-data";
@@ -8,6 +10,32 @@ import { ParticipantSignatureOnboarding } from "./signature-onboarding";
 import { SignForm } from "./sign-form";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * DSGVO-Informationspflicht nach Art. 13: bei jedem Erst-Aufruf der
+ * Sign-Page bekommt der TN einen sichtbaren Hinweis auf die
+ * Verarbeitung + Link zur vollständigen Erklärung. Keine Einwilligungs-
+ * Logik (Verarbeitung läuft Art. 6 lit b/c), nur Information.
+ *
+ * Bewusst kompakt + immer sichtbar (kein Dismissal), damit auch bei
+ * wiederkehrenden TN-Visits der Hinweis nicht verloren geht.
+ */
+function DataProtectionNotice() {
+  return (
+    <p className="text-[11px] leading-relaxed text-zinc-500">
+      Mit der Bestätigung deiner Anwesenheit verarbeitet die innosee GmbH
+      im Auftrag deines Bildungsträgers personenbezogene Daten (Name,
+      Zeitstempel, IP-Adresse, deine Unterschrift als Bild). Details in der{" "}
+      <Link
+        href="/datenschutz"
+        className="underline underline-offset-2 hover:text-zinc-700"
+      >
+        Datenschutzerklärung
+      </Link>
+      .
+    </p>
+  );
+}
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -85,10 +113,14 @@ export default async function ParticipantSignPage({ params }: Props) {
             coach={sheet.coach}
             participant={sheet.participant}
             sessions={sheet.sessions}
+            audit={sheet.audit}
           />
         </div>
         <div className="preview-cta">
           <ApproveForm token={token} />
+          <div className="mx-auto mt-3 max-w-140">
+            <DataProtectionNotice />
+          </div>
         </div>
         <style>{previewCss}</style>
       </div>
@@ -105,9 +137,11 @@ export default async function ParticipantSignPage({ params }: Props) {
         </header>
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
           Danke, {resolved.participantName}! Du hast den Nachweis freigegeben.
-          Dein Coach setzt im nächsten Schritt das digitale Siegel und leitet
-          das Dokument an die Agentur für Arbeit weiter.
+          Dein Coach setzt im nächsten Schritt das digitale Siegel und übergibt
+          das Dokument an den Bildungsträger, der die Übermittlung an die
+          Agentur für Arbeit übernimmt.
         </div>
+        <DataProtectionNotice />
       </div>
     );
   }
@@ -164,6 +198,8 @@ export default async function ParticipantSignPage({ params }: Props) {
           Unterschrift wird dabei als Snapshot in den AfA-Nachweis übernommen.
         </p>
       )}
+
+      <DataProtectionNotice />
     </div>
   );
 }

@@ -65,6 +65,7 @@ export default async function PrintSheetPage({ params }: Props) {
         coach={sheet.coach}
         participant={sheet.participant}
         sessions={sheet.sessions}
+        audit={sheet.audit}
       />
 
       <style>{toolbarCss}</style>

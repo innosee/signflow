@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -18,8 +18,93 @@ import {
   sendParticipantPreviewInvite,
 } from "@/lib/participant-tokens";
 import { recomputeSessionStatus } from "@/lib/session-status";
+import { isValidE164, normalizePhoneInput } from "@/lib/sms";
 
 export type SessionFormState = { error?: string } | undefined;
+
+/**
+ * Gemeinsame Feld-Validierung für Create + Update einer Session — beide
+ * teilen exakt dieselben Regeln (Datum, Topic, Modus, UE, Erstgespräch-
+ * Konsistenz). Liefert entweder einen normalisierten Datensatz oder eine
+ * Fehlermeldung für die Server-Action.
+ */
+function validateSessionFormFields(formData: FormData):
+  | {
+      ok: true;
+      values: {
+        sessionDate: string;
+        topic: string;
+        modus: "praesenz" | "online";
+        anzahlUe: string;
+        isErstgespraech: boolean;
+        geeignet: boolean | null;
+      };
+    }
+  | { ok: false; error: string } {
+  const sessionDate = String(formData.get("sessionDate") ?? "").trim();
+  const topic = String(formData.get("topic") ?? "").trim();
+  const modus = String(formData.get("modus") ?? "").trim();
+  const isErstgespraech = formData.get("isErstgespraech") === "on";
+  const anzahlUeRaw = String(formData.get("anzahlUe") ?? "").trim();
+  const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
+
+  if (!sessionDate) return { ok: false, error: "Datum fehlt." };
+  if (!topic) return { ok: false, error: "Themen / Inhalte fehlen." };
+  if (modus !== "praesenz" && modus !== "online") {
+    return { ok: false, error: "Modus muss Präsenz oder Online sein." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    return { ok: false, error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
+  }
+  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  const isValidDate =
+    parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() === m - 1 &&
+    parsed.getUTCDate() === d;
+  if (!isValidDate) {
+    return { ok: false, error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
+  }
+  const weekday = parsed.getUTCDay();
+  if (weekday === 0 || weekday === 6) {
+    return {
+      ok: false,
+      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
+    };
+  }
+
+  let anzahlUe: string;
+  let geeignet: boolean | null;
+  if (isErstgespraech) {
+    anzahlUe = "0";
+    if (geeignetRaw !== "ja" && geeignetRaw !== "nein") {
+      return {
+        ok: false,
+        error:
+          "Beim Erstgespräch musst du angeben, ob die Teilnehmerin für die Maßnahme geeignet ist.",
+      };
+    }
+    geeignet = geeignetRaw === "ja";
+  } else {
+    const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
+    if (!Number.isFinite(ue) || ue <= 0) {
+      return { ok: false, error: "UE muss eine positive Zahl sein." };
+    }
+    if (Math.round(ue * 2) !== ue * 2) {
+      return { ok: false, error: "UE muss in 0,5er-Schritten angegeben werden." };
+    }
+    if (ue > 24) {
+      return { ok: false, error: "Eine Session darf 24 UE nicht überschreiten." };
+    }
+    anzahlUe = ue.toFixed(1);
+    geeignet = null;
+  }
+
+  return {
+    ok: true,
+    values: { sessionDate, topic, modus, anzahlUe, isErstgespraech, geeignet },
+  };
+}
 
 /**
  * Schickt bei jedem Coach-Sign einen frischen Magic-Link an alle
@@ -88,96 +173,102 @@ export async function createSession(
   const coachId = session.user.id;
 
   const courseId = String(formData.get("courseId") ?? "").trim();
-  const sessionDate = String(formData.get("sessionDate") ?? "").trim();
-  const topic = String(formData.get("topic") ?? "").trim();
-  const modus = String(formData.get("modus") ?? "").trim();
-  const isErstgespraech = formData.get("isErstgespraech") === "on";
-  const anzahlUeRaw = String(formData.get("anzahlUe") ?? "").trim();
-  const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
-
   if (!courseId) return { error: "Kurs fehlt." };
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
-  if (!sessionDate) return { error: "Datum fehlt." };
-  if (!topic) return { error: "Themen / Inhalte fehlen." };
-  if (modus !== "praesenz" && modus !== "online") {
-    return { error: "Modus muss Präsenz oder Online sein." };
-  }
-
-  // Wochenend-Sperre: Sa/So sind für Coachings nicht zulässig. Datum
-  // als pure Kalendertag interpretieren (sessionDate ist YYYY-MM-DD,
-  // nicht UTC-Midnight) — split statt new Date(), damit kein TZ-Schlag
-  // den Tag verschiebt. Malformed-Input wird hart abgelehnt statt
-  // stillschweigend die Validierung zu skippen.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
-    return { error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
-  }
-  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
-  // Date.UTC rollt Overflow-Werte still um (2026-02-30 → 2026-03-02).
-  // Wir prüfen per Round-Trip, dass die Eingabe auch ein echtes Kalenderdatum
-  // ist — sonst würde die Wochenend-Logik auf dem Ersatz-Datum rechnen und
-  // der Insert später an der date-Spalte der DB crashen.
-  const parsed = new Date(Date.UTC(y, m - 1, d));
-  const isValidDate =
-    parsed.getUTCFullYear() === y &&
-    parsed.getUTCMonth() === m - 1 &&
-    parsed.getUTCDate() === d;
-  if (!isValidDate) {
-    return { error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
-  }
-  const weekday = parsed.getUTCDay();
-  if (weekday === 0 || weekday === 6) {
-    return {
-      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
-    };
-  }
-
-  // UE + Geeignet hängen voneinander ab: beim Erstgespräch gilt UE=0 und
-  // geeignet wird zur Pflicht; bei regulärer Session ist UE>0 und geeignet
-  // wird gar nicht erfasst. Der DB-Check `sessions_erstgespraech_consistency`
-  // erzwingt dasselbe — wir validieren hier nochmal, um dem Coach eine
-  // klare Fehlermeldung zu geben statt eines Constraint-Violation-Stack.
-  let anzahlUe: string;
-  let geeignet: boolean | null;
-  if (isErstgespraech) {
-    anzahlUe = "0";
-    if (geeignetRaw !== "ja" && geeignetRaw !== "nein") {
-      return {
-        error:
-          "Beim Erstgespräch musst du angeben, ob die Teilnehmerin für die Maßnahme geeignet ist.",
-      };
-    }
-    geeignet = geeignetRaw === "ja";
-  } else {
-    const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
-    if (!Number.isFinite(ue) || ue <= 0) {
-      return { error: "UE muss eine positive Zahl sein." };
-    }
-    // numeric(3,1) → maximal 99.9, in 0,5er-Schritten (AfA-Konvention).
-    if (Math.round(ue * 2) !== ue * 2) {
-      return { error: "UE muss in 0,5er-Schritten angegeben werden." };
-    }
-    if (ue > 24) {
-      return { error: "Eine Session darf 24 UE nicht überschreiten." };
-    }
-    anzahlUe = ue.toFixed(1);
-    geeignet = null;
-  }
+  const validation = validateSessionFormFields(formData);
+  if (!validation.ok) return { error: validation.error };
+  const v = validation.values;
 
   try {
     await db.insert(schema.sessions).values({
       courseId: ownedCourseId,
-      sessionDate,
-      topic,
-      modus,
-      anzahlUe,
-      isErstgespraech,
-      geeignet,
+      sessionDate: v.sessionDate,
+      topic: v.topic,
+      modus: v.modus,
+      anzahlUe: v.anzahlUe,
+      isErstgespraech: v.isErstgespraech,
+      geeignet: v.geeignet,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { error: `Session konnte nicht angelegt werden (${message}).` };
+  }
+
+  redirect(`/coach/courses/${ownedCourseId}`);
+}
+
+/**
+ * Aktualisiert eine bestehende Session. Erlaubt nur solange weder Coach
+ * noch ein TN signiert hat — sobald eine Signatur dranhängt, würde die
+ * Änderung den Audit-Trail (signed_at, IP) und die rechtliche Beweiskraft
+ * der Signatur entwerten. Edit nach Sign muss über eine separate „Session
+ * wieder öffnen"-Action gehen (eigene Migration, nicht in dieser V1).
+ */
+export async function updateSession(
+  _prev: SessionFormState,
+  formData: FormData,
+): Promise<SessionFormState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  if (!courseId || !sessionId) return { error: "Kurs oder Session fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Pre-Check: gehört die Session zu diesem Kurs UND ist sie noch
+  // unsigniert? Wenn schon mindestens 1 Signatur existiert: hart blocken,
+  // weil ein Edit den Audit-Trail (signed_at, IP, Inhalts-Snapshot) gegen
+  // die Beweiskraft entwerten würde.
+  const [sess] = await db
+    .select({ id: schema.sessions.id, status: schema.sessions.status })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Session nicht gefunden." };
+
+  const [existingSig] = await db
+    .select({ id: schema.signatures.id })
+    .from(schema.signatures)
+    .where(eq(schema.signatures.sessionId, sessionId))
+    .limit(1);
+  if (existingSig) {
+    return {
+      error:
+        "Diese Session ist bereits signiert und lässt sich so nicht mehr bearbeiten. Um zu korrigieren, muss die Session erst wieder geöffnet werden (Coach- und TN-Signaturen werden dabei entfernt).",
+    };
+  }
+
+  const validation = validateSessionFormFields(formData);
+  if (!validation.ok) return { error: validation.error };
+  const v = validation.values;
+
+  try {
+    await db
+      .update(schema.sessions)
+      .set({
+        sessionDate: v.sessionDate,
+        topic: v.topic,
+        modus: v.modus,
+        anzahlUe: v.anzahlUe,
+        isErstgespraech: v.isErstgespraech,
+        geeignet: v.geeignet,
+      })
+      .where(eq(schema.sessions.id, sessionId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Session konnte nicht aktualisiert werden (${message}).` };
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
@@ -211,6 +302,7 @@ export async function addParticipant(
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const kundenNr = String(formData.get("kundenNr") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
 
   if (!courseId) return { error: "Kurs fehlt." };
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
@@ -223,6 +315,22 @@ export async function addParticipant(
     // E-Mail nicht in die Fehlermeldung echo'en — PII gehört nicht in
     // Error-Logs oder Browser-DevTools.
     return { error: "Ungültige E-Mail-Adresse." };
+  }
+
+  // Phone ist optional; wenn gesetzt, normalisieren + strikt validieren.
+  // Bei Reuse eines bestehenden TN überschreiben wir die hinterlegte Nummer
+  // bewusst NICHT — sonst würde ein zweiter Coach versehentlich die im
+  // anderen Kurs eingetragene Nummer überschreiben.
+  let phone: string | null = null;
+  if (phoneRaw.length > 0) {
+    const normalized = normalizePhoneInput(phoneRaw);
+    if (!isValidE164(normalized)) {
+      return {
+        error:
+          "Mobilnummer ist ungültig — bitte im Format +4915712345678 eingeben (oder Feld leer lassen).",
+      };
+    }
+    phone = normalized;
   }
 
   let reused = false;
@@ -247,7 +355,7 @@ export async function addParticipant(
       } else {
         const [created] = await tx
           .insert(schema.participants)
-          .values({ tenantId, name, email, kundenNr })
+          .values({ tenantId, name, email, kundenNr, phone })
           .returning({ id: schema.participants.id });
         if (!created) throw new Error("PARTICIPANT_INSERT_FAILED");
         participantId = created.id;
@@ -285,8 +393,188 @@ export async function addParticipant(
   );
 }
 
+export type UpdateParticipantState = { error?: string } | undefined;
+
+/**
+ * Update der TN-Stammdaten (Name, Email, Kunden-Nr., Phone). Coach muss
+ * den Kurs besitzen, kein Impersonation. TN ist über `course_participants`
+ * an den Kurs gebunden — wir prüfen die Paarung, bevor der zentrale
+ * `participants`-Datensatz angefasst wird, sonst könnte ein Coach durch
+ * URL-Manipulation an einen TN ran, den er gar nicht betreut.
+ *
+ * Email-Wechsel ist erlaubt — `participantId` bleibt stabil, aktive Magic-
+ * Link-Tokens hängen nicht an der Mail. Bei Konflikt mit existierender
+ * Email im selben Tenant (tenant-scoped UNIQUE) wirft DB und wir geben
+ * eine saubere Fehlermeldung zurück.
+ *
+ * Beachtung: bei Reuse über mehrere Kurse (siehe addParticipant) teilen
+ * sich die Kurse den Stammdatensatz. Eine Stammdaten-Änderung wirkt
+ * also auf ALLE Kurse, in denen der TN eingeschrieben ist — das ist
+ * gewollt (Stammdaten sind eben Stamm). Coach wird durch den Confirm-
+ * Step im UI darauf hingewiesen, falls der TN mehrfach enrollt ist.
+ */
+export async function updateParticipant(
+  _prev: UpdateParticipantState,
+  formData: FormData,
+): Promise<UpdateParticipantState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const participantId = String(formData.get("participantId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const kundenNr = String(formData.get("kundenNr") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+
+  if (!courseId || !participantId) {
+    return { error: "Kurs oder Teilnehmer fehlt." };
+  }
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  if (!name || !email || !kundenNr) {
+    return { error: "Name, E-Mail und Kunden-Nr. sind Pflicht." };
+  }
+  if (!looksLikeEmail(email)) {
+    return { error: "Ungültige E-Mail-Adresse." };
+  }
+
+  // Phone optional + E.164 erzwingen wenn gesetzt — selbe Logik wie in
+  // addParticipant, hier aber explizit gegen leeren String zu NULL
+  // unterscheiden, damit Coach eine Nummer auch wieder entfernen kann.
+  let phone: string | null = null;
+  if (phoneRaw.length > 0) {
+    const normalized = normalizePhoneInput(phoneRaw);
+    if (!isValidE164(normalized)) {
+      return {
+        error:
+          "Mobilnummer ist ungültig — bitte im Format +4915712345678 eingeben (oder Feld leer lassen).",
+      };
+    }
+    phone = normalized;
+  }
+
+  // TN muss tatsächlich in diesem Kurs eingeschrieben sein — verhindert,
+  // dass ein Coach einen TN aus einem fremden Kurs ändert. tenant_id
+  // filtert zusätzlich gegen Cross-Tenant-Zugriffe (Defense-in-Depth).
+  const [enrollment] = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(
+      and(
+        eq(schema.courseParticipants.courseId, ownedCourseId),
+        eq(schema.courseParticipants.participantId, participantId),
+        eq(schema.participants.tenantId, tenantId),
+      ),
+    )
+    .limit(1);
+  if (!enrollment) {
+    return { error: "Teilnehmer ist nicht in diesem Kurs." };
+  }
+
+  try {
+    await db
+      .update(schema.participants)
+      .set({ name, email, kundenNr, phone })
+      .where(eq(schema.participants.id, participantId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Unique-Verletzung auf (tenant_id, email) — Coach hat versucht
+    // die Email auf eine im selben Tenant bereits genutzte zu setzen.
+    if (/unique/i.test(message) || /duplicate/i.test(message)) {
+      return {
+        error:
+          "Diese E-Mail-Adresse ist im Bildungsträger bereits einem anderen Teilnehmer zugeordnet.",
+      };
+    }
+    return { error: `Aktualisierung fehlgeschlagen (${message}).` };
+  }
+
+  redirect(`/coach/courses/${ownedCourseId}`);
+}
+
+/**
+ * QR-Code-Übergabe: erzeugt einen frischen Magic-Link für den TN und
+ * gibt ihn samt PNG-Data-URL für den QR-Code zurück. Der Coach zeigt
+ * den QR direkt auf seinem Bildschirm, TN scannt mit der Handy-Kamera.
+ *
+ * Semantisch wie ein Notify-Click: alte Tokens für diese (Kurs, TN)-
+ * Paarung werden invalidiert. UI informiert den Coach darüber.
+ *
+ * Bewusst KEIN Form-Action mit useActionState — wird per direktem
+ * Async-Call aus dem Client gerufen, weil das Modal-Open-Event kein
+ * Submit ist und Form-State unnötigen Overhead bedeuten würde.
+ */
+export async function createParticipantQrLink(params: {
+  courseId: string;
+  participantId: string;
+}): Promise<
+  | { url: string; qrDataUrl: string; error?: undefined }
+  | { error: string; url?: undefined; qrDataUrl?: undefined }
+> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
+
+  const ownedCourseId = await requireOwnedCourseId(params.courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const [enrollment] = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(
+      and(
+        eq(schema.courseParticipants.courseId, ownedCourseId),
+        eq(schema.courseParticipants.participantId, params.participantId),
+        eq(schema.participants.tenantId, tenantId),
+      ),
+    )
+    .limit(1);
+  if (!enrollment) return { error: "Teilnehmer nicht in diesem Kurs." };
+
+  // Dynamic import — qrcode-Lib wird sonst in jeden Action-Bundle gezogen,
+  // obwohl nur dieser eine Code-Pfad sie braucht.
+  const [{ createParticipantMagicLink }, QRCode] = await Promise.all([
+    import("@/lib/participant-tokens"),
+    import("qrcode"),
+  ]);
+
+  const { url } = await createParticipantMagicLink({
+    courseId: ownedCourseId,
+    participantId: params.participantId,
+  });
+
+  // PNG-Data-URL statt SVG: PNG ist binary → kein XSS-Risiko durch
+  // dangerouslySetInnerHTML notwendig, einfaches <img src={…}> reicht.
+  // 320px Breite ist groß genug für scharfe Scans aus ~30 cm Entfernung
+  // auf üblichen Coach-Bildschirmen.
+  const qrDataUrl = await QRCode.toDataURL(url, {
+    margin: 1,
+    width: 320,
+    errorCorrectionLevel: "M",
+  });
+
+  return { url, qrDataUrl };
+}
+
 export type NotifyState =
-  | { success?: number; failedEmails?: string[]; error?: string }
+  | {
+      success?: number;
+      failedEmails?: string[];
+      error?: string;
+    }
   | undefined;
 
 /**
@@ -332,9 +620,14 @@ export async function notifyParticipants(
   let success = 0;
   for (const p of participants) {
     try {
+      // Bulk-Notify ist hart auf Email verkabelt — SMS ist KEIN Bulk-Channel,
+      // sondern ausschließlich Coach-getriggerte Per-TN-Aktion über
+      // `resendInviteAsSms` (siehe unten). Damit bleiben die Kosten unter
+      // Kontrolle und der Coach hat die volle Entscheidungsgewalt.
       await sendParticipantInvite({
         courseId: ownedCourseId,
         participantId: p.participantId,
+        channel: "email",
       });
       success++;
     } catch (err) {
@@ -348,6 +641,72 @@ export async function notifyParticipants(
     success,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+export type SmsResendState = { error?: string; success?: boolean } | undefined;
+
+/**
+ * Verschickt einen frischen Magic-Link per SMS an EINEN spezifischen TN.
+ * Bewusst getrennt vom Bulk-Notify, weil SMS pro Versand 7,5 Cent kostet
+ * und vom Coach nur als gezielte Reaktion auf einen TN gedacht ist, der
+ * auf die E-Mail nicht reagiert hat.
+ *
+ * Gate-Reihenfolge identisch zu `notifyParticipants`:
+ *   1. Signing-enabled-Flag des Coaches
+ *   2. Nicht unter Impersonation
+ *   3. Kurs gehört dem Coach
+ *   4. TN ist im Kurs eingeschrieben (über sendParticipantInvite)
+ *   5. SMS_ENABLED + Phone (über `effectiveChannel` im Lib-Layer)
+ *
+ * Wenn das Lib-Layer Email-Fallback auslöst (kein SMS_ENABLED oder kein
+ * Phone), werfen wir hart — sonst denkt der Coach er hätte eine SMS
+ * geschickt, der TN bekommt aber unsichtbar nochmal die Mail die schon
+ * im Spam liegt.
+ */
+export async function resendInviteAsSms(
+  _prev: SmsResendState,
+  formData: FormData,
+): Promise<SmsResendState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const participantId = String(formData.get("participantId") ?? "").trim();
+  if (!courseId || !participantId) {
+    return { error: "Kurs oder Teilnehmer fehlt." };
+  }
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  try {
+    const { usedChannel } = await sendParticipantInvite({
+      courseId: ownedCourseId,
+      participantId,
+      channel: "sms",
+    });
+    if (usedChannel !== "sms") {
+      // Lib-Layer hat auf Email umgeleitet (Flag aus oder Phone fehlt).
+      // Für diese Action ist das ein Fehlerfall, kein Silent-Fallback.
+      return {
+        error:
+          "SMS-Versand nicht möglich — entweder ist die Mobilnummer beim TN nicht hinterlegt oder das SMS-Feature ist nicht aktiv.",
+      };
+    }
+  } catch (err) {
+    console.error(
+      `resendInviteAsSms failed for participant ${participantId}:`,
+      err,
+    );
+    return {
+      error:
+        "SMS-Versand fehlgeschlagen. Bitte später erneut versuchen oder beim Support melden.",
+    };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
 }
 
 /**
@@ -437,6 +796,99 @@ export async function sendPreviewToParticipants(
     success,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+export type AnwCheckState =
+  | {
+      error?: string;
+      result?: import("@/lib/checker/anw-check").AnwCheckResult;
+    }
+  | undefined;
+
+/**
+ * Server-Action für den ANW-Compliance-Check (KI-gestützte Prüfung der
+ * Stichwort-Einträge im Stundennachweis). Bewusst stateless — kein
+ * Persistieren des Ergebnisses, jeder Klick neuer Azure-Call. Memory
+ * `project_checker_konkretheit` etabliert das Pattern für KI-Checks
+ * im Signflow-Stack.
+ */
+export async function runAnwCheckAction(
+  _prev: AnwCheckState,
+  formData: FormData,
+): Promise<AnwCheckState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Tenant-Name + Kurs-Maßnahmentyp holen. `courses` hat keinen eigenen
+  // `tenantId` — der Mandant wird über den Coach (users.tenantId) abgeleitet,
+  // konsistent mit dem Multi-Tenant-Pattern an anderen Stellen.
+  const [meta] = await db
+    .select({
+      massnahmeTyp: schema.courses.massnahmeTyp,
+      tenantName: schema.tenants.name,
+    })
+    .from(schema.courses)
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.users.tenantId))
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!meta) return { error: "Kurs nicht auflösbar." };
+
+  // Schon-mal-Verteidigung: nur Sessions des eigenen Tenants laden —
+  // sollte durch das Course-Ownership bereits hart sein, aber explizit
+  // ist besser als implizit.
+  const entries = await db
+    .select({
+      sessionDate: schema.sessions.sessionDate,
+      topic: schema.sessions.topic,
+      anzahlUe: schema.sessions.anzahlUe,
+      isErstgespraech: schema.sessions.isErstgespraech,
+    })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .orderBy(asc(schema.sessions.sessionDate));
+
+  try {
+    const { runAnwCheck } = await import("@/lib/checker/anw-check");
+    const result = await runAnwCheck({
+      massnahmeTyp: meta.massnahmeTyp,
+      tenantName: meta.tenantName,
+      entries: entries.map((e) => ({
+        sessionDate: e.sessionDate,
+        topic: e.topic,
+        anzahlUe: Number.parseFloat(e.anzahlUe),
+        isErstgespraech: e.isErstgespraech,
+      })),
+    });
+    // Server-Log für Audit-Zwecke (siehe Memory project_checker_konkretheit).
+    // Tenant-ID statt -Name, weil ID stabiler ist.
+    console.log(
+      `anw-check: tenant=${tenantId} course=${ownedCourseId} status=${result.status} warnings=${result.warnings.length}`,
+    );
+    return { result };
+  } catch (err) {
+    console.error(
+      `anw-check failed for course ${ownedCourseId}:`,
+      err,
+    );
+    return {
+      error:
+        "ANW-Check fehlgeschlagen. Bitte später erneut versuchen oder den Support kontaktieren.",
+    };
+  }
 }
 
 export type SealState = { error?: string; sealed?: boolean } | undefined;

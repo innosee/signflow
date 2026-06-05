@@ -64,9 +64,21 @@ export function SignatureCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const pad = new SignaturePad(canvas, {
-      minWidth: 0.8,
-      maxWidth: 2.2,
-      backgroundColor: "rgba(255,255,255,1)",
+      // Stroke-Tuning für eine satter wirkende Linie auf Touch + Maus.
+      // - throttle senkt die Sampling-Rate auf 16ms (~60Hz) und filtert
+      //   doppelte Punkte raus, die signature_pad sonst als 0-Distanz-
+      //   Bézier-Schnipsel zeichnet (sieht „ribbed" aus).
+      // - velocityFilterWeight 0.5 (Default 0.7) reagiert schneller auf
+      //   Geschwindigkeitsänderungen → Anstriche/Aufstriche wirken
+      //   stärker, Linien lebendiger statt gleichmäßig dick.
+      minWidth: 0.6,
+      maxWidth: 2.6,
+      throttle: 16,
+      velocityFilterWeight: 0.5,
+      // Transparenter Hintergrund → das exportierte PNG legt sich überall
+      // sauber auf (Stundennachweis-Hintergrund, dunkles Theme-Preview,
+      // PDF-Tabelle), kein weißer Block der die Zelle überlappt.
+      backgroundColor: "rgba(0,0,0,0)",
       penColor: "#111",
     });
     padRef.current = pad;
@@ -95,8 +107,9 @@ export function SignatureCanvas({
     setStatus("uploading");
     setError(null);
     try {
+      const trimmed = trimToContent(canvas);
       const blob: Blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(
+        trimmed.toBlob(
           (b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))),
           "image/png",
         );
@@ -162,4 +175,63 @@ export function SignatureCanvas({
       </div>
     </div>
   );
+}
+
+/**
+ * Schneidet das Canvas auf die Bounding-Box der tatsächlich gezeichneten
+ * Pixel zu (Alpha > 0). Begründung: das Roh-Canvas ist immer die volle
+ * Widget-Fläche, d.h. die Signatur landet als kleiner Klecks in einem
+ * großen leeren PNG. Bei der Einbettung in den Stundennachweis (Tabellen-
+ * Zelle, max-height ~14mm) skaliert das Bild dann nicht auf die Linie
+ * selbst sondern auf den Whitespace → Signatur erscheint winzig und
+ * mittig in der Zelle. Trim löst das ohne die UI-Größe zu ändern.
+ *
+ * Ein kleiner Padding-Rand bleibt erhalten, damit Pen-Anstriche an der
+ * Bounding-Box-Kante nicht abrasiert wirken.
+ */
+function trimToContent(source: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = source.getContext("2d");
+  if (!ctx) return source;
+  const { width, height } = source;
+  const img = ctx.getImageData(0, 0, width, height);
+  const data = img.data;
+
+  let top = height;
+  let bottom = -1;
+  let left = width;
+  let right = -1;
+
+  // Wir checken nur den Alpha-Kanal (Index 3 pro Pixel) — funktioniert nur
+  // korrekt, weil der signature_pad-Background auf transparent steht. Bei
+  // weißem Hintergrund würde alles als "Content" gewertet.
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const alpha = data[(y * width + x) * 4 + 3];
+      if (alpha && alpha > 0) {
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+        if (x < left) left = x;
+        if (x > right) right = x;
+      }
+    }
+  }
+
+  if (bottom < 0) return source; // gar nichts gezeichnet → Caller bricht eh ab
+
+  // Kleiner Atem-Rand, damit der Stift-Anstrich nicht direkt an der Kante
+  // klebt. 4px im Canvas-Raster ist bei DPR=2 ~2 logische px — unsichtbar,
+  // aber rettet feine Aufstriche.
+  const pad = 4;
+  const cropX = Math.max(0, left - pad);
+  const cropY = Math.max(0, top - pad);
+  const cropW = Math.min(width - cropX, right - left + 1 + pad * 2);
+  const cropH = Math.min(height - cropY, bottom - top + 1 + pad * 2);
+
+  const out = document.createElement("canvas");
+  out.width = cropW;
+  out.height = cropH;
+  const outCtx = out.getContext("2d");
+  if (!outCtx) return source;
+  outCtx.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+  return out;
 }

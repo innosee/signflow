@@ -4,13 +4,17 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
+import { isSmsEnabled } from "@/lib/sms";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 
+import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
 import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
+import { QrHandoverButton } from "./qr-handover-button";
 import { SealCourseButton } from "./seal-button";
+import { SmsResendButton } from "./sms-resend-button";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +81,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       id: schema.participants.id,
       name: schema.participants.name,
       email: schema.participants.email,
+      phone: schema.participants.phone,
       kundenNr: schema.participants.kundenNr,
     })
     .from(schema.courseParticipants)
@@ -86,6 +91,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     )
     .where(eq(schema.courseParticipants.courseId, id))
     .orderBy(asc(schema.participants.name));
+
+  // SMS ist Coach-getriggert per-TN (siehe SmsResendButton), nicht Bulk.
+  // Feature-Gate steuert nur, ob der Per-TN-Button überhaupt erscheint.
+  const smsEnabled = isSmsEnabled();
 
   // Sessions + aggregierte Signatur-Counts pro Session in einer Query.
   // Spart N+1 und zeigt direkt "Coach ✓ · 2/3 TN", Status-Badge und ob
@@ -278,6 +287,16 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         <span>
                           TN {tnSigned}/{tnTotal}
                         </span>
+                        {!impersonating &&
+                          !coachSigned &&
+                          tnSigned === 0 && (
+                            <Link
+                              href={`/coach/courses/${course.id}/sessions/${s.id}/edit`}
+                              className="text-zinc-700 underline-offset-2 hover:underline"
+                            >
+                              Bearbeiten
+                            </Link>
+                          )}
                       </div>
                     </div>
                   </div>
@@ -307,12 +326,33 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="border-b border-zinc-300 px-6 py-4">
-          <h2 className="text-lg font-semibold">Abschluss</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            Wenn alle Sessions signiert sind, sende den Teilnehmern die
-            Vorschau. Nach deren Freigabe kannst du das Dokument mit FES
-            versiegeln — die Übermittlung an die AfA übernimmt deine Firma.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Abschluss</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Wenn alle Sessions signiert sind, sende den Teilnehmern die
+                Vorschau. Nach deren Freigabe versiegelst du das Dokument mit
+                FES und übergibst es an deinen Bildungsträger zur Übermittlung
+                an die Agentur für Arbeit.
+              </p>
+            </div>
+            {participants.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {participants.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/coach/courses/${course.id}/print/${p.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 transition hover:bg-zinc-50"
+                    title={`PDF-Vorschau für ${p.name}`}
+                  >
+                    <span aria-hidden="true">📄</span> PDF: {p.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="divide-y divide-zinc-200">
           <Step
@@ -336,22 +376,33 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             }
           >
             {!impersonating && (
-              <SendPreviewButton
-                courseId={course.id}
-                disabled={
-                  participants.length === 0 ||
-                  !allSessionsCompleted ||
-                  allApproved
-                }
-                disabledReason={
-                  participants.length === 0
-                    ? "Keine Teilnehmer im Kurs"
-                    : !allSessionsCompleted
-                      ? "Erst wenn alle Sessions signiert sind"
-                      : "Alle Teilnehmer haben bereits freigegeben"
-                }
-                alreadySent={previewSent}
-              />
+              <>
+                <AnwCheckButton
+                  courseId={course.id}
+                  disabled={sessions.length === 0}
+                  disabledReason={
+                    sessions.length === 0
+                      ? "Erst Sessions anlegen, dann prüfen"
+                      : undefined
+                  }
+                />
+                <SendPreviewButton
+                  courseId={course.id}
+                  disabled={
+                    participants.length === 0 ||
+                    !allSessionsCompleted ||
+                    allApproved
+                  }
+                  disabledReason={
+                    participants.length === 0
+                      ? "Keine Teilnehmer im Kurs"
+                      : !allSessionsCompleted
+                        ? "Erst wenn alle Sessions signiert sind"
+                        : "Alle Teilnehmer haben bereits freigegeben"
+                  }
+                  alreadySent={previewSent}
+                />
+              </>
             )}
           </Step>
           <Step
@@ -422,6 +473,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   <div className="font-medium">{p.name}</div>
                   <div className="text-xs text-zinc-500">
                     Kd-Nr. {p.kundenNr} · {p.email}
+                    {smsEnabled && p.phone && (
+                      <span
+                        title={`SMS-Versand möglich: ${p.phone}`}
+                        className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800"
+                      >
+                        SMS
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -482,6 +541,29 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   >
                     Nachweis
                   </Link>
+                  {!impersonating && (
+                    <>
+                      {smsEnabled && p.phone && (
+                        <SmsResendButton
+                          courseId={course.id}
+                          participantId={p.id}
+                          phone={p.phone}
+                        />
+                      )}
+                      <QrHandoverButton
+                        courseId={course.id}
+                        participantId={p.id}
+                        participantName={p.name}
+                      />
+                      <Link
+                        href={`/coach/courses/${course.id}/teilnehmer/${p.id}/edit`}
+                        className="text-zinc-700 underline-offset-2 hover:underline"
+                        title="Stammdaten bearbeiten"
+                      >
+                        Bearbeiten
+                      </Link>
+                    </>
+                  )}
                 </div>
               </li>
             );

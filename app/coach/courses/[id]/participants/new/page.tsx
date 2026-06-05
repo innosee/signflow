@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
+import { isSmsEnabled } from "@/lib/sms";
 
 import { ParticipantForm } from "./participant-form";
 
@@ -40,7 +41,11 @@ export default async function NewParticipantPage({ params }: Props) {
           Link wird erst beim nächsten „Teilnehmer benachrichtigen“ verschickt.
         </p>
       </header>
-      <ParticipantForm courseId={course.id} courseTitle={course.title} />
+      <ParticipantForm
+        courseId={course.id}
+        courseTitle={course.title}
+        smsEnabled={isSmsEnabled()}
+      />
     </div>
   );
 }

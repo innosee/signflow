@@ -21,7 +21,9 @@ export default async function BildungstraegerLayout({
           brandHref="/bildungstraeger"
           navLinks={[
             { href: "/bildungstraeger", label: "Dashboard" },
+            { href: "/bildungstraeger/checker", label: "Bericht prüfen" },
             { href: "/bildungstraeger/bedarfstraeger", label: "Bedarfsträger" },
+            { href: "/bildungstraeger/team", label: "Team" },
           ]}
           userName={session.user.name}
           userEmail={session.user.email}

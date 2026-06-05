@@ -65,6 +65,13 @@ export async function createCourse(
   const bedarfstraegerId = String(
     formData.get("bedarfstraegerId") ?? "",
   ).trim();
+  const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
+  // Whitelist gegen das DB-Enum — alles andere wäre ein Constraint-Violation.
+  const massnahmeTyp = (
+    ["EKC", "ESC", "EGC", "ESCA"] as const
+  ).includes(massnahmeTypRaw as "EKC" | "ESC" | "EGC" | "ESCA")
+    ? (massnahmeTypRaw as "EKC" | "ESC" | "EGC" | "ESCA")
+    : "EKC";
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
 
@@ -147,6 +154,7 @@ export async function createCourse(
           durchfuehrungsort,
           anzahlBewilligteUe,
           bedarfstraegerId,
+          massnahmeTyp,
           startDate,
           endDate,
         })

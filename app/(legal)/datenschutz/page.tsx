@@ -27,7 +27,8 @@ export default function DatenschutzPage() {
 
       <Section title="1. Verantwortlicher">
         <p>
-          Verantwortlicher im Sinne der DSGVO ist:
+          Verantwortlicher für den Betrieb dieser Website und der zentralen
+          Plattformfunktionen ist:
         </p>
         <p>
           innosee GmbH
@@ -55,6 +56,17 @@ export default function DatenschutzPage() {
             Impressum
           </Link>
           .
+        </p>
+        <p>
+          <Placeholder>
+            Multi-Tenant-Kontext: Signflow wird seit 2026-05-05 mehrmandantenfähig
+            betrieben. Für Kurs-, Sitzungs- und Teilnehmerdaten ist in der Regel
+            der jeweilige Bildungsträger Verantwortlicher; innosee GmbH handelt
+            insoweit als Auftragsverarbeiterin nach Art. 28 DSGVO. Die genaue
+            Abgrenzung (Joint Controllership vs. AV) muss durch die
+            DSGVO-Beratung formuliert und je Bildungsträger per AVV bestätigt
+            werden.
+          </Placeholder>
         </p>
       </Section>
 
@@ -95,6 +107,10 @@ export default function DatenschutzPage() {
               Coach und Teilnehmer:in
             </li>
             <li>
+              Versand zeitlich begrenzter Magic Links per E-Mail oder optional
+              per SMS zur Authentifizierung der Teilnehmer:innen für die Signatur
+            </li>
+            <li>
               Versiegelung des Gesamtdokuments mit einer fortgeschrittenen
               elektronischen Signatur (FES) und Übermittlung an die Agentur für
               Arbeit
@@ -104,12 +120,18 @@ export default function DatenschutzPage() {
         <Subsection title="4.2 Datenkategorien">
           <ul className="list-disc space-y-1 pl-5">
             <li>
-              Stammdaten (Name, E-Mail-Adresse, Kunden-Nr. der Teilnehmer:innen)
+              Stammdaten (Name, E-Mail-Adresse, Kunden-Nr. der Teilnehmer:innen,
+              optional Mobilnummer für SMS-Versand)
             </li>
             <li>Kurs- und Sitzungsdaten (Termine, Themen, Unterrichtseinheiten)</li>
             <li>Unterschriftsbilder (Canvas-Eingabe, als Bilddatei gespeichert)</li>
             <li>
               Signatur-Metadaten (IP-Adresse, Zeitstempel, Rolle) als Audit-Log
+            </li>
+            <li>
+              Bei SMS-Zustellung zusätzlich: Mobilnummer (E.164), Vorname zur
+              Anrede, Kursbezeichnung sowie der Magic-Link selbst — als
+              Bestandteil des SMS-Textes an den Versanddienstleister
             </li>
           </ul>
         </Subsection>
@@ -124,6 +146,23 @@ export default function DatenschutzPage() {
               Dokumentations- und Nachweispflichten gegenüber der Agentur für Arbeit
             </li>
           </ul>
+        </Subsection>
+        <Subsection title="4.4 FES-Zertifikat (Aussteller)">
+          <p>
+            Für die fortgeschrittene elektronische Versiegelung wird ein
+            qualifiziertes Zertifikat eines eIDAS-akkreditierten
+            Vertrauensdiensteanbieters genutzt (
+            <Placeholder>
+              geplanter Anbieter: D-Trust GmbH, Berlin — Bundesdruckerei-Gruppe;
+              vor Live-Schaltung bestätigen
+            </Placeholder>
+            ). Der Anbieter erhält weder die zu siegelnden Dokumente noch
+            Inhalte daraus; das Siegel wird server-seitig in der
+            Infrastruktur der innosee GmbH auf das fertige PDF angewendet.
+            Im Rahmen der Zertifikats-Ausstellung werden lediglich
+            Unternehmensstammdaten (Handelsregister, Geschäftsführer-
+            Identifizierung) an den Aussteller übermittelt.
+          </p>
         </Subsection>
       </Section>
 
@@ -206,9 +245,9 @@ export default function DatenschutzPage() {
                 region="EU (AWS Frankfurt), Unternehmenssitz USA — SCCs"
               />
               <ProcessorRow
-                name="Vercel Blob"
-                purpose="Speicherung der Unterschriftsbilder"
-                region="EU — SCCs"
+                name="Cloudflare, Inc."
+                purpose="Objekt-Storage (R2) für Unterschriftsbilder, Logos und gesiegelte PDFs; privater Bucket, Zugriff nur über kurzlebige signierte URLs"
+                region="EU-Jurisdiction (Frankfurt/Amsterdam), Unternehmenssitz USA — SCCs"
               />
               <ProcessorRow
                 name="Resend Inc."
@@ -216,9 +255,9 @@ export default function DatenschutzPage() {
                 region="EU, Unternehmenssitz USA — SCCs"
               />
               <ProcessorRow
-                name="Firma.dev"
-                purpose="Fortgeschrittene elektronische Signatur (FES, eIDAS)"
-                region={<Placeholder>Region / AVV-Quelle bestätigen</Placeholder>}
+                name="Sieben Communications GmbH (seven.io / sms77)"
+                purpose="Versand von Magic-Link-SMS an Teilnehmer:innen, sofern für diesen Zustellweg eine Mobilnummer hinterlegt und der Channel vom Coach gewählt wurde. Auftragsverarbeitungsvertrag nach Art. 28 DSGVO geschlossen; Verarbeitung ausschließlich in einem ISO 27001 zertifizierten Rechenzentrum in Deutschland"
+                region="Deutschland (Köln)"
               />
               <ProcessorRow
                 name="IONOS SE"
@@ -227,7 +266,7 @@ export default function DatenschutzPage() {
               />
               <ProcessorRow
                 name="Microsoft Ireland Operations Ltd. (Azure OpenAI)"
-                purpose="Regelprüfung auf anonymisiertem Text (nur Checker)"
+                purpose="Regelprüfung auf anonymisiertem Text (Abschlussbericht-Checker) sowie KI-gestützte Compliance-Prüfung der stichwortartigen Coach-Einträge in der Anwesenheitsliste (ANW-Check)"
                 region="EU (Sweden Central oder Germany West Central) — SCCs"
               />
             </tbody>
@@ -257,6 +296,13 @@ export default function DatenschutzPage() {
           <li>
             Audit-Log-Einträge: in der Regel 12 Monate, soweit keine längere
             gesetzliche Aufbewahrungspflicht besteht
+          </li>
+          <li>
+            Versandprotokolle des SMS-Dienstleisters (Mobilnummer,
+            Zustellstatus, Zeitpunkt): beim Auftragsverarbeiter standardmäßig
+            bis zu 30 Tage, anschließend automatische Löschung; SMS-Inhalte
+            werden über den eigentlichen Versandvorgang hinaus nicht
+            gespeichert
           </li>
         </ul>
       </Section>
@@ -340,7 +386,7 @@ export default function DatenschutzPage() {
           unter dieser Adresse abrufbare Fassung.
         </p>
         <p className="text-xs text-zinc-500">
-          Stand: <Placeholder>Datum bei Veröffentlichung einsetzen</Placeholder>
+          Stand: 5. Juni 2026 (Entwurf)
         </p>
       </Section>
     </article>

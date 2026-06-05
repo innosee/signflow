@@ -1,3 +1,4 @@
+import { AuthRequiredError } from "./errors";
 import type { CheckerInput, CheckerResult } from "./types";
 
 /**
@@ -16,6 +17,9 @@ export async function runCheck(input: CheckerInput): Promise<CheckerResult> {
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new AuthRequiredError();
+    }
     let message = `Check fehlgeschlagen (HTTP ${res.status})`;
     try {
       const data = (await res.json()) as { error?: string };

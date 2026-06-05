@@ -11,7 +11,19 @@ export type CoachRow = {
   signingEnabled: boolean;
 };
 
-export function CoachListItem({ coach }: { coach: CoachRow }) {
+export function CoachListItem({
+  coach,
+  canImpersonate,
+}: {
+  coach: CoachRow;
+  /**
+   * Owner-Gate: nur der älteste aktive BT-User des Tenants darf
+   * Impersonation auslösen (siehe `impersonateCoach`-Server-Action +
+   * `isTenantOwner` in dal.ts). Eingeladene BT-Kolleg:innen sehen den
+   * Button nicht, damit sie nicht in einen 403-Redirect laufen.
+   */
+  canImpersonate: boolean;
+}) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
       <div className="min-w-0">
@@ -63,15 +75,17 @@ export function CoachListItem({ coach }: { coach: CoachRow }) {
             {coach.signingEnabled ? "Signatur sperren" : "Signatur freischalten"}
           </button>
         </form>
-        <form action={impersonateCoach}>
-          <input type="hidden" name="userId" value={coach.id} />
-          <button
-            type="submit"
-            className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-          >
-            Als Coach anmelden
-          </button>
-        </form>
+        {canImpersonate && (
+          <form action={impersonateCoach}>
+            <input type="hidden" name="userId" value={coach.id} />
+            <button
+              type="submit"
+              className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+            >
+              Als Coach anmelden
+            </button>
+          </form>
+        )}
         <form
           action={deleteCoach}
           onSubmit={(e) => {

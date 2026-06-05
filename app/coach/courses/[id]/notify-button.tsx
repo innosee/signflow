@@ -4,6 +4,13 @@ import { useActionState } from "react";
 
 import { notifyParticipants, type NotifyState } from "./actions";
 
+/**
+ * Bulk-Benachrichtigung aller TN per E-Mail. SMS ist bewusst KEIN Bulk-
+ * Channel — der Coach soll SMS nur als gezielte Reaktion auf einen
+ * stillen TN auslösen (siehe `SmsResendButton`). Das hält die Kosten
+ * unter Kontrolle und gibt dem Coach pro-TN-Entscheidung statt
+ * Massen-Versand auf seine eigene Rechnung.
+ */
 export function NotifyParticipantsButton({
   courseId,
   participantCount,
@@ -31,7 +38,7 @@ export function NotifyParticipantsButton({
         }
         className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40"
       >
-        {pending ? "Wird gesendet…" : "Teilnehmer benachrichtigen"}
+        {pending ? "Wird gesendet…" : "Teilnehmer per E-Mail benachrichtigen"}
       </button>
       {state?.error && (
         <p role="alert" className="text-xs text-red-700">
