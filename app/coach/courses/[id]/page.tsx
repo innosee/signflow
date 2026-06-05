@@ -13,6 +13,7 @@ import { CoachSignForm } from "./coach-sign-form";
 import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
 import { QrHandoverButton } from "./qr-handover-button";
+import { ReopenSessionButton } from "./reopen-session-button";
 import { SealCourseButton } from "./seal-button";
 import { SmsResendButton } from "./sms-resend-button";
 
@@ -297,6 +298,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                               Bearbeiten
                             </Link>
                           )}
+                        {!impersonating && (coachSigned || tnSigned > 0) && (
+                          <ReopenSessionButton
+                            courseId={course.id}
+                            sessionId={s.id}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>

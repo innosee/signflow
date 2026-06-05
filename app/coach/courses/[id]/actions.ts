@@ -274,6 +274,89 @@ export async function updateSession(
   redirect(`/coach/courses/${ownedCourseId}`);
 }
 
+export type ReopenSessionState = { error?: string; success?: boolean } | undefined;
+
+/**
+ * Öffnet eine bereits signierte Session wieder zur Bearbeitung. Hart-Reset:
+ *   - alle Signaturen dieser Session werden gelöscht (Coach + alle TN)
+ *   - alle Teilnehmer-Approvals dieses Kurses werden gelöscht (das
+ *     freigegebene Dokument existiert nach dem Edit nicht mehr in der Form,
+ *     also muss die Freigabe neu eingeholt werden)
+ *   - Session-Status zurück auf `pending`
+ *
+ * Geblockt wenn der Kurs bereits versiegelt ist (FES dranhängt) — dann
+ * darf rechtlich nichts mehr verändert werden, weil die FES bestätigt
+ * genau diesen Stand. Mit FES heißt: neuer Kurs anlegen.
+ */
+export async function reopenSession(
+  _prev: ReopenSessionState,
+  formData: FormData,
+): Promise<ReopenSessionState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  if (!courseId || !sessionId) return { error: "Kurs oder Session fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // FES-Gate: ein versiegelter Kurs ist rechtlich unveränderbar. Sonst
+  // würde das gesiegelte PDF einen Stand bezeugen, den die DB nicht mehr
+  // hat.
+  const [doc] = await db
+    .select({ fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, ownedCourseId))
+    .limit(1);
+  if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
+    return {
+      error:
+        "Dieser Kurs ist bereits mit FES versiegelt und kann rechtlich nicht mehr verändert werden. Bitte einen neuen Kurs anlegen.",
+    };
+  }
+
+  const [sess] = await db
+    .select({ id: schema.sessions.id })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Session nicht gefunden." };
+
+  try {
+    await db.transaction(async (tx) => {
+      // 1. Alle Signaturen dieser Session weg
+      await tx
+        .delete(schema.signatures)
+        .where(eq(schema.signatures.sessionId, sessionId));
+      // 2. Status zurück auf pending
+      await tx
+        .update(schema.sessions)
+        .set({ status: "pending" })
+        .where(eq(schema.sessions.id, sessionId));
+      // 3. Alle TN-Approvals dieses Kurses weg — das Dokument hat sich
+      //    geändert, eine alte Freigabe wäre nicht mehr aussagekräftig.
+      await tx
+        .delete(schema.participantApprovals)
+        .where(eq(schema.participantApprovals.courseId, ownedCourseId));
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Wiederöffnen fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
+}
+
 export type AddParticipantState =
   | { error?: string; reused?: boolean }
   | undefined;
