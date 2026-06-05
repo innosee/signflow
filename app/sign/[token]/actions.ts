@@ -88,6 +88,22 @@ export async function submitParticipantSignature(
         .limit(1);
       if (!cp) throw new Error("NOT_ENROLLED");
 
+      // Session-Enrollment: TN muss explizit für diese Session ausgewählt
+      // sein (session_participants). Coach kann TN pro Session abwählen,
+      // wenn jemand gefehlt hat — dann darf der TN diese Session auch
+      // nicht signieren.
+      const [sp] = await tx
+        .select({ id: schema.sessionParticipants.id })
+        .from(schema.sessionParticipants)
+        .where(
+          and(
+            eq(schema.sessionParticipants.sessionId, sess.id),
+            eq(schema.sessionParticipants.courseParticipantId, cp.id),
+          ),
+        )
+        .limit(1);
+      if (!sp) throw new Error("NOT_IN_SESSION");
+
       // Teilnehmer muss seine Canvas-Signatur bereits einmalig angelegt
       // haben — ohne die ist die AfA-Beweiskraft nicht gegeben.
       const [part] = await tx
@@ -141,6 +157,12 @@ export async function submitParticipantSignature(
     }
     if (message === "NOT_ENROLLED") {
       return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
+    }
+    if (message === "NOT_IN_SESSION") {
+      return {
+        error:
+          "Du warst für diese Einheit nicht als Teilnehmer:in markiert. Bitte den Coach kontaktieren, falls das nicht stimmt.",
+      };
     }
     if (message === "NO_SIGNATURE") {
       return {

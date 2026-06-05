@@ -48,10 +48,14 @@ export async function recomputeSessionStatus(
     .limit(1);
   const coachSigned = !!coachSig;
 
+  // Enrolled-Count = TN, die EXPLIZIT für diese Session ausgewählt sind
+  // (session_participants), nicht alle Kurs-TN. Erlaubt 1:1-Termine
+  // innerhalb von Gruppenkursen oder Abwesenheiten ohne dass die Session
+  // ewig auf eine TN-Signatur wartet, die nie kommt.
   const [{ count: enrolledCount } = { count: 0 }] = await executor
     .select({ count: countStar() })
-    .from(schema.courseParticipants)
-    .where(eq(schema.courseParticipants.courseId, sess.courseId));
+    .from(schema.sessionParticipants)
+    .where(eq(schema.sessionParticipants.sessionId, sess.id));
 
   const [{ count: tnSigned } = { count: 0 }] = await executor
     .select({ count: countStar() })

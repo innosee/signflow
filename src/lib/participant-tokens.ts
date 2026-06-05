@@ -336,6 +336,9 @@ export async function resolveParticipantToken(
 
   if (!cp) return null; // Teilnehmer ist gar nicht im Kurs
 
+  // Nur Sessions, in denen dieser TN explizit enrolled ist (session_participants).
+  // Coach kann TN pro Session abwählen — abgewählte Sessions tauchen für
+  // diesen TN gar nicht auf, sodass er sie auch nicht versehentlich signiert.
   const rawSessions = await db
     .select({
       id: schema.sessions.id,
@@ -346,10 +349,15 @@ export async function resolveParticipantToken(
       isErstgespraech: schema.sessions.isErstgespraech,
     })
     .from(schema.sessions)
+    .innerJoin(
+      schema.sessionParticipants,
+      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
+    )
     .where(
       and(
         eq(schema.sessions.courseId, head.courseId),
         isNull(schema.sessions.deletedAt),
+        eq(schema.sessionParticipants.courseParticipantId, cp.id),
       ),
     )
     .orderBy(asc(schema.sessions.sessionDate));

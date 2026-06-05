@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
@@ -67,6 +67,28 @@ export default async function EditSessionPage({ params }: Props) {
     redirect(`/coach/courses/${course.id}?signed=${sessionId}`);
   }
 
+  // Alle TN des Kurses + welche aktuell für die Session enrolled sind.
+  // SP-Tabelle bekam beim Backfill alle Bestandskombinationen — bei neu
+  // angelegten Sessions kommen nur die im Form ausgewählten rein.
+  const courseTns = await db
+    .select({
+      id: schema.courseParticipants.id,
+      name: schema.participants.name,
+    })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(eq(schema.courseParticipants.courseId, course.id))
+    .orderBy(asc(schema.participants.name));
+
+  const enrolledSp = await db
+    .select({ courseParticipantId: schema.sessionParticipants.courseParticipantId })
+    .from(schema.sessionParticipants)
+    .where(eq(schema.sessionParticipants.sessionId, sessionId));
+  const enrolledIds = enrolledSp.map((e) => e.courseParticipantId);
+
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
@@ -89,6 +111,8 @@ export default async function EditSessionPage({ params }: Props) {
           isErstgespraech: sess.isErstgespraech,
           geeignet: sess.geeignet,
         }}
+        courseTns={courseTns}
+        enrolledIds={enrolledIds}
       />
     </div>
   );

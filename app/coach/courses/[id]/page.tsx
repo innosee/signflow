@@ -102,9 +102,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
   // Feature-Gate steuert nur, ob der Per-TN-Button überhaupt erscheint.
   const smsEnabled = isSmsEnabled();
 
-  // Sessions + aggregierte Signatur-Counts pro Session in einer Query.
-  // Spart N+1 und zeigt direkt "Coach ✓ · 2/3 TN", Status-Badge und ob
-  // der Coach-Sign-Button angezeigt werden muss.
+  // Sessions + aggregierte Counts pro Session. signatures + session_participants
+  // beide via leftJoin → multipliziert Rows aus, deshalb DISTINCT-Counts.
+  // Zeigt "Coach ✓ · 2/3 TN" mit enrolled = explizit für die Session
+  // ausgewählte TN (nicht alle Kurs-TN).
   const sessions = await db
     .select({
       id: schema.sessions.id,
@@ -114,13 +115,18 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       isErstgespraech: schema.sessions.isErstgespraech,
       topic: schema.sessions.topic,
       status: schema.sessions.status,
-      coachSigned: sql<number>`count(*) filter (where ${schema.signatures.signerType} = 'coach')::int`,
-      participantsSigned: sql<number>`count(*) filter (where ${schema.signatures.signerType} = 'participant')::int`,
+      coachSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'coach')::int`,
+      participantsSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'participant')::int`,
+      enrolledTns: sql<number>`count(distinct ${schema.sessionParticipants.id})::int`,
     })
     .from(schema.sessions)
     .leftJoin(
       schema.signatures,
       eq(schema.signatures.sessionId, schema.sessions.id),
+    )
+    .leftJoin(
+      schema.sessionParticipants,
+      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
     )
     .where(
       and(
@@ -270,7 +276,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           <ul className="divide-y divide-zinc-200 text-sm">
             {sessions.map((s) => {
               const coachSigned = s.coachSigned > 0;
-              const tnTotal = participants.length;
+              // tnTotal = explizit für diese Session ausgewählte TN (nicht
+              // alle Kurs-TN). Fallback auf participants.length nur falls
+              // (sehr unwahrscheinlich) keine SP-Einträge existieren.
+              const tnTotal = s.enrolledTns > 0 ? s.enrolledTns : participants.length;
               const tnSigned = s.participantsSigned;
               return (
                 <li key={s.id} className="px-6 py-4 space-y-2">

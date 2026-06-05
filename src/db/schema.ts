@@ -467,6 +467,40 @@ export const participantAccessTokens = pgTable(
   ],
 );
 
+/**
+ * Welcher Teilnehmer war für eine konkrete Session enrolled / anwesend?
+ * Default-Verhalten in der UI: bei Session-Anlage sind ALLE Kurs-TN
+ * vorausgewählt (Standard-AVGS-Annahme „alle dabei"); der Coach kann
+ * einzelne abwählen, wenn jemand gefehlt hat oder es ein 1:1-Termin
+ * innerhalb eines Gruppenkurses war.
+ *
+ * Beim Bestand werden alle existierenden Sessions via Migrations-
+ * Backfill mit allen aktuell enrollten TN verknüpft, sodass das alte
+ * implizite Verhalten weiterläuft.
+ */
+export const sessionParticipants = pgTable(
+  "session_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    courseParticipantId: uuid("course_participant_id")
+      .notNull()
+      .references(() => courseParticipants.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("session_participants_session_cp_uq").on(
+      t.sessionId,
+      t.courseParticipantId,
+    ),
+    index("session_participants_session_idx").on(t.sessionId),
+  ],
+);
+
 export const signatures = pgTable(
   "signatures",
   {

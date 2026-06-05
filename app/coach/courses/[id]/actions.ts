@@ -181,17 +181,50 @@ export async function createSession(
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
 
+  // course_participant_ids aus dem Form: Multi-Checkbox-Group, FormData
+  // liefert `getAll(...)` → string[]. Validierung: alle IDs müssen zu
+  // diesem Kurs gehören (sonst könnte ein DevTools-Edit fremde TN
+  // verlinken). Mind. 1 TN ist Pflicht — sonst wäre die Session
+  // teilnehmer-leer, was sinnlos ist.
+  const participantIds = formData
+    .getAll("courseParticipantIds")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+  if (participantIds.length === 0) {
+    return { error: "Mindestens ein Teilnehmer muss ausgewählt sein." };
+  }
+  const validCpIds = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+  const validIdSet = new Set(validCpIds.map((r) => r.id));
+  if (participantIds.some((id) => !validIdSet.has(id))) {
+    return { error: "Ein ausgewählter Teilnehmer gehört nicht zu diesem Kurs." };
+  }
+
   try {
     await db.transaction(async (tx) => {
-      await tx.insert(schema.sessions).values({
-        courseId: ownedCourseId,
-        sessionDate: v.sessionDate,
-        topic: v.topic,
-        modus: v.modus,
-        anzahlUe: v.anzahlUe,
-        isErstgespraech: v.isErstgespraech,
-        geeignet: v.geeignet,
-      });
+      const [created] = await tx
+        .insert(schema.sessions)
+        .values({
+          courseId: ownedCourseId,
+          sessionDate: v.sessionDate,
+          topic: v.topic,
+          modus: v.modus,
+          anzahlUe: v.anzahlUe,
+          isErstgespraech: v.isErstgespraech,
+          geeignet: v.geeignet,
+        })
+        .returning({ id: schema.sessions.id });
+      if (!created) throw new Error("INSERT_FAILED");
+      // Pro ausgewähltem TN ein session_participants-Eintrag — das ist
+      // die explizite Anwesenheits-Markierung pro Session.
+      await tx.insert(schema.sessionParticipants).values(
+        participantIds.map((cpId) => ({
+          sessionId: created.id,
+          courseParticipantId: cpId,
+        })),
+      );
       // FES-Gates resetten: neue Session ändert den Stand → alte
       // Maßnahme-Abschluss-Bestätigung + ANW-Check-Status sind nicht
       // mehr aussagekräftig.
@@ -263,6 +296,22 @@ export async function updateSession(
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
 
+  const participantIds = formData
+    .getAll("courseParticipantIds")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+  if (participantIds.length === 0) {
+    return { error: "Mindestens ein Teilnehmer muss ausgewählt sein." };
+  }
+  const validCpIds = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+  const validIdSet = new Set(validCpIds.map((r) => r.id));
+  if (participantIds.some((id) => !validIdSet.has(id))) {
+    return { error: "Ein ausgewählter Teilnehmer gehört nicht zu diesem Kurs." };
+  }
+
   try {
     await db.transaction(async (tx) => {
       await tx
@@ -276,6 +325,19 @@ export async function updateSession(
           geeignet: v.geeignet,
         })
         .where(eq(schema.sessions.id, sessionId));
+      // Session-Participants neu setzen: kompletter Replace statt Diff,
+      // weil unsignierte Sessions sowieso keine Signaturen mit Foreign-
+      // Keys auf SP haben (Signatur referenziert course_participant
+      // direkt, nicht das SP-Mapping).
+      await tx
+        .delete(schema.sessionParticipants)
+        .where(eq(schema.sessionParticipants.sessionId, sessionId));
+      await tx.insert(schema.sessionParticipants).values(
+        participantIds.map((cpId) => ({
+          sessionId,
+          courseParticipantId: cpId,
+        })),
+      );
       // FES-Gates resetten — Inhalts-Edit ändert den Stand.
       await tx
         .update(schema.courses)

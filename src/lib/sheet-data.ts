@@ -75,6 +75,9 @@ export async function loadStundennachweisSheet(params: {
     .limit(1);
   if (!enrollment) return null;
 
+  // Nur Sessions, für die dieser TN explizit enrolled ist. Sonst würden
+  // im pro-TN-Sheet Sessions auftauchen, an denen er gar nicht teilgenommen
+  // hat — verzerrt die UE-Summe und macht den Nachweis fachlich falsch.
   const sessions = await db
     .select({
       id: schema.sessions.id,
@@ -86,10 +89,15 @@ export async function loadStundennachweisSheet(params: {
       geeignet: schema.sessions.geeignet,
     })
     .from(schema.sessions)
+    .innerJoin(
+      schema.sessionParticipants,
+      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
+    )
     .where(
       and(
         eq(schema.sessions.courseId, params.courseId),
         isNull(schema.sessions.deletedAt),
+        eq(schema.sessionParticipants.courseParticipantId, enrollment.cpId),
       ),
     )
     .orderBy(asc(schema.sessions.sessionDate));
