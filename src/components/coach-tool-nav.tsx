@@ -96,7 +96,7 @@ export function CoachToolNav({ signingEnabled }: { signingEnabled: boolean }) {
                   href={t.href}
                   role="tab"
                   aria-selected={isActive}
-                  className={`rounded-md px-3 py-1.5 transition ${
+                  className={`whitespace-nowrap rounded-md px-3 py-1.5 transition ${
                     isActive
                       ? ACCENT[t.key].active
                       : ACCENT[t.key].inactive
@@ -121,7 +121,7 @@ export function CoachToolNav({ signingEnabled }: { signingEnabled: boolean }) {
                 key={l.href}
                 href={l.href}
                 aria-current={isCurrent ? "page" : undefined}
-                className={`text-zinc-700 underline-offset-4 hover:underline ${
+                className={`whitespace-nowrap text-zinc-700 underline-offset-4 hover:underline ${
                   isCurrent ? accent.navActive : accent.navHover
                 }`}
               >
