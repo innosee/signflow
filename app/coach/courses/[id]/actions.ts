@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -14,7 +14,6 @@ import {
 } from "@/lib/dal";
 import { sealWithFes } from "@/lib/firma";
 import {
-  type NotificationChannel,
   sendParticipantInvite,
   sendParticipantPreviewInvite,
 } from "@/lib/participant-tokens";
@@ -22,6 +21,90 @@ import { recomputeSessionStatus } from "@/lib/session-status";
 import { isValidE164, normalizePhoneInput } from "@/lib/sms";
 
 export type SessionFormState = { error?: string } | undefined;
+
+/**
+ * Gemeinsame Feld-Validierung für Create + Update einer Session — beide
+ * teilen exakt dieselben Regeln (Datum, Topic, Modus, UE, Erstgespräch-
+ * Konsistenz). Liefert entweder einen normalisierten Datensatz oder eine
+ * Fehlermeldung für die Server-Action.
+ */
+function validateSessionFormFields(formData: FormData):
+  | {
+      ok: true;
+      values: {
+        sessionDate: string;
+        topic: string;
+        modus: "praesenz" | "online";
+        anzahlUe: string;
+        isErstgespraech: boolean;
+        geeignet: boolean | null;
+      };
+    }
+  | { ok: false; error: string } {
+  const sessionDate = String(formData.get("sessionDate") ?? "").trim();
+  const topic = String(formData.get("topic") ?? "").trim();
+  const modus = String(formData.get("modus") ?? "").trim();
+  const isErstgespraech = formData.get("isErstgespraech") === "on";
+  const anzahlUeRaw = String(formData.get("anzahlUe") ?? "").trim();
+  const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
+
+  if (!sessionDate) return { ok: false, error: "Datum fehlt." };
+  if (!topic) return { ok: false, error: "Themen / Inhalte fehlen." };
+  if (modus !== "praesenz" && modus !== "online") {
+    return { ok: false, error: "Modus muss Präsenz oder Online sein." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    return { ok: false, error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
+  }
+  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  const isValidDate =
+    parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() === m - 1 &&
+    parsed.getUTCDate() === d;
+  if (!isValidDate) {
+    return { ok: false, error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
+  }
+  const weekday = parsed.getUTCDay();
+  if (weekday === 0 || weekday === 6) {
+    return {
+      ok: false,
+      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
+    };
+  }
+
+  let anzahlUe: string;
+  let geeignet: boolean | null;
+  if (isErstgespraech) {
+    anzahlUe = "0";
+    if (geeignetRaw !== "ja" && geeignetRaw !== "nein") {
+      return {
+        ok: false,
+        error:
+          "Beim Erstgespräch musst du angeben, ob die Teilnehmerin für die Maßnahme geeignet ist.",
+      };
+    }
+    geeignet = geeignetRaw === "ja";
+  } else {
+    const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
+    if (!Number.isFinite(ue) || ue <= 0) {
+      return { ok: false, error: "UE muss eine positive Zahl sein." };
+    }
+    if (Math.round(ue * 2) !== ue * 2) {
+      return { ok: false, error: "UE muss in 0,5er-Schritten angegeben werden." };
+    }
+    if (ue > 24) {
+      return { ok: false, error: "Eine Session darf 24 UE nicht überschreiten." };
+    }
+    anzahlUe = ue.toFixed(1);
+    geeignet = null;
+  }
+
+  return {
+    ok: true,
+    values: { sessionDate, topic, modus, anzahlUe, isErstgespraech, geeignet },
+  };
+}
 
 /**
  * Schickt bei jedem Coach-Sign einen frischen Magic-Link an alle
@@ -90,92 +173,65 @@ export async function createSession(
   const coachId = session.user.id;
 
   const courseId = String(formData.get("courseId") ?? "").trim();
-  const sessionDate = String(formData.get("sessionDate") ?? "").trim();
-  const topic = String(formData.get("topic") ?? "").trim();
-  const modus = String(formData.get("modus") ?? "").trim();
-  const isErstgespraech = formData.get("isErstgespraech") === "on";
-  const anzahlUeRaw = String(formData.get("anzahlUe") ?? "").trim();
-  const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
-
   if (!courseId) return { error: "Kurs fehlt." };
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
-  if (!sessionDate) return { error: "Datum fehlt." };
-  if (!topic) return { error: "Themen / Inhalte fehlen." };
-  if (modus !== "praesenz" && modus !== "online") {
-    return { error: "Modus muss Präsenz oder Online sein." };
-  }
+  const validation = validateSessionFormFields(formData);
+  if (!validation.ok) return { error: validation.error };
+  const v = validation.values;
 
-  // Wochenend-Sperre: Sa/So sind für Coachings nicht zulässig. Datum
-  // als pure Kalendertag interpretieren (sessionDate ist YYYY-MM-DD,
-  // nicht UTC-Midnight) — split statt new Date(), damit kein TZ-Schlag
-  // den Tag verschiebt. Malformed-Input wird hart abgelehnt statt
-  // stillschweigend die Validierung zu skippen.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
-    return { error: "Datum muss im Format JJJJ-MM-TT vorliegen." };
+  // course_participant_ids aus dem Form: Multi-Checkbox-Group, FormData
+  // liefert `getAll(...)` → string[]. Validierung: alle IDs müssen zu
+  // diesem Kurs gehören (sonst könnte ein DevTools-Edit fremde TN
+  // verlinken). Mind. 1 TN ist Pflicht — sonst wäre die Session
+  // teilnehmer-leer, was sinnlos ist.
+  const participantIds = formData
+    .getAll("courseParticipantIds")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+  if (participantIds.length === 0) {
+    return { error: "Mindestens ein Teilnehmer muss ausgewählt sein." };
   }
-  const [y, m, d] = sessionDate.split("-").map((s) => Number.parseInt(s, 10));
-  // Date.UTC rollt Overflow-Werte still um (2026-02-30 → 2026-03-02).
-  // Wir prüfen per Round-Trip, dass die Eingabe auch ein echtes Kalenderdatum
-  // ist — sonst würde die Wochenend-Logik auf dem Ersatz-Datum rechnen und
-  // der Insert später an der date-Spalte der DB crashen.
-  const parsed = new Date(Date.UTC(y, m - 1, d));
-  const isValidDate =
-    parsed.getUTCFullYear() === y &&
-    parsed.getUTCMonth() === m - 1 &&
-    parsed.getUTCDate() === d;
-  if (!isValidDate) {
-    return { error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
-  }
-  const weekday = parsed.getUTCDay();
-  if (weekday === 0 || weekday === 6) {
-    return {
-      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
-    };
-  }
-
-  // UE + Geeignet hängen voneinander ab: beim Erstgespräch gilt UE=0 und
-  // geeignet wird zur Pflicht; bei regulärer Session ist UE>0 und geeignet
-  // wird gar nicht erfasst. Der DB-Check `sessions_erstgespraech_consistency`
-  // erzwingt dasselbe — wir validieren hier nochmal, um dem Coach eine
-  // klare Fehlermeldung zu geben statt eines Constraint-Violation-Stack.
-  let anzahlUe: string;
-  let geeignet: boolean | null;
-  if (isErstgespraech) {
-    anzahlUe = "0";
-    if (geeignetRaw !== "ja" && geeignetRaw !== "nein") {
-      return {
-        error:
-          "Beim Erstgespräch musst du angeben, ob die Teilnehmerin für die Maßnahme geeignet ist.",
-      };
-    }
-    geeignet = geeignetRaw === "ja";
-  } else {
-    const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
-    if (!Number.isFinite(ue) || ue <= 0) {
-      return { error: "UE muss eine positive Zahl sein." };
-    }
-    // numeric(3,1) → maximal 99.9, in 0,5er-Schritten (AfA-Konvention).
-    if (Math.round(ue * 2) !== ue * 2) {
-      return { error: "UE muss in 0,5er-Schritten angegeben werden." };
-    }
-    if (ue > 24) {
-      return { error: "Eine Session darf 24 UE nicht überschreiten." };
-    }
-    anzahlUe = ue.toFixed(1);
-    geeignet = null;
+  const validCpIds = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+  const validIdSet = new Set(validCpIds.map((r) => r.id));
+  if (participantIds.some((id) => !validIdSet.has(id))) {
+    return { error: "Ein ausgewählter Teilnehmer gehört nicht zu diesem Kurs." };
   }
 
   try {
-    await db.insert(schema.sessions).values({
-      courseId: ownedCourseId,
-      sessionDate,
-      topic,
-      modus,
-      anzahlUe,
-      isErstgespraech,
-      geeignet,
+    await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.sessions)
+        .values({
+          courseId: ownedCourseId,
+          sessionDate: v.sessionDate,
+          topic: v.topic,
+          modus: v.modus,
+          anzahlUe: v.anzahlUe,
+          isErstgespraech: v.isErstgespraech,
+          geeignet: v.geeignet,
+        })
+        .returning({ id: schema.sessions.id });
+      if (!created) throw new Error("INSERT_FAILED");
+      // Pro ausgewähltem TN ein session_participants-Eintrag — das ist
+      // die explizite Anwesenheits-Markierung pro Session.
+      await tx.insert(schema.sessionParticipants).values(
+        participantIds.map((cpId) => ({
+          sessionId: created.id,
+          courseParticipantId: cpId,
+        })),
+      );
+      // FES-Gates resetten: neue Session ändert den Stand → alte
+      // Maßnahme-Abschluss-Bestätigung + ANW-Check-Status sind nicht
+      // mehr aussagekräftig.
+      await tx
+        .update(schema.courses)
+        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .where(eq(schema.courses.id, ownedCourseId));
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -183,6 +239,225 @@ export async function createSession(
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
+}
+
+/**
+ * Aktualisiert eine bestehende Session. Erlaubt nur solange weder Coach
+ * noch ein TN signiert hat — sobald eine Signatur dranhängt, würde die
+ * Änderung den Audit-Trail (signed_at, IP) und die rechtliche Beweiskraft
+ * der Signatur entwerten. Edit nach Sign muss über eine separate „Session
+ * wieder öffnen"-Action gehen (eigene Migration, nicht in dieser V1).
+ */
+export async function updateSession(
+  _prev: SessionFormState,
+  formData: FormData,
+): Promise<SessionFormState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  if (!courseId || !sessionId) return { error: "Kurs oder Session fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Pre-Check: gehört die Session zu diesem Kurs UND ist sie noch
+  // unsigniert? Wenn schon mindestens 1 Signatur existiert: hart blocken,
+  // weil ein Edit den Audit-Trail (signed_at, IP, Inhalts-Snapshot) gegen
+  // die Beweiskraft entwerten würde.
+  const [sess] = await db
+    .select({ id: schema.sessions.id, status: schema.sessions.status })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Session nicht gefunden." };
+
+  const [existingSig] = await db
+    .select({ id: schema.signatures.id })
+    .from(schema.signatures)
+    .where(eq(schema.signatures.sessionId, sessionId))
+    .limit(1);
+  if (existingSig) {
+    return {
+      error:
+        "Diese Session ist bereits signiert und lässt sich so nicht mehr bearbeiten. Um zu korrigieren, muss die Session erst wieder geöffnet werden (Coach- und TN-Signaturen werden dabei entfernt).",
+    };
+  }
+
+  const validation = validateSessionFormFields(formData);
+  if (!validation.ok) return { error: validation.error };
+  const v = validation.values;
+
+  const participantIds = formData
+    .getAll("courseParticipantIds")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+  if (participantIds.length === 0) {
+    return { error: "Mindestens ein Teilnehmer muss ausgewählt sein." };
+  }
+  const validCpIds = await db
+    .select({ id: schema.courseParticipants.id })
+    .from(schema.courseParticipants)
+    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+  const validIdSet = new Set(validCpIds.map((r) => r.id));
+  if (participantIds.some((id) => !validIdSet.has(id))) {
+    return { error: "Ein ausgewählter Teilnehmer gehört nicht zu diesem Kurs." };
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.sessions)
+        .set({
+          sessionDate: v.sessionDate,
+          topic: v.topic,
+          modus: v.modus,
+          anzahlUe: v.anzahlUe,
+          isErstgespraech: v.isErstgespraech,
+          geeignet: v.geeignet,
+        })
+        .where(eq(schema.sessions.id, sessionId));
+      // Session-Participants neu setzen: kompletter Replace statt Diff,
+      // weil unsignierte Sessions sowieso keine Signaturen mit Foreign-
+      // Keys auf SP haben (Signatur referenziert course_participant
+      // direkt, nicht das SP-Mapping).
+      await tx
+        .delete(schema.sessionParticipants)
+        .where(eq(schema.sessionParticipants.sessionId, sessionId));
+      await tx.insert(schema.sessionParticipants).values(
+        participantIds.map((cpId) => ({
+          sessionId,
+          courseParticipantId: cpId,
+        })),
+      );
+      // FES-Gates resetten — Inhalts-Edit ändert den Stand.
+      await tx
+        .update(schema.courses)
+        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .where(eq(schema.courses.id, ownedCourseId));
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Session konnte nicht aktualisiert werden (${message}).` };
+  }
+
+  redirect(`/coach/courses/${ownedCourseId}`);
+}
+
+export type ReopenSessionState = { error?: string; success?: boolean } | undefined;
+
+/**
+ * Öffnet eine bereits signierte Session wieder zur Bearbeitung. Hart-Reset:
+ *   - alle Signaturen dieser Session werden gelöscht (Coach + alle TN)
+ *   - alle Teilnehmer-Approvals dieses Kurses werden gelöscht (das
+ *     freigegebene Dokument existiert nach dem Edit nicht mehr in der Form,
+ *     also muss die Freigabe neu eingeholt werden)
+ *   - Session-Status zurück auf `pending`
+ *
+ * Geblockt wenn der Kurs bereits versiegelt ist (FES dranhängt) — dann
+ * darf rechtlich nichts mehr verändert werden, weil die FES bestätigt
+ * genau diesen Stand. Mit FES heißt: neuer Kurs anlegen.
+ */
+export async function reopenSession(
+  _prev: ReopenSessionState,
+  formData: FormData,
+): Promise<ReopenSessionState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  if (!courseId || !sessionId) return { error: "Kurs oder Session fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // FES-Gate: ein versiegelter Kurs ist rechtlich unveränderbar. Sonst
+  // würde das gesiegelte PDF einen Stand bezeugen, den die DB nicht mehr
+  // hat.
+  const [doc] = await db
+    .select({ fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, ownedCourseId))
+    .limit(1);
+  if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
+    return {
+      error:
+        "Dieser Kurs ist bereits mit FES versiegelt und kann rechtlich nicht mehr verändert werden. Bitte einen neuen Kurs anlegen.",
+    };
+  }
+
+  const [sess] = await db
+    .select({ id: schema.sessions.id })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Session nicht gefunden." };
+
+  // Guard: keine Signatur → Edit reicht, nicht Reopen. Sonst würden wir
+  // unnötig die Kurs-TN-Approvals löschen, obwohl noch nichts signiert
+  // war. Schickt den Coach direkt aufs Edit-Form.
+  const [existingSig] = await db
+    .select({ id: schema.signatures.id })
+    .from(schema.signatures)
+    .where(eq(schema.signatures.sessionId, sessionId))
+    .limit(1);
+  if (!existingSig) {
+    redirect(
+      `/coach/courses/${ownedCourseId}/sessions/${sessionId}/edit?reopened=1`,
+    );
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      // 1. Alle Signaturen dieser Session weg
+      await tx
+        .delete(schema.signatures)
+        .where(eq(schema.signatures.sessionId, sessionId));
+      // 2. Status zurück auf pending
+      await tx
+        .update(schema.sessions)
+        .set({ status: "pending" })
+        .where(eq(schema.sessions.id, sessionId));
+      // 3. Alle TN-Approvals dieses Kurses weg — das Dokument hat sich
+      //    geändert, eine alte Freigabe wäre nicht mehr aussagekräftig.
+      await tx
+        .delete(schema.participantApprovals)
+        .where(eq(schema.participantApprovals.courseId, ownedCourseId));
+      // 4. FES-Gates resetten — Maßnahme-Abschluss und ANW-Check müssen
+      //    nach dem Edit neu bestätigt werden.
+      await tx
+        .update(schema.courses)
+        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .where(eq(schema.courses.id, ownedCourseId));
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Wiederöffnen fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  // Direkt ins Edit-Form schicken — der User klickt „Wieder öffnen"
+  // praktisch immer weil er den Inhalt korrigieren will. Zwei Klicks
+  // (reopen → manuell Bearbeiten) ergeben keinen Mehrwert.
+  redirect(
+    `/coach/courses/${ownedCourseId}/sessions/${sessionId}/edit?reopened=1`,
+  );
 }
 
 export type AddParticipantState =
@@ -481,7 +756,11 @@ export async function createParticipantQrLink(params: {
 }
 
 export type NotifyState =
-  | { success?: number; failedEmails?: string[]; error?: string }
+  | {
+      success?: number;
+      failedEmails?: string[];
+      error?: string;
+    }
   | undefined;
 
 /**
@@ -504,14 +783,6 @@ export async function notifyParticipants(
   const courseId = String(formData.get("courseId") ?? "").trim();
   if (!courseId) return { error: "Kurs fehlt." };
 
-  // `channel` aus dem Form: "email" (Default, alle bekommen Mail) oder
-  // "sms" (jeder mit hinterlegter Nummer bekommt SMS, alle anderen
-  // fallen zurück auf E-Mail). Per-TN-Channel-Präferenz heben wir uns
-  // für später auf — der Bulk-Switch deckt 90 % der Fälle.
-  const channelRaw = String(formData.get("channel") ?? "email").trim();
-  const preferredChannel: NotificationChannel =
-    channelRaw === "sms" ? "sms" : "email";
-
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
@@ -519,7 +790,6 @@ export async function notifyParticipants(
     .select({
       participantId: schema.participants.id,
       email: schema.participants.email,
-      phone: schema.participants.phone,
     })
     .from(schema.courseParticipants)
     .innerJoin(
@@ -535,17 +805,15 @@ export async function notifyParticipants(
   const failedEmails: string[] = [];
   let success = 0;
   for (const p of participants) {
-    // Channel-Auswahl pro TN: preferred=SMS nur wenn Phone vorhanden,
-    // sonst silent fallback auf Email — sonst hätte ein TN ohne Phone
-    // gar keine Benachrichtigung bekommen.
-    const channel: NotificationChannel =
-      preferredChannel === "sms" && p.phone ? "sms" : "email";
-
     try {
+      // Bulk-Notify ist hart auf Email verkabelt — SMS ist KEIN Bulk-Channel,
+      // sondern ausschließlich Coach-getriggerte Per-TN-Aktion über
+      // `resendInviteAsSms` (siehe unten). Damit bleiben die Kosten unter
+      // Kontrolle und der Coach hat die volle Entscheidungsgewalt.
       await sendParticipantInvite({
         courseId: ownedCourseId,
         participantId: p.participantId,
-        channel,
+        channel: "email",
       });
       success++;
     } catch (err) {
@@ -559,6 +827,72 @@ export async function notifyParticipants(
     success,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+export type SmsResendState = { error?: string; success?: boolean } | undefined;
+
+/**
+ * Verschickt einen frischen Magic-Link per SMS an EINEN spezifischen TN.
+ * Bewusst getrennt vom Bulk-Notify, weil SMS pro Versand 7,5 Cent kostet
+ * und vom Coach nur als gezielte Reaktion auf einen TN gedacht ist, der
+ * auf die E-Mail nicht reagiert hat.
+ *
+ * Gate-Reihenfolge identisch zu `notifyParticipants`:
+ *   1. Signing-enabled-Flag des Coaches
+ *   2. Nicht unter Impersonation
+ *   3. Kurs gehört dem Coach
+ *   4. TN ist im Kurs eingeschrieben (über sendParticipantInvite)
+ *   5. SMS_ENABLED + Phone (über `effectiveChannel` im Lib-Layer)
+ *
+ * Wenn das Lib-Layer Email-Fallback auslöst (kein SMS_ENABLED oder kein
+ * Phone), werfen wir hart — sonst denkt der Coach er hätte eine SMS
+ * geschickt, der TN bekommt aber unsichtbar nochmal die Mail die schon
+ * im Spam liegt.
+ */
+export async function resendInviteAsSms(
+  _prev: SmsResendState,
+  formData: FormData,
+): Promise<SmsResendState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const participantId = String(formData.get("participantId") ?? "").trim();
+  if (!courseId || !participantId) {
+    return { error: "Kurs oder Teilnehmer fehlt." };
+  }
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  try {
+    const { usedChannel } = await sendParticipantInvite({
+      courseId: ownedCourseId,
+      participantId,
+      channel: "sms",
+    });
+    if (usedChannel !== "sms") {
+      // Lib-Layer hat auf Email umgeleitet (Flag aus oder Phone fehlt).
+      // Für diese Action ist das ein Fehlerfall, kein Silent-Fallback.
+      return {
+        error:
+          "SMS-Versand nicht möglich — entweder ist die Mobilnummer beim TN nicht hinterlegt oder das SMS-Feature ist nicht aktiv.",
+      };
+    }
+  } catch (err) {
+    console.error(
+      `resendInviteAsSms failed for participant ${participantId}:`,
+      err,
+    );
+    return {
+      error:
+        "SMS-Versand fehlgeschlagen. Bitte später erneut versuchen oder beim Support melden.",
+    };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
 }
 
 /**
@@ -606,6 +940,32 @@ export async function sendPreviewToParticipants(
     };
   }
 
+  // Pflicht-Gates vor TN-Freigabe-Aufforderung: ANW-Check muss durch und
+  // der Coach muss die Maßnahme aktiv als abgeschlossen markiert haben.
+  // Sonst landet beim TN eine Freigabe-Aufforderung an die Agentur für
+  // Arbeit, während der Coach gedanklich noch mitten im Kurs ist und
+  // weitere Sessions plant.
+  const [gates] = await db
+    .select({
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      abgeschlossenAt: schema.courses.abgeschlossenAt,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!gates?.abgeschlossenAt) {
+    return {
+      error:
+        "Vor dem Versand der Freigabe-Aufforderung muss die Maßnahme als abgeschlossen markiert werden (Schritt davor).",
+    };
+  }
+  if (!gates.anwCheckPassedAt) {
+    return {
+      error:
+        "Vor dem Versand der Freigabe-Aufforderung muss der ANW-Compliance-Check mit Status „Freigabe“ durchlaufen sein.",
+    };
+  }
+
   const participants = await db
     .select({
       participantId: schema.participants.id,
@@ -648,6 +1008,192 @@ export async function sendPreviewToParticipants(
     success,
     failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
   };
+}
+
+export type AnwCheckState =
+  | {
+      error?: string;
+      result?: import("@/lib/checker/anw-check").AnwCheckResult;
+    }
+  | undefined;
+
+/**
+ * Server-Action für den ANW-Compliance-Check (KI-gestützte Prüfung der
+ * Stichwort-Einträge im Stundennachweis). Bewusst stateless — kein
+ * Persistieren des Ergebnisses, jeder Klick neuer Azure-Call. Memory
+ * `project_checker_konkretheit` etabliert das Pattern für KI-Checks
+ * im Signflow-Stack.
+ */
+export async function runAnwCheckAction(
+  _prev: AnwCheckState,
+  formData: FormData,
+): Promise<AnwCheckState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Tenant-Name + Kurs-Maßnahmentyp holen. `courses` hat keinen eigenen
+  // `tenantId` — der Mandant wird über den Coach (users.tenantId) abgeleitet,
+  // konsistent mit dem Multi-Tenant-Pattern an anderen Stellen.
+  const [meta] = await db
+    .select({
+      massnahmeTyp: schema.courses.massnahmeTyp,
+      tenantName: schema.tenants.name,
+    })
+    .from(schema.courses)
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.users.tenantId))
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!meta) return { error: "Kurs nicht auflösbar." };
+
+  // Schon-mal-Verteidigung: nur Sessions des eigenen Tenants laden —
+  // sollte durch das Course-Ownership bereits hart sein, aber explizit
+  // ist besser als implizit.
+  const entries = await db
+    .select({
+      sessionDate: schema.sessions.sessionDate,
+      topic: schema.sessions.topic,
+      anzahlUe: schema.sessions.anzahlUe,
+      isErstgespraech: schema.sessions.isErstgespraech,
+    })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .orderBy(asc(schema.sessions.sessionDate));
+
+  try {
+    const { runAnwCheck } = await import("@/lib/checker/anw-check");
+    const result = await runAnwCheck({
+      massnahmeTyp: meta.massnahmeTyp,
+      tenantName: meta.tenantName,
+      entries: entries.map((e) => ({
+        sessionDate: e.sessionDate,
+        topic: e.topic,
+        anzahlUe: Number.parseFloat(e.anzahlUe),
+        isErstgespraech: e.isErstgespraech,
+      })),
+    });
+    // Server-Log für Audit-Zwecke (siehe Memory project_checker_konkretheit).
+    // Tenant-ID statt -Name, weil ID stabiler ist.
+    console.log(
+      `anw-check: tenant=${tenantId} course=${ownedCourseId} status=${result.status} warnings=${result.warnings.length}`,
+    );
+    // FES-Gate: bei `freigabe` Timestamp setzen, sonst löschen. So bleibt
+    // das Gate nicht auf einem alten „freigabe" stehen, wenn der Coach
+    // nach einer Änderung den Check nochmal laufen lässt und er jetzt
+    // „nacharbeit" sagt.
+    await db
+      .update(schema.courses)
+      .set({
+        anwCheckPassedAt: result.status === "freigabe" ? new Date() : null,
+      })
+      .where(eq(schema.courses.id, ownedCourseId));
+    revalidatePath(`/coach/courses/${ownedCourseId}`);
+    return { result };
+  } catch (err) {
+    console.error(
+      `anw-check failed for course ${ownedCourseId}:`,
+      err,
+    );
+    return {
+      error:
+        "ANW-Check fehlgeschlagen. Bitte später erneut versuchen oder den Support kontaktieren.",
+    };
+  }
+}
+
+export type MarkAbgeschlossenState =
+  | { error?: string; success?: boolean }
+  | undefined;
+
+/**
+ * Coach bestätigt: keine weiteren Sessions kommen. Erst nach diesem Klick
+ * darf FES-Sealing laufen. Der Klick wird zugelassen wenn ENTWEDER 80%
+ * der bewilligten UE geleistet sind ODER der Kurs als vorzeitig beendet
+ * gekennzeichnet ist (`flagVorzeitigesEnde=true`) mit Begründung.
+ *
+ * Beim nächsten Session-Edit/Create/Reopen wird das Feld wieder gelöscht,
+ * der Coach muss neu bestätigen.
+ */
+export async function markCourseAbgeschlossen(
+  _prev: MarkAbgeschlossenState,
+  formData: FormData,
+): Promise<MarkAbgeschlossenState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Gate-Berechnung serverseitig — Client-UI kann den Button zwar grayen,
+  // aber die Wahrheit liegt hier.
+  const [course] = await db
+    .select({
+      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      begruendungText: schema.courses.begruendungText,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!course) return { error: "Kurs nicht auflösbar." };
+
+  // Summe der geleisteten UE (nur completed Sessions zählen, Erstgespräche
+  // wie im Sheet UE-frei).
+  const completedSessions = await db
+    .select({
+      anzahlUe: schema.sessions.anzahlUe,
+      isErstgespraech: schema.sessions.isErstgespraech,
+    })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        eq(schema.sessions.status, "completed"),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+  const geleisteteUe = completedSessions
+    .filter((s) => !s.isErstgespraech)
+    .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
+  const erfuellungQuote = geleisteteUe / course.anzahlBewilligteUe;
+  const hatVorzeitigesEndeBegruendung =
+    course.flagVorzeitigesEnde && (course.begruendungText?.trim().length ?? 0) > 0;
+
+  if (erfuellungQuote < 0.8 && !hatVorzeitigesEndeBegruendung) {
+    return {
+      error: `Maßnahme kann erst abgeschlossen werden, wenn ≥80% der bewilligten UE geleistet sind (aktuell ${geleisteteUe} von ${course.anzahlBewilligteUe} = ${Math.round(erfuellungQuote * 100)}%). Bei vorzeitigem Ende: Kurs-Stammdaten → „vorzeitig beendet" + Begründung setzen.`,
+    };
+  }
+
+  try {
+    await db
+      .update(schema.courses)
+      .set({ abgeschlossenAt: new Date() })
+      .where(eq(schema.courses.id, ownedCourseId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Markierung fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
 }
 
 export type SealState = { error?: string; sealed?: boolean } | undefined;
@@ -699,6 +1245,31 @@ export async function sealCourse(
   }
   if (existingDoc?.fesStatus === "sent") {
     return { error: "Siegelung läuft bereits — bitte warten." };
+  }
+
+  // FES-Gates (zusätzlich zu Sessions/Approval): ANW-Check muss durch
+  // und Coach muss „Maßnahme abgeschlossen" aktiv bestätigt haben. Beide
+  // Gates werden bei jedem Session-Edit zurückgesetzt → der Coach kann
+  // nicht versehentlich auf einem alten Stand siegeln.
+  const [courseGates] = await db
+    .select({
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      abgeschlossenAt: schema.courses.abgeschlossenAt,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!courseGates?.anwCheckPassedAt) {
+    return {
+      error:
+        "ANW-Compliance-Check muss vor der Versiegelung mit Status „Freigabe“ durchlaufen sein.",
+    };
+  }
+  if (!courseGates.abgeschlossenAt) {
+    return {
+      error:
+        "Maßnahme muss vor der Versiegelung aktiv als abgeschlossen markiert werden.",
+    };
   }
 
   // Sessions-Gate: jede nicht-gelöschte Session muss vollständig signiert sein.

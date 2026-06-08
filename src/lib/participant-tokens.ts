@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import { sendParticipantMagicLink, sendParticipantPreview } from "@/lib/email";
 import {
   composeMagicLinkSms,
+  composePreviewSms,
   isSmsEnabled,
   isValidE164,
   sendSms,
@@ -108,7 +109,7 @@ export async function sendParticipantInvite(params: {
    * überfordert sind — siehe Auto-Memory `project_participant_delivery_channels`.
    */
   channel?: NotificationChannel;
-}): Promise<void> {
+}): Promise<{ usedChannel: NotificationChannel }> {
   const requested: NotificationChannel = params.channel ?? "email";
 
   const rows = await db
@@ -156,7 +157,7 @@ export async function sendParticipantInvite(params: {
         url,
       }),
     });
-    return;
+    return { usedChannel: "sms" };
   }
 
   await sendParticipantMagicLink({
@@ -169,6 +170,7 @@ export async function sendParticipantInvite(params: {
     sessionDate: "laufender Kurs",
     url,
   });
+  return { usedChannel: "email" };
 }
 
 /**
@@ -225,13 +227,13 @@ export async function sendParticipantPreviewInvite(params: {
   const { url } = await createParticipantMagicLink(params);
 
   if (channel === "sms") {
-    // Preview-spezifische SMS-Variante: anderer Wortlaut als Magic-Link
-    // (TN soll wissen, dass es um Freigabe statt um Session-Sign geht).
-    const firstName = row.participantName.split(" ")[0] ?? "";
-    const greeting = firstName ? `Hallo ${firstName}, ` : "";
     await sendSms({
       to: row.participantPhone!,
-      body: `${greeting}dein Stundennachweis für „${row.courseTitle}" ist fertig — bitte ansehen und freigeben: ${url} (24h gültig).`,
+      body: composePreviewSms({
+        participantName: row.participantName,
+        courseTitle: row.courseTitle,
+        url,
+      }),
     });
     return;
   }
@@ -334,6 +336,9 @@ export async function resolveParticipantToken(
 
   if (!cp) return null; // Teilnehmer ist gar nicht im Kurs
 
+  // Nur Sessions, in denen dieser TN explizit enrolled ist (session_participants).
+  // Coach kann TN pro Session abwählen — abgewählte Sessions tauchen für
+  // diesen TN gar nicht auf, sodass er sie auch nicht versehentlich signiert.
   const rawSessions = await db
     .select({
       id: schema.sessions.id,
@@ -344,10 +349,15 @@ export async function resolveParticipantToken(
       isErstgespraech: schema.sessions.isErstgespraech,
     })
     .from(schema.sessions)
+    .innerJoin(
+      schema.sessionParticipants,
+      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
+    )
     .where(
       and(
         eq(schema.sessions.courseId, head.courseId),
         isNull(schema.sessions.deletedAt),
+        eq(schema.sessionParticipants.courseParticipantId, cp.id),
       ),
     )
     .orderBy(asc(schema.sessions.sessionDate));

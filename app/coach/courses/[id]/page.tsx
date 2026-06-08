@@ -8,11 +8,15 @@ import { isSmsEnabled } from "@/lib/sms";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 
+import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
+import { MarkAbgeschlossenButton } from "./mark-abgeschlossen-button";
 import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
 import { QrHandoverButton } from "./qr-handover-button";
+import { ReopenSessionButton } from "./reopen-session-button";
 import { SealCourseButton } from "./seal-button";
+import { SmsResendButton } from "./sms-resend-button";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +52,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
+      flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      begruendungText: schema.courses.begruendungText,
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      abgeschlossenAt: schema.courses.abgeschlossenAt,
       bedarfstraegerName: schema.bedarfstraeger.name,
       bedarfstraegerType: schema.bedarfstraeger.type,
     })
@@ -90,14 +98,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .where(eq(schema.courseParticipants.courseId, id))
     .orderBy(asc(schema.participants.name));
 
+  // SMS ist Coach-getriggert per-TN (siehe SmsResendButton), nicht Bulk.
+  // Feature-Gate steuert nur, ob der Per-TN-Button überhaupt erscheint.
   const smsEnabled = isSmsEnabled();
-  const participantsWithPhone = smsEnabled
-    ? participants.filter((p) => !!p.phone).length
-    : 0;
 
-  // Sessions + aggregierte Signatur-Counts pro Session in einer Query.
-  // Spart N+1 und zeigt direkt "Coach ✓ · 2/3 TN", Status-Badge und ob
-  // der Coach-Sign-Button angezeigt werden muss.
+  // Sessions + aggregierte Counts pro Session. signatures + session_participants
+  // beide via leftJoin → multipliziert Rows aus, deshalb DISTINCT-Counts.
+  // Zeigt "Coach ✓ · 2/3 TN" mit enrolled = explizit für die Session
+  // ausgewählte TN (nicht alle Kurs-TN).
   const sessions = await db
     .select({
       id: schema.sessions.id,
@@ -107,13 +115,18 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       isErstgespraech: schema.sessions.isErstgespraech,
       topic: schema.sessions.topic,
       status: schema.sessions.status,
-      coachSigned: sql<number>`count(*) filter (where ${schema.signatures.signerType} = 'coach')::int`,
-      participantsSigned: sql<number>`count(*) filter (where ${schema.signatures.signerType} = 'participant')::int`,
+      coachSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'coach')::int`,
+      participantsSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'participant')::int`,
+      enrolledTns: sql<number>`count(distinct ${schema.sessionParticipants.id})::int`,
     })
     .from(schema.sessions)
     .leftJoin(
       schema.signatures,
       eq(schema.signatures.sessionId, schema.sessions.id),
+    )
+    .leftJoin(
+      schema.sessionParticipants,
+      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
     )
     .where(
       and(
@@ -263,7 +276,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           <ul className="divide-y divide-zinc-200 text-sm">
             {sessions.map((s) => {
               const coachSigned = s.coachSigned > 0;
-              const tnTotal = participants.length;
+              // tnTotal = explizit für diese Session ausgewählte TN (nicht
+              // alle Kurs-TN). Fallback auf participants.length nur falls
+              // (sehr unwahrscheinlich) keine SP-Einträge existieren.
+              const tnTotal = s.enrolledTns > 0 ? s.enrolledTns : participants.length;
               const tnSigned = s.participantsSigned;
               return (
                 <li key={s.id} className="px-6 py-4 space-y-2">
@@ -286,6 +302,22 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         <span>
                           TN {tnSigned}/{tnTotal}
                         </span>
+                        {!impersonating &&
+                          !coachSigned &&
+                          tnSigned === 0 && (
+                            <Link
+                              href={`/coach/courses/${course.id}/sessions/${s.id}/edit`}
+                              className="text-zinc-700 underline-offset-2 hover:underline"
+                            >
+                              Bearbeiten
+                            </Link>
+                          )}
+                        {!impersonating && (coachSigned || tnSigned > 0) && (
+                          <ReopenSessionButton
+                            courseId={course.id}
+                            sessionId={s.id}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -315,12 +347,33 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="border-b border-zinc-300 px-6 py-4">
-          <h2 className="text-lg font-semibold">Abschluss</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            Wenn alle Sessions signiert sind, sende den Teilnehmern die
-            Vorschau. Nach deren Freigabe kannst du das Dokument mit FES
-            versiegeln — die Übermittlung an die AfA übernimmt deine Firma.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Abschluss</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Wenn alle Sessions signiert sind, sende den Teilnehmern die
+                Vorschau. Nach deren Freigabe versiegelst du das Dokument mit
+                FES und übergibst es an deinen Bildungsträger zur Übermittlung
+                an die Agentur für Arbeit.
+              </p>
+            </div>
+            {participants.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {participants.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/coach/courses/${course.id}/print/${p.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 transition hover:bg-zinc-50"
+                    title={`PDF-Vorschau für ${p.name}`}
+                  >
+                    <span aria-hidden="true">📄</span> PDF: {p.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="divide-y divide-zinc-200">
           <Step
@@ -335,12 +388,50 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           />
           <Step
             index={2}
+            title="ANW-Compliance-Check"
+            done={!!course.anwCheckPassedAt}
+            subtitle={
+              course.anwCheckPassedAt
+                ? `Freigegeben am ${new Date(course.anwCheckPassedAt).toLocaleString("de-DE")}.`
+                : "KI-Prüfung der Stichwort-Einträge gegen AZAV-Vorgaben."
+            }
+          >
+            {!impersonating && (
+              <AnwCheckButton
+                courseId={course.id}
+                disabled={sessions.length === 0}
+                disabledReason={
+                  sessions.length === 0
+                    ? "Erst Sessions anlegen, dann prüfen"
+                    : undefined
+                }
+              />
+            )}
+          </Step>
+          <Step
+            index={3}
+            title="Maßnahme als abgeschlossen markieren"
+            done={!!course.abgeschlossenAt}
+            subtitle={
+              course.abgeschlossenAt
+                ? `Abgeschlossen am ${new Date(course.abgeschlossenAt).toLocaleString("de-DE")}.`
+                : `${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Coach-Bestätigung nötig: keine weiteren Sessions kommen mehr.`
+            }
+          >
+            {!impersonating && !course.abgeschlossenAt && (
+              <MarkAbgeschlossenButton courseId={course.id} />
+            )}
+          </Step>
+          <Step
+            index={4}
             title="Freigabe der Teilnehmer einholen"
             done={allApproved}
             subtitle={
               participants.length === 0
                 ? "Noch keine Teilnehmer im Kurs."
-                : `${approvalByParticipant.size} von ${participants.length} Teilnehmern haben freigegeben.`
+                : !course.abgeschlossenAt
+                  ? "Erst nach Markierung als abgeschlossen möglich."
+                  : `${approvalByParticipant.size} von ${participants.length} Teilnehmern haben freigegeben.`
             }
           >
             {!impersonating && (
@@ -349,6 +440,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 disabled={
                   participants.length === 0 ||
                   !allSessionsCompleted ||
+                  !course.anwCheckPassedAt ||
+                  !course.abgeschlossenAt ||
                   allApproved
                 }
                 disabledReason={
@@ -356,30 +449,45 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                     ? "Keine Teilnehmer im Kurs"
                     : !allSessionsCompleted
                       ? "Erst wenn alle Sessions signiert sind"
-                      : "Alle Teilnehmer haben bereits freigegeben"
+                      : !course.anwCheckPassedAt
+                        ? "ANW-Compliance-Check muss durchlaufen sein"
+                        : !course.abgeschlossenAt
+                          ? "Maßnahme muss als abgeschlossen markiert sein"
+                          : "Alle Teilnehmer haben bereits freigegeben"
                 }
                 alreadySent={previewSent}
               />
             )}
           </Step>
           <Step
-            index={3}
+            index={5}
             title="Mit FES versiegeln"
             done={isSealed}
             subtitle={
               isSealed
                 ? `Gesiegelt am ${finalDoc?.completedAt ? new Date(finalDoc.completedAt).toLocaleString("de-DE") : "—"}.`
-                : "Nach der Freigabe aller Teilnehmer."
+                : "Letzter Schritt vor der Übergabe an den Bildungsträger."
             }
           >
             {!impersonating && !isSealed && (
               <SealCourseButton
                 courseId={course.id}
-                disabled={!allApproved}
+                disabled={
+                  !allSessionsCompleted ||
+                  !allApproved ||
+                  !course.anwCheckPassedAt ||
+                  !course.abgeschlossenAt
+                }
                 disabledReason={
                   !allSessionsCompleted
                     ? "Erst wenn alle Sessions signiert sind"
-                    : "Mindestens ein Teilnehmer hat noch nicht freigegeben"
+                    : !allApproved
+                      ? "Mindestens ein Teilnehmer hat noch nicht freigegeben"
+                      : !course.anwCheckPassedAt
+                        ? "ANW-Compliance-Check muss durchlaufen sein"
+                        : !course.abgeschlossenAt
+                          ? "Maßnahme muss als abgeschlossen markiert sein"
+                          : undefined
                 }
               />
             )}
@@ -413,8 +521,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               <NotifyParticipantsButton
                 courseId={course.id}
                 participantCount={participants.length}
-                participantsWithPhone={participantsWithPhone}
-                smsEnabled={smsEnabled}
               />
             </div>
           )}
@@ -502,6 +608,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   </Link>
                   {!impersonating && (
                     <>
+                      {smsEnabled && p.phone && (
+                        <SmsResendButton
+                          courseId={course.id}
+                          participantId={p.id}
+                          phone={p.phone}
+                        />
+                      )}
                       <QrHandoverButton
                         courseId={course.id}
                         participantId={p.id}

@@ -3,31 +3,46 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
-import { createSession, type SessionFormState } from "../../actions";
+import { updateSession, type SessionFormState } from "../../../actions";
 
-export function SessionForm({
+type SessionInitial = {
+  id: string;
+  sessionDate: string;
+  topic: string;
+  anzahlUe: string;
+  modus: "praesenz" | "online";
+  isErstgespraech: boolean;
+  geeignet: boolean | null;
+};
+
+export function SessionEditForm({
   courseId,
   courseTitle,
+  session,
   courseTns,
+  enrolledIds,
 }: {
   courseId: string;
   courseTitle: string;
-  /** Alle eingeschriebenen TN des Kurses (id = course_participant_id). */
+  session: SessionInitial;
   courseTns: Array<{ id: string; name: string }>;
+  enrolledIds: string[];
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
-    createSession,
+    updateSession,
     undefined,
   );
-  const [isErstgespraech, setIsErstgespraech] = useState(false);
+  const [isErstgespraech, setIsErstgespraech] = useState(session.isErstgespraech);
+  const enrolledSet = new Set(enrolledIds);
 
   return (
     <form action={action} className="space-y-8">
       <input type="hidden" name="courseId" value={courseId} />
+      <input type="hidden" name="sessionId" value={session.id} />
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6 space-y-4">
         <header className="space-y-1">
-          <h2 className="text-lg font-semibold">Neue Session</h2>
+          <h2 className="text-lg font-semibold">Session bearbeiten</h2>
           <p className="text-sm text-zinc-500">
             Für Kurs: <span className="font-medium">{courseTitle}</span>
           </p>
@@ -42,6 +57,7 @@ export function SessionForm({
               type="date"
               name="sessionDate"
               required
+              defaultValue={session.sessionDate}
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
             <span className="text-xs text-zinc-500">
@@ -55,7 +71,7 @@ export function SessionForm({
             </span>
             <select
               name="modus"
-              defaultValue="praesenz"
+              defaultValue={session.modus}
               required
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             >
@@ -76,6 +92,7 @@ export function SessionForm({
                 min="0.5"
                 max="24"
                 required
+                defaultValue={session.anzahlUe}
                 placeholder="z.B. 2"
                 className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
               />
@@ -94,7 +111,7 @@ export function SessionForm({
           <span>
             <span className="font-medium">Erstgespräch</span>
             <span className="block text-xs text-zinc-500">
-              Zählt keine UE, braucht aber Entscheidung „geeignet JA/NEIN”.
+              Zählt keine UE, braucht aber Entscheidung &bdquo;geeignet JA/NEIN&ldquo;.
             </span>
           </span>
         </label>
@@ -107,11 +124,23 @@ export function SessionForm({
             </legend>
             <div className="flex gap-6 text-sm">
               <label className="flex items-center gap-2">
-                <input type="radio" name="geeignet" value="ja" required />
+                <input
+                  type="radio"
+                  name="geeignet"
+                  value="ja"
+                  defaultChecked={session.geeignet === true}
+                  required
+                />
                 Ja
               </label>
               <label className="flex items-center gap-2">
-                <input type="radio" name="geeignet" value="nein" required />
+                <input
+                  type="radio"
+                  name="geeignet"
+                  value="nein"
+                  defaultChecked={session.geeignet === false}
+                  required
+                />
                 Nein
               </label>
             </div>
@@ -126,6 +155,7 @@ export function SessionForm({
             name="topic"
             required
             rows={4}
+            defaultValue={session.topic}
             placeholder="z.B. Lebenslauf-Feedback, Bewerbungstraining, Zielklärung"
             className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
           />
@@ -138,7 +168,7 @@ export function SessionForm({
           </legend>
           {courseTns.length === 0 ? (
             <p className="text-xs text-zinc-600">
-              Noch kein Teilnehmer im Kurs — bitte erst Teilnehmer hinzufügen.
+              Noch kein Teilnehmer im Kurs.
             </p>
           ) : (
             <div className="space-y-1.5">
@@ -151,14 +181,11 @@ export function SessionForm({
                     type="checkbox"
                     name="courseParticipantIds"
                     value={tn.id}
-                    defaultChecked
+                    defaultChecked={enrolledSet.has(tn.id)}
                   />
                   <span>{tn.name}</span>
                 </label>
               ))}
-              <p className="pt-1 text-xs text-zinc-500">
-                Standard ist alle dabei. Hake ab, wer gefehlt hat.
-              </p>
             </div>
           )}
         </fieldset>
@@ -176,7 +203,7 @@ export function SessionForm({
           disabled={pending}
           className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
         >
-          {pending ? "Wird angelegt…" : "Session anlegen"}
+          {pending ? "Wird gespeichert…" : "Änderungen speichern"}
         </button>
         <Link
           href={`/coach/courses/${courseId}`}

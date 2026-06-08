@@ -113,6 +113,7 @@ export default async function ParticipantSignPage({ params }: Props) {
             coach={sheet.coach}
             participant={sheet.participant}
             sessions={sheet.sessions}
+            audit={sheet.audit}
           />
         </div>
         <div className="preview-cta">
@@ -136,8 +137,9 @@ export default async function ParticipantSignPage({ params }: Props) {
         </header>
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
           Danke, {resolved.participantName}! Du hast den Nachweis freigegeben.
-          Dein Coach setzt im nächsten Schritt das digitale Siegel und leitet
-          das Dokument an die Agentur für Arbeit weiter.
+          Dein Coach setzt im nächsten Schritt das digitale Siegel und übergibt
+          das Dokument an den Bildungsträger, der die Übermittlung an die
+          Agentur für Arbeit übernimmt.
         </div>
         <DataProtectionNotice />
       </div>

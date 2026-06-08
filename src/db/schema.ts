@@ -56,6 +56,17 @@ export const bedarfstraegerType = pgEnum("bedarfstraeger_type", ["JC", "AA"]);
 /** Durchführungsmodus einer Kurseinheit. */
 export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
 /**
+ * AVGS-Maßnahmentyp gemäß § 45 SGB III. Werte-Set parallel zu
+ * `MassnahmeTyp` in `src/lib/checker/types.ts`:
+ *   - EKC = Erango Karriere-Coaching
+ *   - ESC = Erango Standort-Coaching (gleiches Baustein-Set wie EKC)
+ *   - EGC = Erango Gründungs-Coaching
+ *   - ESCA = Erango Ausbildungs-Coaching / Probezeitbegleitung
+ * Wird vom ANW-Compliance-Check gelesen, um den „roten Faden" der
+ * Sessions gegen die Phasen der gebuchten Maßnahme abzugleichen.
+ */
+export const massnahmeTyp = pgEnum("massnahme_typ", ["EKC", "ESC", "EGC", "ESCA"]);
+/**
  * Lebenszyklus eines Abschlussberichts.
  * `draft` = Coach arbeitet noch dran (Autosave); `submitted` = Coach hat an die Bildungsträgerin
  * abgegeben. Edit nach Submit bleibt erlaubt (Korrekturen); Status ändert sich dadurch nicht,
@@ -269,6 +280,15 @@ export const courses = pgTable("courses", {
   bedarfstraegerId: uuid("bedarfstraeger_id")
     .notNull()
     .references(() => bedarfstraeger.id, { onDelete: "restrict" }),
+  /**
+   * AVGS-Maßnahmentyp gemäß § 45 SGB III. Wird vom ANW-Compliance-Check
+   * gebraucht, um den „roten Faden" der Session-Themen gegen die
+   * Phasenbausteine der gebuchten Maßnahme abzugleichen (EKC-Startphase
+   * vs. EGC-Konzeptarbeit etc.). Default `EKC` weil das die historisch
+   * häufigste Maßnahme ist und beim Backfill der Bestandskurse die
+   * unschädlichste Annahme ist (Bausteine sehr ähnlich zu ESC).
+   */
+  massnahmeTyp: massnahmeTyp("massnahme_typ").notNull().default("EKC"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   status: courseStatus("status").notNull().default("active"),
@@ -281,6 +301,20 @@ export const courses = pgTable("courses", {
     .notNull()
     .default(false),
   begruendungText: text("begruendung_text"),
+  /**
+   * FES-Gate (1/2): Coach-Klick „Maßnahme als abgeschlossen markieren".
+   * Der Coach bestätigt damit aktiv, dass keine weiteren Sessions mehr
+   * kommen. Bei jeder Session-Änderung (create/update/reopen) wird das
+   * Feld zurückgesetzt → der Coach muss neu bestätigen.
+   */
+  abgeschlossenAt: timestamp("abgeschlossen_at", { withTimezone: true }),
+  /**
+   * FES-Gate (2/2): Zeitpunkt, an dem der ANW-Compliance-Check zuletzt
+   * mit Status „freigabe" lief. Bei jeder Session-Änderung zurückgesetzt
+   * — das Dokument hat sich geändert, alter Check-Status nicht mehr
+   * aussagekräftig.
+   */
+  anwCheckPassedAt: timestamp("anw_check_passed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -430,6 +464,48 @@ export const participantAccessTokens = pgTable(
       t.courseId,
       t.participantId,
     ),
+  ],
+);
+
+/**
+ * Welcher Teilnehmer war für eine konkrete Session enrolled / anwesend?
+ * Default-Verhalten in der UI: bei Session-Anlage sind ALLE Kurs-TN
+ * vorausgewählt (Standard-AVGS-Annahme „alle dabei"); der Coach kann
+ * einzelne abwählen, wenn jemand gefehlt hat oder es ein 1:1-Termin
+ * innerhalb eines Gruppenkurses war.
+ *
+ * Beim Bestand werden alle existierenden Sessions via Migrations-
+ * Backfill mit allen aktuell enrollten TN verknüpft, sodass das alte
+ * implizite Verhalten weiterläuft.
+ *
+ * TODO (Code-Rabbit Finding PR #64): DB-Constraint fehlt der Check,
+ * dass `session_id` und `course_participant_id` zum selben Kurs gehören
+ * — wäre über materialisierten `course_id` + Composite-FK lösbar.
+ * Aktuell durch Application-Layer abgesichert (createSession und
+ * updateSession validieren, dass alle ausgewählten course_participants
+ * zum bearbeiteten Kurs gehören). Migration auf Composite-FK ist
+ * Heavy-Lift und wartet bis zur nächsten Konsolidierung.
+ */
+export const sessionParticipants = pgTable(
+  "session_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    courseParticipantId: uuid("course_participant_id")
+      .notNull()
+      .references(() => courseParticipants.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("session_participants_session_cp_uq").on(
+      t.sessionId,
+      t.courseParticipantId,
+    ),
+    index("session_participants_session_idx").on(t.sessionId),
   ],
 );
 

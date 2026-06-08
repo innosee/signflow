@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
@@ -37,6 +37,21 @@ export default async function NewSessionPage({ params }: Props) {
 
   if (!course) notFound();
 
+  // Alle TN des Kurses für die Anwesenheits-Auswahl. Default: alle
+  // vorausgewählt (Standard-AVGS-Annahme „alle dabei").
+  const courseTns = await db
+    .select({
+      id: schema.courseParticipants.id,
+      name: schema.participants.name,
+    })
+    .from(schema.courseParticipants)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courseParticipants.participantId),
+    )
+    .where(eq(schema.courseParticipants.courseId, course.id))
+    .orderBy(asc(schema.participants.name));
+
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
@@ -47,7 +62,11 @@ export default async function NewSessionPage({ params }: Props) {
         </p>
       </header>
 
-      <SessionForm courseId={course.id} courseTitle={course.title} />
+      <SessionForm
+        courseId={course.id}
+        courseTitle={course.title}
+        courseTns={courseTns}
+      />
     </div>
   );
 }

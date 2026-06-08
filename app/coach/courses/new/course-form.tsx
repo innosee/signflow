@@ -72,26 +72,44 @@ export function CourseForm({
           />
         </div>
 
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-zinc-800">
-            Bedarfsträger <span className="text-red-600">*</span>
-          </span>
-          <select
-            name="bedarfstraegerId"
-            required
-            defaultValue=""
-            className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
-          >
-            <option value="" disabled>
-              Bitte wählen…
-            </option>
-            {bedarfstraeger.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.type})
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-zinc-800">
+              Bedarfsträger <span className="text-red-600">*</span>
+            </span>
+            <select
+              name="bedarfstraegerId"
+              required
+              defaultValue=""
+              className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+            >
+              <option value="" disabled>
+                Bitte wählen…
               </option>
-            ))}
-          </select>
-        </label>
+              {bedarfstraeger.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.type})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-zinc-800">
+              Maßnahmentyp <span className="text-red-600">*</span>
+            </span>
+            <select
+              name="massnahmeTyp"
+              required
+              defaultValue="EKC"
+              className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+            >
+              <option value="EKC">EKC — Karriere-Coaching</option>
+              <option value="ESC">ESC — Standort-Coaching</option>
+              <option value="EGC">EGC — Gründungs-Coaching</option>
+              <option value="ESCA">ESCA — Ausbildungs-Coaching / Probezeit</option>
+            </select>
+          </label>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field name="startDate" label="Startdatum" type="date" required />

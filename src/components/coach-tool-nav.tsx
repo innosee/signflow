@@ -96,7 +96,7 @@ export function CoachToolNav({ signingEnabled }: { signingEnabled: boolean }) {
                   href={t.href}
                   role="tab"
                   aria-selected={isActive}
-                  className={`rounded-md px-3 py-1.5 transition ${
+                  className={`whitespace-nowrap rounded-md px-3 py-1.5 transition ${
                     isActive
                       ? ACCENT[t.key].active
                       : ACCENT[t.key].inactive
@@ -121,7 +121,7 @@ export function CoachToolNav({ signingEnabled }: { signingEnabled: boolean }) {
                 key={l.href}
                 href={l.href}
                 aria-current={isCurrent ? "page" : undefined}
-                className={`text-zinc-700 underline-offset-4 hover:underline ${
+                className={`whitespace-nowrap text-zinc-700 underline-offset-4 hover:underline ${
                   isCurrent ? accent.navActive : accent.navHover
                 }`}
               >
@@ -153,6 +153,12 @@ export function CoachToolSubBrand({
 }) {
   const pathname = usePathname() ?? "/coach";
   const tools: Tool[] = signingEnabled ? [SIGN_TOOL, CHECK_TOOL] : [CHECK_TOOL];
+  // Wenn der Switcher sichtbar ist (>= 2 Tools), zeigt der schon klar
+  // welches Tool aktiv ist — der zusätzliche „· Signatur"-SubBrand wäre
+  // redundant und hat im Test als doppelter Eintrag verwirrt. Nur bei
+  // 1-Tool-Coaches (Checker-only) macht der SubBrand das aktive Tool
+  // sichtbar, weil dort der Switcher fehlt.
+  if (tools.length > 1) return null;
   const active = detectTool(pathname, tools);
   return (
     <span
