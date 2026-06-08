@@ -196,7 +196,7 @@ export function composePreviewSms(params: {
   url: string;
 }): string {
   const greeting = greetingForFirstName(params.participantName);
-  return `${greeting}dein Stundennachweis für „${params.courseTitle}" ist fertig — bitte ansehen und freigeben: ${params.url} (24h gültig).`;
+  return `${greeting}dein Stundennachweis für „${params.courseTitle}“ ist fertig — bitte ansehen und freigeben: ${params.url} (24h gültig).`;
 }
 
 // Vorname only, damit Anrede + Link in 1 Segment passen.

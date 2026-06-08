@@ -66,12 +66,19 @@ export async function createCourse(
     formData.get("bedarfstraegerId") ?? "",
   ).trim();
   const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
-  // Whitelist gegen das DB-Enum — alles andere wäre ein Constraint-Violation.
-  const massnahmeTyp = (
-    ["EKC", "ESC", "EGC", "ESCA"] as const
-  ).includes(massnahmeTypRaw as "EKC" | "ESC" | "EGC" | "ESCA")
-    ? (massnahmeTypRaw as "EKC" | "ESC" | "EGC" | "ESCA")
-    : "EKC";
+  // Hart validieren statt auf EKC fallback — sonst landet bei einem
+  // manipulierten Form-Submit der falsche Kurstyp in der DB und der
+  // ANW-Check würde die Sessions gegen den falschen „roten Faden" prüfen.
+  const allowedMassnahmeTyp = ["EKC", "ESC", "EGC", "ESCA"] as const;
+  if (
+    !allowedMassnahmeTyp.includes(
+      massnahmeTypRaw as (typeof allowedMassnahmeTyp)[number],
+    )
+  ) {
+    return { error: "Ungültiger Maßnahme-Typ. Bitte aus der Liste wählen." };
+  }
+  const massnahmeTyp =
+    massnahmeTypRaw as (typeof allowedMassnahmeTyp)[number];
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
 

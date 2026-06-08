@@ -477,6 +477,14 @@ export const participantAccessTokens = pgTable(
  * Beim Bestand werden alle existierenden Sessions via Migrations-
  * Backfill mit allen aktuell enrollten TN verknüpft, sodass das alte
  * implizite Verhalten weiterläuft.
+ *
+ * TODO (Code-Rabbit Finding PR #64): DB-Constraint fehlt der Check,
+ * dass `session_id` und `course_participant_id` zum selben Kurs gehören
+ * — wäre über materialisierten `course_id` + Composite-FK lösbar.
+ * Aktuell durch Application-Layer abgesichert (createSession und
+ * updateSession validieren, dass alle ausgewählten course_participants
+ * zum bearbeiteten Kurs gehören). Migration auf Composite-FK ist
+ * Heavy-Lift und wartet bis zur nächsten Konsolidierung.
  */
 export const sessionParticipants = pgTable(
   "session_participants",

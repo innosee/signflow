@@ -409,6 +409,20 @@ export async function reopenSession(
     .limit(1);
   if (!sess) return { error: "Session nicht gefunden." };
 
+  // Guard: keine Signatur → Edit reicht, nicht Reopen. Sonst würden wir
+  // unnötig die Kurs-TN-Approvals löschen, obwohl noch nichts signiert
+  // war. Schickt den Coach direkt aufs Edit-Form.
+  const [existingSig] = await db
+    .select({ id: schema.signatures.id })
+    .from(schema.signatures)
+    .where(eq(schema.signatures.sessionId, sessionId))
+    .limit(1);
+  if (!existingSig) {
+    redirect(
+      `/coach/courses/${ownedCourseId}/sessions/${sessionId}/edit?reopened=1`,
+    );
+  }
+
   try {
     await db.transaction(async (tx) => {
       // 1. Alle Signaturen dieser Session weg
