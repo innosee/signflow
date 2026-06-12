@@ -7,6 +7,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { isFutureSessionDate } from "@/lib/dates";
 import {
   assertNotImpersonating,
   getTenantId,
@@ -1309,9 +1310,12 @@ export async function signSessionAsCoach(
 
   try {
     await db.transaction(async (tx) => {
-      // Session muss zum Kurs gehören + noch nicht gelöscht sein.
+      // Termin muss zum Kurs gehören + noch nicht gelöscht sein.
       const [sess] = await tx
-        .select({ id: schema.sessions.id })
+        .select({
+          id: schema.sessions.id,
+          sessionDate: schema.sessions.sessionDate,
+        })
         .from(schema.sessions)
         .where(
           and(
@@ -1322,6 +1326,11 @@ export async function signSessionAsCoach(
         )
         .limit(1);
       if (!sess) throw new Error("SESSION_NOT_FOUND");
+      // Zukunfts-Termine sind nicht signierbar — Anwesenheit für etwas, das
+      // noch nicht stattgefunden hat, wäre fachlich + rechtlich unsinnig.
+      if (isFutureSessionDate(sess.sessionDate)) {
+        throw new Error("FUTURE_SESSION");
+      }
 
       // Doppel-Signatur verhindern. Der Check-Constraint
       // `signatures_signer_type_cp_consistency` stellt sicher, dass
@@ -1351,10 +1360,16 @@ export async function signSessionAsCoach(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === "SESSION_NOT_FOUND") {
-      return { error: "Session nicht gefunden." };
+      return { error: "Termin nicht gefunden." };
+    }
+    if (message === "FUTURE_SESSION") {
+      return {
+        error:
+          "Dieser Termin liegt in der Zukunft und kann erst ab dem Termindatum signiert werden.",
+      };
     }
     if (message === "ALREADY_SIGNED") {
-      return { error: "Diese Session hast du bereits bestätigt." };
+      return { error: "Diesen Termin hast du bereits bestätigt." };
     }
     return { error: `Signatur fehlgeschlagen (${message}).` };
   }

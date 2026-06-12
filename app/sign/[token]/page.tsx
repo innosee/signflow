@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Stundennachweis } from "@/components/stundennachweis";
+import { isFutureSessionDate } from "@/lib/dates";
 import { loadStundennachweisSheet } from "@/lib/sheet-data";
 import { resolveParticipantToken } from "@/lib/participant-tokens";
 
@@ -236,10 +237,15 @@ function SessionRow({
         </div>
       </div>
       <p className="text-sm leading-relaxed text-zinc-700">{session.topic}</p>
-      {open ? (
-        <SignForm token={token} sessionId={session.id} />
-      ) : (
+      {!open ? (
         <p className="text-xs text-green-700">✓ bestätigt</p>
+      ) : isFutureSessionDate(session.sessionDate) ? (
+        <p className="text-xs text-zinc-500">
+          Dieser Termin liegt in der Zukunft — du kannst ihn ab dem
+          Termindatum bestätigen.
+        </p>
+      ) : (
+        <SignForm token={token} sessionId={session.id} />
       )}
     </div>
   );

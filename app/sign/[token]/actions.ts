@@ -7,6 +7,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { isFutureSessionDate } from "@/lib/dates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 
 export type SignState = { error?: string } | undefined;
@@ -57,9 +58,12 @@ export async function submitParticipantSignature(
         .limit(1);
       if (!tok) throw new Error("TOKEN_INVALID");
 
-      // Session muss zum Kurs des Tokens gehören
+      // Termin muss zum Kurs des Tokens gehören
       const [sess] = await tx
-        .select({ id: schema.sessions.id })
+        .select({
+          id: schema.sessions.id,
+          sessionDate: schema.sessions.sessionDate,
+        })
         .from(schema.sessions)
         .where(
           and(
@@ -70,6 +74,10 @@ export async function submitParticipantSignature(
         )
         .limit(1);
       if (!sess) throw new Error("SESSION_INVALID");
+      // Zukunfts-Termine sind nicht signierbar (Termin noch nicht stattgefunden).
+      if (isFutureSessionDate(sess.sessionDate)) {
+        throw new Error("FUTURE_SESSION");
+      }
 
       // 1:1: Der Token-Teilnehmer muss der Kunde genau dieses Kurses sein.
       // Eine Session-Anwesenheits-Auswahl gibt es nicht mehr — jeder Termin
@@ -133,6 +141,12 @@ export async function submitParticipantSignature(
     }
     if (message === "SESSION_INVALID") {
       return { error: "Dieser Termin gehört nicht zu deinem Kurs." };
+    }
+    if (message === "FUTURE_SESSION") {
+      return {
+        error:
+          "Dieser Termin liegt in der Zukunft und kann erst ab dem Termindatum bestätigt werden.",
+      };
     }
     if (message === "NOT_ENROLLED") {
       return { error: "Du bist in diesem Kurs nicht eingeschrieben." };

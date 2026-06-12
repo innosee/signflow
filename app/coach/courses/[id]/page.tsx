@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
+import { isFutureSessionDate } from "@/lib/dates";
 import { isSmsEnabled } from "@/lib/sms";
 
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -273,6 +274,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               // 1:1: Jeder Termin gehört genau dem einen Kunden des Kurses.
               const tnTotal = 1;
               const tnSigned = s.participantsSigned;
+              // Zukunfts-Termine sind noch nicht signierbar.
+              const isFuture = isFutureSessionDate(s.sessionDate);
               return (
                 <li key={s.id} className="px-6 py-4 space-y-2">
                   <div className="flex items-start gap-4">
@@ -315,7 +318,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   </div>
                   {!coachSigned && !impersonating && coachHasSignature && (
                     <div className="pl-28">
-                      <CoachSignForm courseId={course.id} sessionId={s.id} />
+                      {isFuture ? (
+                        <p className="text-xs text-zinc-500">
+                          Termin liegt in der Zukunft — signierbar ab dem
+                          Termindatum.
+                        </p>
+                      ) : (
+                        <CoachSignForm courseId={course.id} sessionId={s.id} />
+                      )}
                     </div>
                   )}
                   {!coachSigned && !impersonating && !coachHasSignature && (
