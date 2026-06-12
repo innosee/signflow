@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
+import { type Bundesland, getFeiertag } from "@/lib/feiertage";
+
 import { updateSession, type SessionFormState } from "../../../actions";
 
 type SessionInitial = {
@@ -18,10 +20,12 @@ type SessionInitial = {
 export function SessionEditForm({
   courseId,
   courseTitle,
+  bundesland,
   session,
 }: {
   courseId: string;
   courseTitle: string;
+  bundesland: Bundesland | null;
   session: SessionInitial;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
@@ -29,6 +33,10 @@ export function SessionEditForm({
     undefined,
   );
   const [isErstgespraech, setIsErstgespraech] = useState(session.isErstgespraech);
+  const [sessionDate, setSessionDate] = useState(session.sessionDate);
+
+  // Weiche Feiertags-Warnung, identisch zur Neu-Anlage (nur Hinweis, kein Block).
+  const feiertag = getFeiertag(sessionDate, bundesland);
 
   return (
     <form action={action} className="space-y-8">
@@ -52,7 +60,8 @@ export function SessionEditForm({
               type="date"
               name="sessionDate"
               required
-              defaultValue={session.sessionDate}
+              value={sessionDate}
+              onChange={(e) => setSessionDate(e.target.value)}
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
             <span className="text-xs text-zinc-500">
@@ -94,6 +103,17 @@ export function SessionEditForm({
             </label>
           )}
         </div>
+
+        {feiertag && (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            ⚠️ Der {formatGermanDate(sessionDate)} ist ein Feiertag
+            <span className="font-medium"> ({feiertag})</span> — findet hier
+            wirklich ein Coaching statt? Speichern bleibt möglich.
+          </p>
+        )}
 
         <label className="flex items-start gap-2 text-sm">
           <input
@@ -181,4 +201,10 @@ export function SessionEditForm({
       </div>
     </form>
   );
+}
+
+// `YYYY-MM-DD` → `DD.MM.YYYY`, reines String-Splitting (keine Zeitzonen-Falle).
+function formatGermanDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}.${m}.${y}` : iso;
 }

@@ -3,20 +3,31 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
+import { type Bundesland, getFeiertag } from "@/lib/feiertage";
+
 import { createSession, type SessionFormState } from "../../actions";
 
 export function SessionForm({
   courseId,
   courseTitle,
+  bundesland,
 }: {
   courseId: string;
   courseTitle: string;
+  bundesland: Bundesland | null;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
     undefined,
   );
   const [isErstgespraech, setIsErstgespraech] = useState(false);
+  const [sessionDate, setSessionDate] = useState("");
+
+  // Weiche Warnung: Coaching findet an Feiertagen i.d.R. nicht statt. Nur ein
+  // Hinweis, kein Block — Ausnahmen kommen vor (anders als das harte Wochenend-
+  // Gate in der Server-Action). `null`-Bundesland (Bestandskunde) → keine
+  // Warnung.
+  const feiertag = getFeiertag(sessionDate, bundesland);
 
   return (
     <form action={action} className="space-y-8">
@@ -39,6 +50,8 @@ export function SessionForm({
               type="date"
               name="sessionDate"
               required
+              value={sessionDate}
+              onChange={(e) => setSessionDate(e.target.value)}
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
             <span className="text-xs text-zinc-500">
@@ -79,6 +92,17 @@ export function SessionForm({
             </label>
           )}
         </div>
+
+        {feiertag && (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            ⚠️ Der {formatGermanDate(sessionDate)} ist ein Feiertag
+            <span className="font-medium"> ({feiertag})</span> — findet hier
+            wirklich ein Coaching statt? Anlegen bleibt möglich.
+          </p>
+        )}
 
         <label className="flex items-start gap-2 text-sm">
           <input
@@ -153,4 +177,11 @@ export function SessionForm({
       </div>
     </form>
   );
+}
+
+// `YYYY-MM-DD` → `DD.MM.YYYY`. Keine Date-Parsing-Konvertierung (Zeitzonen-
+// Falle), reines String-Splitting — `sessionDate` ist ein Kalendertag.
+function formatGermanDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}.${m}.${y}` : iso;
 }

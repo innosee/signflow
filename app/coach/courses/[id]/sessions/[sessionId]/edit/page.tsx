@@ -23,7 +23,11 @@ export default async function EditSessionPage({ params }: Props) {
   // dort die spätere „Session wieder öffnen"-Action triggern kann (noch
   // nicht implementiert, daher bewusst defensive Tür).
   const [course] = await db
-    .select({ id: schema.courses.id, title: schema.courses.title })
+    .select({
+      id: schema.courses.id,
+      title: schema.courses.title,
+      bundesland: schema.courses.bundesland,
+    })
     .from(schema.courses)
     .where(
       and(
@@ -80,6 +84,7 @@ export default async function EditSessionPage({ params }: Props) {
       <SessionEditForm
         courseId={course.id}
         courseTitle={course.title}
+        bundesland={course.bundesland}
         session={{
           id: sess.id,
           sessionDate: sess.sessionDate,

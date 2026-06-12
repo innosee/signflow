@@ -9,6 +9,7 @@ import {
   getTenantId,
   requireBildungstraeger,
 } from "@/lib/dal";
+import { isBundesland } from "@/lib/feiertage";
 
 export type CourseFormState = { error?: string } | undefined;
 
@@ -43,6 +44,7 @@ export async function createCourse(
   const bedarfstraegerId = String(formData.get("bedarfstraegerId") ?? "").trim();
   const coachId = String(formData.get("coachId") ?? "").trim();
   const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
+  const bundeslandRaw = String(formData.get("bundesland") ?? "").trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
 
@@ -62,6 +64,12 @@ export async function createCourse(
     return { error: "Ungültiger Maßnahme-Typ. Bitte aus der Liste wählen." };
   }
   const massnahmeTyp = massnahmeTypRaw as (typeof allowedMassnahmeTyp)[number];
+
+  // Bundesland ist Pflicht für neue Kunden — Grundlage der Feiertags-Warnung.
+  if (!isBundesland(bundeslandRaw)) {
+    return { error: "Bitte ein Bundesland aus der Liste wählen." };
+  }
+  const bundesland = bundeslandRaw;
 
   if (
     !title ||
@@ -168,6 +176,7 @@ export async function createCourse(
           anzahlBewilligteUe,
           bedarfstraegerId,
           massnahmeTyp,
+          bundesland,
           startDate,
           endDate,
         })

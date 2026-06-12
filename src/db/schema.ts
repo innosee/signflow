@@ -68,6 +68,18 @@ export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
  */
 export const massnahmeTyp = pgEnum("massnahme_typ", ["EKC", "ESC", "EGC", "ESCA"]);
 /**
+ * Deutsches Bundesland des Kunden — alleinige Grundlage für die Feiertags-
+ * Berechnung (`src/lib/feiertage.ts`). Coachings finden an Feiertagen nicht
+ * statt; die Termin-Anlage warnt anhand dieses Felds. Bewusst NUR das Bundesland
+ * (kein Ort/PLZ/Geolocation): deutsche Feiertage hängen ausschließlich am
+ * Bundesland, der Rest ist berechenbar. ISO-3166-2:DE-Codes. Werte-Set parallel
+ * zu `Bundesland` in `src/lib/feiertage.ts`.
+ */
+export const bundesland = pgEnum("bundesland", [
+  "BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV",
+  "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH",
+]);
+/**
  * Lebenszyklus eines Abschlussberichts.
  * `draft` = Coach arbeitet noch dran (Autosave); `submitted` = Coach hat an die Bildungsträgerin
  * abgegeben. Edit nach Submit bleibt erlaubt (Korrekturen); Status ändert sich dadurch nicht,
@@ -286,6 +298,15 @@ export const courses = pgTable("courses", {
   avgsNummer: text("avgs_nummer").notNull(),
   /** Durchführungs-Ort (z.B. "Online" oder "Singen, Erzbergerstr. 10"). */
   durchfuehrungsort: text("durchfuehrungsort").notNull(),
+  /**
+   * Bundesland des Kunden — Grundlage für die Feiertags-Warnung bei der
+   * Termin-Anlage (`src/lib/feiertage.ts`). Nullable, weil Bestandskurse
+   * (vor Einführung) kein Bundesland haben; für die sind Feiertags-Hinweise
+   * dann schlicht aus (kein falscher Default — ein geratenes Bundesland würde
+   * sonst flächendeckend falsche Warnungen erzeugen). Neue Kunden setzen es
+   * im BT-Anlageformular als Pflichtfeld.
+   */
+  bundesland: bundesland("bundesland"),
   /** Bewilligte Unterrichtseinheiten gesamt (ganzzahlig, z.B. 80). */
   anzahlBewilligteUe: integer("anzahl_bewilligte_ue").notNull(),
   bedarfstraegerId: uuid("bedarfstraeger_id")

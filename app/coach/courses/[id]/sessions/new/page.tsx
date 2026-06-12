@@ -24,6 +24,7 @@ export default async function NewSessionPage({ params }: Props) {
     .select({
       id: schema.courses.id,
       title: schema.courses.title,
+      bundesland: schema.courses.bundesland,
     })
     .from(schema.courses)
     .where(
@@ -47,7 +48,11 @@ export default async function NewSessionPage({ params }: Props) {
         </p>
       </header>
 
-      <SessionForm courseId={course.id} courseTitle={course.title} />
+      <SessionForm
+        courseId={course.id}
+        courseTitle={course.title}
+        bundesland={course.bundesland}
+      />
     </div>
   );
 }

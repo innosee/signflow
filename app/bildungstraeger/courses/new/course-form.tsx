@@ -2,6 +2,8 @@
 
 import { useActionState, useState } from "react";
 
+import { BUNDESLAENDER } from "@/lib/feiertage";
+
 import { createCourse, type CourseFormState } from "../actions";
 
 type BedarfstraegerOption = {
@@ -37,6 +39,7 @@ export function CourseForm({
     anzahlBewilligteUe: "",
     bedarfstraegerId: "",
     massnahmeTyp: "EKC",
+    bundesland: "",
     startDate: "",
     endDate: "",
     p_name: "",
@@ -150,6 +153,30 @@ export function CourseForm({
               <option value="EGC">EGC — Gründungs-Coaching</option>
               <option value="ESCA">ESCA — Ausbildungs-Coaching / Probezeit</option>
             </select>
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-zinc-800">
+              Bundesland <span className="text-red-600">*</span>
+            </span>
+            <select
+              name="bundesland"
+              required
+              value={head.bundesland}
+              onChange={setField("bundesland")}
+              className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+            >
+              <option value="" disabled>
+                Bitte wählen…
+              </option>
+              {BUNDESLAENDER.map((b) => (
+                <option key={b.code} value={b.code}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-zinc-500">
+              Bestimmt, an welchen Feiertagen die Termin-Anlage warnt.
+            </span>
           </label>
         </div>
 

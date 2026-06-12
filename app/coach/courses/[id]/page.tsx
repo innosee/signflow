@@ -5,6 +5,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
 import { isFutureSessionDate } from "@/lib/dates";
+import { getFeiertag } from "@/lib/feiertage";
 import { isSmsEnabled } from "@/lib/sms";
 
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -51,6 +52,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       avgsNummer: schema.courses.avgsNummer,
       durchfuehrungsort: schema.courses.durchfuehrungsort,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      bundesland: schema.courses.bundesland,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
@@ -276,6 +278,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               const tnSigned = s.participantsSigned;
               // Zukunfts-Termine sind noch nicht signierbar.
               const isFuture = isFutureSessionDate(s.sessionDate);
+              // Feiertag im Bundesland des Kunden? Nur Markierung — Coaching an
+              // einem Feiertag ist die Ausnahme, aber nicht verboten.
+              const feiertag = getFeiertag(s.sessionDate, course.bundesland);
               return (
                 <li key={s.id} className="px-6 py-4 space-y-2">
                   <div className="flex items-start gap-4">
@@ -286,6 +291,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         {" · "}
                         {s.isErstgespraech ? "Erstgespräch" : `${s.anzahlUe} UE`}
                       </div>
+                      {feiertag && (
+                        <span
+                          title={`${feiertag} — Coaching an Feiertagen ist die Ausnahme`}
+                          className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                        >
+                          🎌 {feiertag}
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <p className="text-zinc-700">{s.topic}</p>
