@@ -71,7 +71,6 @@ const tables = [
   "participant_access_tokens",
   "abschlussberichte",
   "sessions",
-  "course_participants",
   "final_documents",
   "courses",
   "bedarfstraeger",
@@ -162,19 +161,9 @@ const { rows: btsRows } = await client.query(
 );
 const bedId = btsRows[0].id;
 
-console.log("→ seeding course + participants");
-const { rows: courseRows } = await client.query(
-  `INSERT INTO courses (
-     coach_id, title, avgs_nummer, durchfuehrungsort, anzahl_bewilligte_ue,
-     bedarfstraeger_id, start_date, end_date, status
-   ) VALUES (
-     $1, 'Demo AVGS-Coaching „Karriere & Selbständigkeit"', 'AVGS-2026-DEMO',
-     'Singen, Demo-Adresse', 80, $2, '2026-03-01', '2026-04-30', 'active'
-   ) RETURNING id`,
-  [coachAId, bedId],
-);
-const courseId = courseRows[0].id;
-
+console.log("→ seeding participants + courses (1:1 — ein Kurs = ein Kunde)");
+// 1:1-Modell: jeder Kunde ist genau ein Teilnehmer mit eigener Maßnahme.
+// Wir legen die Teilnehmer zuerst an, dann je einen Kurs mit participant_id.
 const { rows: tn1Rows } = await client.query(
   `INSERT INTO participants (tenant_id, name, email, kunden_nr)
      VALUES ($1::uuid, 'TN Alpha (Demo)', 'tn.alpha@signflow-staging.test', '999A11111')
@@ -191,9 +180,29 @@ const { rows: tn2Rows } = await client.query(
 );
 const tn2Id = tn2Rows[0].id;
 
+// Kunde 1 (TN Alpha) → Coach Alpha
+const { rows: courseRows } = await client.query(
+  `INSERT INTO courses (
+     coach_id, participant_id, title, avgs_nummer, durchfuehrungsort,
+     anzahl_bewilligte_ue, bedarfstraeger_id, start_date, end_date, status
+   ) VALUES (
+     $1, $2, 'Demo AVGS-Coaching „Karriere & Selbständigkeit"', 'AVGS-2026-DEMO',
+     'Singen, Demo-Adresse', 80, $3, '2026-03-01', '2026-04-30', 'active'
+   ) RETURNING id`,
+  [coachAId, tn1Id, bedId],
+);
+const courseId = courseRows[0].id;
+
+// Kunde 2 (TN Beta) → Coach Alpha (zweiter Demo-Kunde für die Listenansicht)
 await client.query(
-  `INSERT INTO course_participants (course_id, participant_id) VALUES ($1, $2), ($1, $3)`,
-  [courseId, tn1Id, tn2Id],
+  `INSERT INTO courses (
+     coach_id, participant_id, title, avgs_nummer, durchfuehrungsort,
+     anzahl_bewilligte_ue, bedarfstraeger_id, start_date, end_date, status
+   ) VALUES (
+     $1, $2, 'Demo AVGS-Coaching „Bewerbungstraining"', 'AVGS-2026-DEMO-2',
+     'Online', 60, $3, '2026-03-15', '2026-05-15', 'active'
+   )`,
+  [coachAId, tn2Id, bedId],
 );
 
 console.log("→ seeding fertigen kurs-gebundenen BER (TN Alpha)");
