@@ -80,6 +80,42 @@ export const bundesland = pgEnum("bundesland", [
   "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH",
 ]);
 /**
+ * Status der Bildungsträger-Prüfung vor der FES-Versiegelung. Der
+ * Bildungsträger ist die Entität, die an die AfA übermittelt — deshalb
+ * muss er JEDE Anwesenheitsliste vor dem Siegel freigeben.
+ *   - `none`              = noch nicht zur Prüfung eingereicht (Default)
+ *   - `pending`           = Coach hat eingereicht, BT muss entscheiden
+ *   - `changes_requested` = BT fordert Nachbesserung; Coach editiert
+ *   - `approved`          = BT hat freigegeben → FES-Button beim Coach frei
+ * Wird bei jeder Session-Änderung auf `none` zurückgesetzt — eine alte
+ * Freigabe bezeugt sonst einen Stand, den das Dokument nicht mehr hat.
+ */
+export const courseReviewStatus = pgEnum("course_review_status", [
+  "none",
+  "pending",
+  "changes_requested",
+  "approved",
+]);
+/** Wer hat eine Prüf-Notiz verfasst — immer ein Coach oder ein Bildungsträger. */
+export const courseReviewNoteAuthor = pgEnum("course_review_note_author", [
+  "coach",
+  "bildungstraeger",
+]);
+/**
+ * Art einer Prüf-Notiz im Review-Thread:
+ *   - `submit`  = Coach reicht zur Prüfung ein (enthält ggf. die Begründung
+ *                 bei vorzeitigem Ende / unvollständigen UE)
+ *   - `approve` = BT gibt frei
+ *   - `changes` = BT fordert Nachbesserung (Pflicht-Notiz)
+ *   - `comment` = freie Rückmeldung ohne Statuswechsel
+ */
+export const courseReviewNoteKind = pgEnum("course_review_note_kind", [
+  "submit",
+  "approve",
+  "changes",
+  "comment",
+]);
+/**
  * Lebenszyklus eines Abschlussberichts.
  * `draft` = Coach arbeitet noch dran (Autosave); `submitted` = Coach hat an die Bildungsträgerin
  * abgegeben. Edit nach Submit bleibt erlaubt (Korrekturen); Status ändert sich dadurch nicht,
@@ -347,6 +383,22 @@ export const courses = pgTable("courses", {
    * aussagekräftig.
    */
   anwCheckPassedAt: timestamp("anw_check_passed_at", { withTimezone: true }),
+  /**
+   * FES-Gate (3/3): Bildungsträger-Prüfung. Der Coach reicht die fertige,
+   * vom Kunden freigegebene Anwesenheitsliste zur Prüfung ein; erst wenn
+   * `reviewStatus = 'approved'` ist, darf die FES-Versiegelung laufen.
+   * Bei jeder Session-Änderung zusammen mit den anderen Gates auf `none`
+   * zurückgesetzt. Siehe `courseReviewStatus`.
+   */
+  reviewStatus: courseReviewStatus("review_status").notNull().default("none"),
+  /** Zeitpunkt der letzten Einreichung des Coaches zur BT-Prüfung. */
+  reviewRequestedAt: timestamp("review_requested_at", { withTimezone: true }),
+  /** Zeitpunkt der letzten BT-Entscheidung (Freigabe oder Nachbesserung). */
+  reviewDecidedAt: timestamp("review_decided_at", { withTimezone: true }),
+  /** Bildungsträger-User, der zuletzt entschieden hat. */
+  reviewDecidedBy: uuid("review_decided_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -582,6 +634,39 @@ export const participantApprovals = pgTable(
       t.participantId,
     ),
     index("participant_approvals_course_idx").on(t.courseId),
+  ],
+);
+
+/**
+ * Notiz-Thread der Bildungsträger-Prüfung (FES-Gate 3/3). Bildet die
+ * Kommunikation Coach ↔ Bildungsträger über mehrere Nachbesserungs-Runden
+ * ab: der Coach reicht ein (`submit`, ggf. mit Begründung), der BT gibt
+ * frei (`approve`) oder fordert Nachbesserung (`changes`, Pflicht-Text).
+ * Bewusst KEIN Chat-System — nur ein append-only Verlauf pro Kurs, der die
+ * Prüf-Entscheidungen nachvollziehbar macht. `author_id` ist immer ein
+ * `users`-Row (Coach oder BT), nie ein Participant.
+ */
+export const courseReviewNotes = pgTable(
+  "course_review_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    authorType: courseReviewNoteAuthor("author_type").notNull(),
+    /** users.id des Coaches bzw. Bildungsträgers. Coaches/BT werden soft-deleted, daher restrict. */
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    kind: courseReviewNoteKind("kind").notNull(),
+    /** Freitext. Bei `changes` Pflicht (action-seitig erzwungen), sonst optional. */
+    body: text("body"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("course_review_notes_course_idx").on(t.courseId, t.createdAt),
   ],
 );
 

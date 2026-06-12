@@ -9,6 +9,7 @@ import { getFeiertag } from "@/lib/feiertage";
 import { isSmsEnabled } from "@/lib/sms";
 
 import { AutoRefresh } from "@/components/auto-refresh";
+import { ReviewThread } from "@/components/review-thread";
 
 import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
@@ -17,6 +18,7 @@ import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
 import { QrHandoverButton } from "./qr-handover-button";
 import { ReopenSessionButton } from "./reopen-session-button";
+import { ReviewSubmitButton } from "./review-submit-button";
 import { SealCourseButton } from "./seal-button";
 import { SmsResendButton } from "./sms-resend-button";
 
@@ -59,6 +61,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       begruendungText: schema.courses.begruendungText,
       anwCheckPassedAt: schema.courses.anwCheckPassedAt,
       abgeschlossenAt: schema.courses.abgeschlossenAt,
+      reviewStatus: schema.courses.reviewStatus,
+      reviewRequestedAt: schema.courses.reviewRequestedAt,
+      reviewDecidedAt: schema.courses.reviewDecidedAt,
       bedarfstraegerName: schema.bedarfstraeger.name,
       bedarfstraegerType: schema.bedarfstraeger.type,
     })
@@ -193,6 +198,25 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .where(eq(schema.finalDocuments.courseId, id))
     .limit(1);
 
+  // Notiz-Thread der BT-Prüfung (Coach ↔ Bildungsträger), chronologisch.
+  // Autor-Name zur Anzeige direkt mitjoinen.
+  const reviewNotes = await db
+    .select({
+      id: schema.courseReviewNotes.id,
+      authorType: schema.courseReviewNotes.authorType,
+      authorName: schema.users.name,
+      kind: schema.courseReviewNotes.kind,
+      body: schema.courseReviewNotes.body,
+      createdAt: schema.courseReviewNotes.createdAt,
+    })
+    .from(schema.courseReviewNotes)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.courseReviewNotes.authorId),
+    )
+    .where(eq(schema.courseReviewNotes.courseId, id))
+    .orderBy(asc(schema.courseReviewNotes.createdAt));
+
   const allSessionsCompleted =
     sessions.length > 0 && sessions.every((s) => s.status === "completed");
   const allApproved =
@@ -217,9 +241,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       )}
 
       <header className="space-y-2">
+        {/* 1:1: Genau ein Kunde pro Kurs. Kundenname als Überschrift für die
+            Zuordnung, Kurs-Titel als Subline darunter. */}
         <h1 className="text-2xl font-semibold tracking-tight">
-          {course.title}
+          {participants[0]?.name ?? course.title}
         </h1>
+        {participants[0] && (
+          <p className="text-base text-zinc-700">{course.title}</p>
+        )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-600">
           <span>AVGS {course.avgsNummer}</span>
           <span>{course.durchfuehrungsort}</span>
@@ -434,7 +463,11 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             }
           >
             {!impersonating && !course.abgeschlossenAt && (
-              <MarkAbgeschlossenButton courseId={course.id} />
+              <MarkAbgeschlossenButton
+                courseId={course.id}
+                geleisteteUe={geleisteteUe}
+                bewilligteUe={course.anzahlBewilligteUe}
+              />
             )}
           </Step>
           <Step
@@ -476,6 +509,47 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </Step>
           <Step
             index={5}
+            title="Bildungsträger-Prüfung"
+            done={course.reviewStatus === "approved"}
+            subtitle={
+              course.reviewStatus === "approved"
+                ? `Vom Bildungsträger freigegeben${course.reviewDecidedAt ? ` am ${new Date(course.reviewDecidedAt).toLocaleString("de-DE")}` : ""}.`
+                : course.reviewStatus === "pending"
+                  ? `Beim Bildungsträger in Prüfung${course.reviewRequestedAt ? ` seit ${new Date(course.reviewRequestedAt).toLocaleString("de-DE")}` : ""}.`
+                  : course.reviewStatus === "changes_requested"
+                    ? "Nachbesserung angefordert — Hinweis unten beachten, Termine korrigieren und erneut einreichen."
+                    : "Reiche die freigegebene Liste beim Bildungsträger zur Prüfung ein."
+            }
+          >
+            {!impersonating &&
+              course.reviewStatus !== "approved" &&
+              course.reviewStatus !== "pending" && (
+                <ReviewSubmitButton
+                  courseId={course.id}
+                  resubmit={course.reviewStatus === "changes_requested"}
+                  disabled={
+                    !allSessionsCompleted ||
+                    !allApproved ||
+                    !course.anwCheckPassedAt ||
+                    !course.abgeschlossenAt
+                  }
+                  disabledReason={
+                    !allSessionsCompleted
+                      ? "Erst wenn alle Termine signiert sind"
+                      : !course.anwCheckPassedAt
+                        ? "ANW-Compliance-Check muss durchlaufen sein"
+                        : !course.abgeschlossenAt
+                          ? "Maßnahme muss als abgeschlossen markiert sein"
+                          : !allApproved
+                            ? "Der Kunde hat den Nachweis noch nicht freigegeben"
+                            : undefined
+                  }
+                />
+              )}
+            {reviewNotes.length > 0 && <ReviewThread notes={reviewNotes} />}
+          </Step>
+          <Step
+            index={6}
             title="Mit FES versiegeln"
             done={isSealed}
             subtitle={
@@ -491,7 +565,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   !allSessionsCompleted ||
                   !allApproved ||
                   !course.anwCheckPassedAt ||
-                  !course.abgeschlossenAt
+                  !course.abgeschlossenAt ||
+                  course.reviewStatus !== "approved"
                 }
                 disabledReason={
                   !allSessionsCompleted
@@ -502,7 +577,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         ? "ANW-Compliance-Check muss durchlaufen sein"
                         : !course.abgeschlossenAt
                           ? "Maßnahme muss als abgeschlossen markiert sein"
-                          : undefined
+                          : course.reviewStatus !== "approved"
+                            ? "Der Bildungsträger muss die Liste erst freigeben"
+                            : undefined
                 }
               />
             )}

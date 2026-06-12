@@ -190,3 +190,73 @@ export async function sendParticipantPreview(params: {
     html: renderLayout("Stundennachweis zur Freigabe", body),
   });
 }
+
+/**
+ * Mail an den Bildungsträger: ein Coach hat eine Anwesenheitsliste zur Prüfung
+ * eingereicht (FES-Gate 3/3). Führt direkt auf die Prüf-Seite.
+ */
+export async function sendReviewRequestedToBildungstraeger(params: {
+  to: string;
+  coachName: string;
+  courseTitle: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo,</p>
+    <p><strong>${esc(params.coachName)}</strong> hat die Anwesenheitsliste für <strong>${esc(params.courseTitle)}</strong> zur Prüfung eingereicht. Bitte prüfe sie und gib sie frei oder fordere eine Nachbesserung an — erst nach deiner Freigabe kann der Coach mit FES versiegeln.</p>
+    ${renderButton(params.url, "Liste prüfen")}
+  `;
+  await sendEmail({
+    to: params.to,
+    subject: `Zu prüfen: ${params.courseTitle}`,
+    html: renderLayout("Anwesenheitsliste zur Prüfung", body),
+  });
+}
+
+/**
+ * Mail an den Coach: der Bildungsträger hat die Liste freigegeben. Der Coach
+ * kann jetzt die FES-Versiegelung auslösen.
+ */
+export async function sendReviewApprovedToCoach(params: {
+  to: string;
+  coachName: string;
+  courseTitle: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo ${esc(params.coachName)},</p>
+    <p>der Bildungsträger hat die Anwesenheitsliste für <strong>${esc(params.courseTitle)}</strong> geprüft und <strong>freigegeben</strong>. Du kannst die Maßnahme jetzt mit FES versiegeln.</p>
+    ${renderButton(params.url, "Zur Maßnahme")}
+  `;
+  await sendEmail({
+    to: params.to,
+    subject: `Freigegeben: ${params.courseTitle}`,
+    html: renderLayout("Liste freigegeben", body),
+  });
+}
+
+/**
+ * Mail an den Coach: der Bildungsträger fordert eine Nachbesserung. Enthält
+ * die Begründung des BT; der Coach kann die Termine korrigieren und neu
+ * einreichen.
+ */
+export async function sendReviewChangesToCoach(params: {
+  to: string;
+  coachName: string;
+  courseTitle: string;
+  note: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo ${esc(params.coachName)},</p>
+    <p>der Bildungsträger hat die Anwesenheitsliste für <strong>${esc(params.courseTitle)}</strong> geprüft und bittet um eine <strong>Nachbesserung</strong>:</p>
+    <blockquote style="margin:16px 0; padding:12px 16px; border-left:3px solid #d4d4d8; background:#fafafa; color:#333; white-space:pre-wrap;">${esc(params.note)}</blockquote>
+    <p>Bitte korrigiere die Termine und reiche die Liste erneut zur Prüfung ein.</p>
+    ${renderButton(params.url, "Zur Maßnahme")}
+  `;
+  await sendEmail({
+    to: params.to,
+    subject: `Nachbesserung nötig: ${params.courseTitle}`,
+    html: renderLayout("Nachbesserung angefordert", body),
+  });
+}

@@ -7,6 +7,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { sendReviewRequestedToBildungstraeger } from "@/lib/email";
 import { isFutureSessionDate } from "@/lib/dates";
 import {
   assertNotImpersonating,
@@ -147,6 +148,47 @@ async function autoNotifyAllParticipants(courseId: string): Promise<void> {
   }
 }
 
+/**
+ * Schickt allen aktiven Bildungsträger-Usern im Mandanten des Coaches eine
+ * Mail „Neue Anwesenheitsliste zu prüfen". Best-effort — der Dashboard-Badge
+ * greift auch ohne Mail, deshalb darf ein Fehler hier die Einreichung nicht
+ * kippen (Caller fängt). Tenant des Coaches via `users.tenantId`.
+ */
+async function notifyBildungstraegerReviewRequested(params: {
+  courseId: string;
+  courseTitle: string;
+  coachId: string;
+}): Promise<void> {
+  const [coach] = await db
+    .select({ name: schema.users.name, tenantId: schema.users.tenantId })
+    .from(schema.users)
+    .where(eq(schema.users.id, params.coachId))
+    .limit(1);
+  if (!coach) return;
+
+  const recipients = await db
+    .select({ email: schema.users.email })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.role, "bildungstraeger"),
+        eq(schema.users.tenantId, coach.tenantId),
+        isNull(schema.users.deletedAt),
+      ),
+    );
+
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const url = `${base}/bildungstraeger/reviews/${params.courseId}`;
+  for (const r of recipients) {
+    await sendReviewRequestedToBildungstraeger({
+      to: r.email,
+      coachName: coach.name,
+      courseTitle: params.courseTitle,
+      url,
+    });
+  }
+}
+
 async function requireOwnedCourseId(
   courseId: string,
   coachId: string,
@@ -204,7 +246,16 @@ export async function createSession(
       // mehr aussagekräftig.
       await tx
         .update(schema.courses)
-        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .set({
+          abgeschlossenAt: null,
+          anwCheckPassedAt: null,
+          // BT-Prüfung mit zurücksetzen: das Dokument hat sich geändert, eine
+          // alte Freigabe/Prüfung bezeugt einen Stand, den es nicht mehr gibt.
+          reviewStatus: "none",
+          reviewRequestedAt: null,
+          reviewDecidedAt: null,
+          reviewDecidedBy: null,
+        })
         .where(eq(schema.courses.id, ownedCourseId));
     });
   } catch (err) {
@@ -286,7 +337,16 @@ export async function updateSession(
       // FES-Gates resetten — Inhalts-Edit ändert den Stand.
       await tx
         .update(schema.courses)
-        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .set({
+          abgeschlossenAt: null,
+          anwCheckPassedAt: null,
+          // BT-Prüfung mit zurücksetzen: das Dokument hat sich geändert, eine
+          // alte Freigabe/Prüfung bezeugt einen Stand, den es nicht mehr gibt.
+          reviewStatus: "none",
+          reviewRequestedAt: null,
+          reviewDecidedAt: null,
+          reviewDecidedBy: null,
+        })
         .where(eq(schema.courses.id, ownedCourseId));
     });
   } catch (err) {
@@ -388,7 +448,16 @@ export async function reopenSession(
       //    nach dem Edit neu bestätigt werden.
       await tx
         .update(schema.courses)
-        .set({ abgeschlossenAt: null, anwCheckPassedAt: null })
+        .set({
+          abgeschlossenAt: null,
+          anwCheckPassedAt: null,
+          // BT-Prüfung mit zurücksetzen: das Dokument hat sich geändert, eine
+          // alte Freigabe/Prüfung bezeugt einen Stand, den es nicht mehr gibt.
+          reviewStatus: "none",
+          reviewRequestedAt: null,
+          reviewDecidedAt: null,
+          reviewDecidedBy: null,
+        })
         .where(eq(schema.courses.id, ownedCourseId));
     });
   } catch (err) {
@@ -953,12 +1022,17 @@ export type MarkAbgeschlossenState =
 
 /**
  * Coach bestätigt: keine weiteren Sessions kommen. Erst nach diesem Klick
- * darf FES-Sealing laufen. Der Klick wird zugelassen wenn ENTWEDER 80%
- * der bewilligten UE geleistet sind ODER der Kurs als vorzeitig beendet
- * gekennzeichnet ist (`flagVorzeitigesEnde=true`) mit Begründung.
+ * (und der anschließenden Teilnehmer-Freigabe + BT-Prüfung) darf FES-Sealing
+ * laufen.
  *
- * Beim nächsten Session-Edit/Create/Reopen wird das Feld wieder gelöscht,
- * der Coach muss neu bestätigen.
+ * Regel (vom Kunden festgelegt 2026-06-12): sind die bewilligten UE voll
+ * geleistet, geht der Abschluss direkt durch. Liegt die geleistete UE-Zahl
+ * DARUNTER (vorzeitiges Ende, inkl. 0 UE bei Sofort-Abbruch), ist eine
+ * Begründung PFLICHT — sie wird auf dem Kurs gespeichert (`flagVorzeitigesEnde`
+ * + `begruendungText`) und später dem Bildungsträger in der Prüfung angezeigt.
+ *
+ * Beim nächsten Session-Edit/Create/Reopen wird `abgeschlossenAt` wieder
+ * gelöscht, der Coach muss neu bestätigen.
  */
 export async function markCourseAbgeschlossen(
   _prev: MarkAbgeschlossenState,
@@ -970,6 +1044,7 @@ export async function markCourseAbgeschlossen(
 
   const courseId = String(formData.get("courseId") ?? "").trim();
   if (!courseId) return { error: "Kurs fehlt." };
+  const begruendung = String(formData.get("begruendung") ?? "").trim();
 
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
@@ -979,8 +1054,6 @@ export async function markCourseAbgeschlossen(
   const [course] = await db
     .select({
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
-      flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
-      begruendungText: schema.courses.begruendungText,
     })
     .from(schema.courses)
     .where(eq(schema.courses.id, ownedCourseId))
@@ -1005,24 +1078,174 @@ export async function markCourseAbgeschlossen(
   const geleisteteUe = completedSessions
     .filter((s) => !s.isErstgespraech)
     .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
-  const erfuellungQuote = geleisteteUe / course.anzahlBewilligteUe;
-  const hatVorzeitigesEndeBegruendung =
-    course.flagVorzeitigesEnde && (course.begruendungText?.trim().length ?? 0) > 0;
 
-  if (erfuellungQuote < 0.8 && !hatVorzeitigesEndeBegruendung) {
+  // Unvollständig = weniger geleistet als bewilligt → Begründung Pflicht.
+  const istVollstaendig = geleisteteUe >= course.anzahlBewilligteUe;
+  if (!istVollstaendig && begruendung.length === 0) {
     return {
-      error: `Maßnahme kann erst abgeschlossen werden, wenn ≥80% der bewilligten UE geleistet sind (aktuell ${geleisteteUe} von ${course.anzahlBewilligteUe} = ${Math.round(erfuellungQuote * 100)}%). Bei vorzeitigem Ende: Kurs-Stammdaten → „vorzeitig beendet" + Begründung setzen.`,
+      error: `Es sind erst ${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Zum vorzeitigen Abschluss bitte eine Begründung angeben — sie wird dem Bildungsträger bei der Prüfung angezeigt.`,
     };
   }
 
   try {
     await db
       .update(schema.courses)
-      .set({ abgeschlossenAt: new Date() })
+      .set({
+        abgeschlossenAt: new Date(),
+        // Bei vorzeitigem Ende Flag + Begründung mitsetzen (landen im
+        // AfA-Footer + in der BT-Prüfung). Bei voller Erfüllung Flag aus.
+        flagVorzeitigesEnde: !istVollstaendig,
+        begruendungText: istVollstaendig ? null : begruendung,
+      })
       .where(eq(schema.courses.id, ownedCourseId));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { error: `Markierung fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
+}
+
+export type RequestReviewState =
+  | { error?: string; success?: boolean }
+  | undefined;
+
+/**
+ * Coach reicht die fertige, vom Kunden freigegebene Anwesenheitsliste beim
+ * Bildungsträger zur Prüfung ein (FES-Gate 3/3). Pre-Conditions sind dieselben
+ * wie beim FES-Sealing — nur dass am Ende statt des Siegels die BT-Prüfung
+ * angestoßen wird. Setzt `reviewStatus = 'pending'`, schreibt eine `submit`-
+ * Notiz (inkl. Begründung bei vorzeitigem Ende) und benachrichtigt den BT.
+ */
+export async function requestBildungstraegerReview(
+  _prev: RequestReviewState,
+  formData: FormData,
+): Promise<RequestReviewState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+  const coachNote = String(formData.get("note") ?? "").trim();
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const [course] = await db
+    .select({
+      title: schema.courses.title,
+      reviewStatus: schema.courses.reviewStatus,
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      abgeschlossenAt: schema.courses.abgeschlossenAt,
+      flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      begruendungText: schema.courses.begruendungText,
+      participantId: schema.courses.participantId,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!course) return { error: "Kurs nicht auflösbar." };
+
+  if (course.reviewStatus === "approved") {
+    return { error: "Der Bildungsträger hat bereits freigegeben." };
+  }
+  if (course.reviewStatus === "pending") {
+    return { error: "Die Prüfung läuft bereits — der Bildungsträger ist am Zug." };
+  }
+  if (!course.abgeschlossenAt) {
+    return { error: "Maßnahme muss zuerst als abgeschlossen markiert werden." };
+  }
+  if (!course.anwCheckPassedAt) {
+    return { error: "ANW-Compliance-Check muss zuerst durchlaufen sein." };
+  }
+
+  // Sessions-Gate: alle nicht-gelöschten Sessions vollständig signiert.
+  const allSessions = await db
+    .select({ status: schema.sessions.status })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+  if (allSessions.length === 0) {
+    return { error: "Kurs hat keine Sessions." };
+  }
+  if (allSessions.some((s) => s.status !== "completed")) {
+    return { error: "Mindestens eine Session ist noch nicht vollständig signiert." };
+  }
+
+  // Approval-Gate (1:1): der eine Kunde muss freigegeben haben.
+  const [approval] = await db
+    .select({ id: schema.participantApprovals.id })
+    .from(schema.participantApprovals)
+    .where(
+      and(
+        eq(schema.participantApprovals.courseId, ownedCourseId),
+        eq(schema.participantApprovals.participantId, course.participantId),
+      ),
+    )
+    .limit(1);
+  if (!approval) {
+    return { error: "Der Kunde hat den Nachweis noch nicht freigegeben." };
+  }
+
+  // Submit-Notiz zusammenbauen: Begründung bei vorzeitigem Ende voranstellen,
+  // optionale Coach-Notiz anhängen.
+  const noteParts: string[] = [];
+  if (course.flagVorzeitigesEnde && course.begruendungText?.trim()) {
+    noteParts.push(`Vorzeitiges Ende — Begründung: ${course.begruendungText.trim()}`);
+  }
+  if (coachNote) noteParts.push(coachNote);
+  const noteBody = noteParts.join("\n\n") || null;
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.courses)
+        .set({
+          reviewStatus: "pending",
+          reviewRequestedAt: new Date(),
+          reviewDecidedAt: null,
+          reviewDecidedBy: null,
+        })
+        .where(eq(schema.courses.id, ownedCourseId));
+      await tx.insert(schema.courseReviewNotes).values({
+        courseId: ownedCourseId,
+        authorType: "coach",
+        authorId: coachId,
+        kind: "submit",
+        body: noteBody,
+      });
+      await logAudit(
+        {
+          actorType: "coach",
+          actorId: coachId,
+          action: "course.review_requested",
+          resourceType: "course",
+          resourceId: ownedCourseId,
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Einreichung fehlgeschlagen (${message}).` };
+  }
+
+  // Bildungsträger benachrichtigen (best effort — der Badge im Dashboard
+  // greift auch ohne Mail). Fehler hier dürfen die Einreichung nicht kippen.
+  try {
+    await notifyBildungstraegerReviewRequested({
+      courseId: ownedCourseId,
+      courseTitle: course.title,
+      coachId,
+    });
+  } catch (err) {
+    console.error(`review-request notification failed for course ${ownedCourseId}:`, err);
   }
 
   revalidatePath(`/coach/courses/${ownedCourseId}`);
@@ -1088,6 +1311,7 @@ export async function sealCourse(
     .select({
       anwCheckPassedAt: schema.courses.anwCheckPassedAt,
       abgeschlossenAt: schema.courses.abgeschlossenAt,
+      reviewStatus: schema.courses.reviewStatus,
     })
     .from(schema.courses)
     .where(eq(schema.courses.id, ownedCourseId))
@@ -1102,6 +1326,14 @@ export async function sealCourse(
     return {
       error:
         "Maßnahme muss vor der Versiegelung aktiv als abgeschlossen markiert werden.",
+    };
+  }
+  // FES-Gate (3/3): Der Bildungsträger muss die Anwesenheitsliste geprüft und
+  // freigegeben haben. Ohne diese Freigabe darf das Siegel nicht laufen.
+  if (courseGates.reviewStatus !== "approved") {
+    return {
+      error:
+        "Der Bildungsträger muss die Anwesenheitsliste vor der Versiegelung prüfen und freigeben.",
     };
   }
 

@@ -56,6 +56,21 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
     );
   const pendingSubmissions = pendingSubmissionsRow?.count ?? 0;
 
+  // Offene Anwesenheitslisten-Prüfungen (Coach hat eingereicht, BT muss
+  // entscheiden) — blockieren die FES-Versiegelung beim Coach, deshalb als
+  // eigener Teaser oben. Tenant-Filter via Coach-Join.
+  const [pendingReviewsRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.courses)
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .where(
+      and(
+        eq(schema.courses.reviewStatus, "pending"),
+        eq(schema.users.tenantId, tenantId),
+      ),
+    );
+  const pendingReviews = pendingReviewsRow?.count ?? 0;
+
   const coaches = await db
     .select({
       id: schema.users.id,
@@ -150,6 +165,37 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
             className="shrink-0 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
           >
             Liste öffnen →
+          </Link>
+        </div>
+      </section>
+
+      <section
+        className={`rounded-xl border p-6 ${
+          pendingReviews > 0
+            ? "border-amber-300 bg-amber-50"
+            : "border-zinc-300 bg-white"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">
+              Anwesenheitslisten prüfen
+            </h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              {pendingReviews === 0
+                ? "Aktuell keine Liste zur Prüfung."
+                : `${pendingReviews} ${
+                    pendingReviews === 1
+                      ? "Liste wartet"
+                      : "Listen warten"
+                  } auf deine Freigabe (blockiert die FES-Versiegelung).`}
+            </p>
+          </div>
+          <Link
+            href="/bildungstraeger/reviews"
+            className="shrink-0 rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-white/60"
+          >
+            Öffnen
           </Link>
         </div>
       </section>
