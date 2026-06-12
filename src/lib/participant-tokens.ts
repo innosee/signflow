@@ -96,9 +96,9 @@ export async function createParticipantMagicLink(params: {
  * Magic-Link-Mail. Wird vom Coach-Dashboard per "Teilnehmer benachrichtigen"
  * aufgerufen (manuell ausgelöst, kein Cron im V1).
  *
- * Die (course, participant)-Paarung wird über `course_participants` hart
- * geprüft — sonst ginge unter Umständen eine Mail raus, während
- * `resolveParticipantToken()` den Link später verwerfen würde.
+ * Die (course, participant)-Paarung wird gegen die 1:1-Bindung
+ * `courses.participant_id` geprüft — sonst ginge unter Umständen eine Mail
+ * raus, während `resolveParticipantToken()` den Link später verwerfen würde.
  */
 export async function sendParticipantInvite(params: {
   courseId: string;
@@ -119,19 +119,15 @@ export async function sendParticipantInvite(params: {
       participantPhone: schema.participants.phone,
       courseTitle: schema.courses.title,
     })
-    .from(schema.courseParticipants)
-    .innerJoin(
-      schema.courses,
-      eq(schema.courses.id, schema.courseParticipants.courseId),
-    )
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(
-        eq(schema.courseParticipants.courseId, params.courseId),
-        eq(schema.courseParticipants.participantId, params.participantId),
+        eq(schema.courses.id, params.courseId),
+        eq(schema.courses.participantId, params.participantId),
       ),
     )
     .limit(1);
@@ -200,19 +196,15 @@ export async function sendParticipantPreviewInvite(params: {
       participantPhone: schema.participants.phone,
       courseTitle: schema.courses.title,
     })
-    .from(schema.courseParticipants)
-    .innerJoin(
-      schema.courses,
-      eq(schema.courses.id, schema.courseParticipants.courseId),
-    )
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(
-        eq(schema.courseParticipants.courseId, params.courseId),
-        eq(schema.courseParticipants.participantId, params.participantId),
+        eq(schema.courses.id, params.courseId),
+        eq(schema.courses.participantId, params.participantId),
       ),
     )
     .limit(1);
@@ -302,7 +294,14 @@ export async function resolveParticipantToken(
     .from(schema.participantAccessTokens)
     .innerJoin(
       schema.courses,
-      eq(schema.courses.id, schema.participantAccessTokens.courseId),
+      and(
+        eq(schema.courses.id, schema.participantAccessTokens.courseId),
+        // 1:1-Defense: der Token-Teilnehmer muss der Kunde des Kurses sein.
+        eq(
+          schema.courses.participantId,
+          schema.participantAccessTokens.participantId,
+        ),
+      ),
     )
     .innerJoin(
       schema.participants,
@@ -320,25 +319,8 @@ export async function resolveParticipantToken(
   const head = rows[0];
   if (!head) return null;
 
-  // Alle Sessions des Kurses + Info ob der Teilnehmer bereits eine Signatur
-  // geleistet hat. Der Join auf signatures filtert pro (session, participant)
-  // anhand von course_participants.
-  const [cp] = await db
-    .select({ id: schema.courseParticipants.id })
-    .from(schema.courseParticipants)
-    .where(
-      and(
-        eq(schema.courseParticipants.courseId, head.courseId),
-        eq(schema.courseParticipants.participantId, head.participantId),
-      ),
-    )
-    .limit(1);
-
-  if (!cp) return null; // Teilnehmer ist gar nicht im Kurs
-
-  // Nur Sessions, in denen dieser TN explizit enrolled ist (session_participants).
-  // Coach kann TN pro Session abwählen — abgewählte Sessions tauchen für
-  // diesen TN gar nicht auf, sodass er sie auch nicht versehentlich signiert.
+  // 1:1: Alle nicht-gelöschten Termine des Kurses gehören dem einen Kunden —
+  // keine Enrollment-/Anwesenheits-Tabelle mehr.
   const rawSessions = await db
     .select({
       id: schema.sessions.id,
@@ -349,15 +331,10 @@ export async function resolveParticipantToken(
       isErstgespraech: schema.sessions.isErstgespraech,
     })
     .from(schema.sessions)
-    .innerJoin(
-      schema.sessionParticipants,
-      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
-    )
     .where(
       and(
         eq(schema.sessions.courseId, head.courseId),
         isNull(schema.sessions.deletedAt),
-        eq(schema.sessionParticipants.courseParticipantId, cp.id),
       ),
     )
     .orderBy(asc(schema.sessions.sessionDate));
@@ -367,9 +344,14 @@ export async function resolveParticipantToken(
       await db
         .select({ sessionId: schema.signatures.sessionId })
         .from(schema.signatures)
+        .innerJoin(
+          schema.sessions,
+          eq(schema.sessions.id, schema.signatures.sessionId),
+        )
         .where(
           and(
-            eq(schema.signatures.courseParticipantId, cp.id),
+            eq(schema.sessions.courseId, head.courseId),
+            eq(schema.signatures.participantId, head.participantId),
             eq(schema.signatures.signerType, "participant"),
           ),
         )

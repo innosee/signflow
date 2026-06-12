@@ -57,7 +57,7 @@ export default async function CoachDashboard() {
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
           <p className="font-medium">Unterschrift noch nicht hinterlegt.</p>
           <p className="mt-1">
-            Du brauchst eine einmalig erfasste Unterschrift, bevor du Sessions
+            Du brauchst eine einmalig erfasste Unterschrift, bevor du Termine
             bestätigen kannst.
           </p>
           <Link
@@ -72,16 +72,10 @@ export default async function CoachDashboard() {
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="flex items-center justify-between border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">
-            Meine Kurse ({courses.length})
+            Meine Kunden ({courses.length})
           </h2>
-          {!impersonating && (
-            <Link
-              href="/coach/courses/new"
-              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-            >
-              + Neuer Kurs
-            </Link>
-          )}
+          {/* 1:1: Coaches legen nicht mehr selbst an — der Bildungsträger
+              erstellt Kunden und weist sie zu. */}
         </div>
 
         <CoachCourseList courses={courses} />

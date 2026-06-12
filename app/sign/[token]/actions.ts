@@ -16,12 +16,11 @@ function hashToken(token: string): string {
 }
 
 /**
- * Signiert eine einzelne Session innerhalb eines aktiven Magic-Link-Tokens.
+ * Signiert einen einzelnen Termin innerhalb eines aktiven Magic-Link-Tokens.
  * Token wird NICHT verbraucht — der Teilnehmer kann innerhalb der 24 h
- * weitere Sessions signieren. Replay-Schutz liegt pro Session darin, dass
- * `(session_id, course_participant_id, signer_type='participant')` nur
- * einmal eingefügt werden kann (sonst würde beim Insert ein Fehler kommen
- * weil wir die eindeutige Paarung vorher prüfen).
+ * weitere Termine signieren. Replay-Schutz liegt pro Termin darin, dass
+ * `(session_id, participant_id, signer_type='participant')` nur einmal
+ * eingefügt werden kann (wir prüfen die eindeutige Paarung vorher).
  */
 export async function submitParticipantSignature(
   _prev: SignState,
@@ -72,37 +71,17 @@ export async function submitParticipantSignature(
         .limit(1);
       if (!sess) throw new Error("SESSION_INVALID");
 
-      // Teilnehmer muss im Kurs eingeschrieben sein (→ course_participants-Row)
-      const [cp] = await tx
-        .select({ id: schema.courseParticipants.id })
-        .from(schema.courseParticipants)
-        .where(
-          and(
-            eq(schema.courseParticipants.courseId, tok.courseId),
-            eq(
-              schema.courseParticipants.participantId,
-              tok.participantId,
-            ),
-          ),
-        )
+      // 1:1: Der Token-Teilnehmer muss der Kunde genau dieses Kurses sein.
+      // Eine Session-Anwesenheits-Auswahl gibt es nicht mehr — jeder Termin
+      // des Kurses gehört dem einen Kunden.
+      const [courseRow] = await tx
+        .select({ participantId: schema.courses.participantId })
+        .from(schema.courses)
+        .where(eq(schema.courses.id, tok.courseId))
         .limit(1);
-      if (!cp) throw new Error("NOT_ENROLLED");
-
-      // Session-Enrollment: TN muss explizit für diese Session ausgewählt
-      // sein (session_participants). Coach kann TN pro Session abwählen,
-      // wenn jemand gefehlt hat — dann darf der TN diese Session auch
-      // nicht signieren.
-      const [sp] = await tx
-        .select({ id: schema.sessionParticipants.id })
-        .from(schema.sessionParticipants)
-        .where(
-          and(
-            eq(schema.sessionParticipants.sessionId, sess.id),
-            eq(schema.sessionParticipants.courseParticipantId, cp.id),
-          ),
-        )
-        .limit(1);
-      if (!sp) throw new Error("NOT_IN_SESSION");
+      if (!courseRow || courseRow.participantId !== tok.participantId) {
+        throw new Error("NOT_ENROLLED");
+      }
 
       // Teilnehmer muss seine Canvas-Signatur bereits einmalig angelegt
       // haben — ohne die ist die AfA-Beweiskraft nicht gegeben.
@@ -121,7 +100,7 @@ export async function submitParticipantSignature(
         .where(
           and(
             eq(schema.signatures.sessionId, sess.id),
-            eq(schema.signatures.courseParticipantId, cp.id),
+            eq(schema.signatures.participantId, tok.participantId),
             eq(schema.signatures.signerType, "participant"),
           ),
         )
@@ -130,7 +109,7 @@ export async function submitParticipantSignature(
 
       await tx.insert(schema.signatures).values({
         sessionId: sess.id,
-        courseParticipantId: cp.id,
+        participantId: tok.participantId,
         signerType: "participant",
         // Snapshot der einmalig angelegten Teilnehmer-Unterschrift — siehe
         // CLAUDE.md → „Unterschriften": pro Session aktive Bestätigung
@@ -153,16 +132,10 @@ export async function submitParticipantSignature(
       };
     }
     if (message === "SESSION_INVALID") {
-      return { error: "Diese Einheit gehört nicht zu deinem Kurs." };
+      return { error: "Dieser Termin gehört nicht zu deinem Kurs." };
     }
     if (message === "NOT_ENROLLED") {
       return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
-    }
-    if (message === "NOT_IN_SESSION") {
-      return {
-        error:
-          "Du warst für diese Einheit nicht als Teilnehmer:in markiert. Bitte den Coach kontaktieren, falls das nicht stimmt.",
-      };
     }
     if (message === "NO_SIGNATURE") {
       return {
@@ -171,7 +144,7 @@ export async function submitParticipantSignature(
       };
     }
     if (message === "ALREADY_SIGNED") {
-      return { error: "Diese Einheit wurde bereits bestätigt." };
+      return { error: "Dieser Termin wurde bereits bestätigt." };
     }
     throw err;
   }
@@ -228,21 +201,15 @@ export async function approveFinalDocument(
         .limit(1);
       if (!tok) throw new Error("TOKEN_INVALID");
 
-      // Enrollment + pro TN signierten Sessions prüfen. Wir stellen
-      // sicher, dass JEDE nicht-gelöschte Session eine TN-Signatur vom
-      // Teilnehmer hat — ohne das wäre die finale Freigabe inhaltlich
-      // falsch (es gibt noch offene Einheiten).
-      const [cp] = await tx
-        .select({ id: schema.courseParticipants.id })
-        .from(schema.courseParticipants)
-        .where(
-          and(
-            eq(schema.courseParticipants.courseId, tok.courseId),
-            eq(schema.courseParticipants.participantId, tok.participantId),
-          ),
-        )
+      // 1:1: Der Token-Teilnehmer muss der Kunde dieses Kurses sein.
+      const [courseRow] = await tx
+        .select({ participantId: schema.courses.participantId })
+        .from(schema.courses)
+        .where(eq(schema.courses.id, tok.courseId))
         .limit(1);
-      if (!cp) throw new Error("NOT_ENROLLED");
+      if (!courseRow || courseRow.participantId !== tok.participantId) {
+        throw new Error("NOT_ENROLLED");
+      }
 
       // Preview/Freigabe ist nur gültig, wenn ALLE Sessions des Kurses
       // `status='completed'` sind — das bedeutet Coach + alle enrollten
@@ -310,12 +277,12 @@ export async function approveFinalDocument(
       return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
     }
     if (message === "NO_SESSIONS") {
-      return { error: "Der Kurs hat noch keine Sessions." };
+      return { error: "Der Kurs hat noch keine Termine." };
     }
     if (message === "SESSIONS_OPEN") {
       return {
         error:
-          "Du hast noch nicht alle Einheiten bestätigt. Bitte zuerst alle offenen Termine signieren.",
+          "Du hast noch nicht alle Termine bestätigt. Bitte zuerst alle offenen signieren.",
       };
     }
     if (message === "ALREADY_APPROVED") {

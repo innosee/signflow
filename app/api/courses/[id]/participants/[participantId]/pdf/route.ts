@@ -46,18 +46,18 @@ export async function GET(
 
   const [enrolled] = await db
     .select({
-      id: schema.courseParticipants.id,
+      id: schema.courses.id,
       participantName: schema.participants.name,
     })
-    .from(schema.courseParticipants)
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(
-        eq(schema.courseParticipants.courseId, courseId),
-        eq(schema.courseParticipants.participantId, participantId),
+        eq(schema.courses.id, courseId),
+        eq(schema.courses.participantId, participantId),
       ),
     )
     .limit(1);

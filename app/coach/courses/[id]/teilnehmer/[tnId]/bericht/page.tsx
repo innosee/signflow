@@ -42,12 +42,8 @@ export default async function BerEditorPage({ params }: Props) {
     })
     .from(schema.courses)
     .innerJoin(
-      schema.courseParticipants,
-      eq(schema.courseParticipants.courseId, schema.courses.id),
-    )
-    .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(

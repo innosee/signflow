@@ -12,6 +12,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -270,6 +271,16 @@ export const courses = pgTable("courses", {
   coachId: uuid("coach_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  /**
+   * Der eine Kunde dieser Maßnahme (1:1-Modell). Ein „Kurs" ist genau ein
+   * Kunde mit genau einem Unterschreiber. Personendaten (Name/E-Mail/
+   * Kunden-Nr/Signatur) leben weiter in `participants` (Single-Source);
+   * diese Spalte ist die 1:1-Bindung. Die früheren Join-Tabellen
+   * `course_participants`/`session_participants` sind damit entfallen.
+   */
+  participantId: uuid("participant_id")
+    .notNull()
+    .references(() => participants.id, { onDelete: "restrict" }),
   title: text("title").notNull(),
   /** AVGS-Maßnahmen-Nummer (von der AfA vergeben). */
   avgsNummer: text("avgs_nummer").notNull(),
@@ -323,7 +334,14 @@ export const courses = pgTable("courses", {
     .defaultNow()
     .$onUpdate(() => new Date()),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+}, (t) => [
+  // 1:1-Integritäts-Anker: `id` ist bereits PK, aber dieser Composite-Unique
+  // macht die Paarung (Kurs ↔ sein Kunde) als FK-Ziel referenzierbar — der
+  // Abschlussbericht hängt seinen Enrollment-FK darauf. Muss ein Unique-
+  // CONSTRAINT sein (nicht nur -Index), sonst akzeptiert Postgres es nicht
+  // als FK-Ziel (Fehler 42830).
+  unique("courses_id_participant_uq").on(t.id, t.participantId),
+]);
 
 export const participants = pgTable("participants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -368,28 +386,8 @@ export const participants = pgTable("participants", {
   index("participants_tenant_idx").on(t.tenantId),
 ]);
 
-export const courseParticipants = pgTable(
-  "course_participants",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    courseId: uuid("course_id")
-      .notNull()
-      .references(() => courses.id, { onDelete: "cascade" }),
-    participantId: uuid("participant_id")
-      .notNull()
-      .references(() => participants.id, { onDelete: "restrict" }),
-    enrolledAt: timestamp("enrolled_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    index("course_participants_course_id_idx").on(t.courseId),
-    uniqueIndex("course_participants_course_participant_uq").on(
-      t.courseId,
-      t.participantId,
-    ),
-  ],
-);
+// 1:1-Modell: Die frühere Join-Tabelle `course_participants` ist entfallen.
+// Die Kunde↔Kurs-Bindung läuft jetzt direkt über `courses.participant_id`.
 
 export const sessions = pgTable(
   "sessions",
@@ -467,47 +465,9 @@ export const participantAccessTokens = pgTable(
   ],
 );
 
-/**
- * Welcher Teilnehmer war für eine konkrete Session enrolled / anwesend?
- * Default-Verhalten in der UI: bei Session-Anlage sind ALLE Kurs-TN
- * vorausgewählt (Standard-AVGS-Annahme „alle dabei"); der Coach kann
- * einzelne abwählen, wenn jemand gefehlt hat oder es ein 1:1-Termin
- * innerhalb eines Gruppenkurses war.
- *
- * Beim Bestand werden alle existierenden Sessions via Migrations-
- * Backfill mit allen aktuell enrollten TN verknüpft, sodass das alte
- * implizite Verhalten weiterläuft.
- *
- * TODO (Code-Rabbit Finding PR #64): DB-Constraint fehlt der Check,
- * dass `session_id` und `course_participant_id` zum selben Kurs gehören
- * — wäre über materialisierten `course_id` + Composite-FK lösbar.
- * Aktuell durch Application-Layer abgesichert (createSession und
- * updateSession validieren, dass alle ausgewählten course_participants
- * zum bearbeiteten Kurs gehören). Migration auf Composite-FK ist
- * Heavy-Lift und wartet bis zur nächsten Konsolidierung.
- */
-export const sessionParticipants = pgTable(
-  "session_participants",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    sessionId: uuid("session_id")
-      .notNull()
-      .references(() => sessions.id, { onDelete: "cascade" }),
-    courseParticipantId: uuid("course_participant_id")
-      .notNull()
-      .references(() => courseParticipants.id, { onDelete: "restrict" }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("session_participants_session_cp_uq").on(
-      t.sessionId,
-      t.courseParticipantId,
-    ),
-    index("session_participants_session_idx").on(t.sessionId),
-  ],
-);
+// 1:1-Modell: Die frühere Tabelle `session_participants` (Anwesenheit pro
+// Session) ist entfallen. Jeder Termin gehört implizit dem einen Kunden des
+// Kurses — eine explizite Anwesenheits-Auswahl gibt es nicht mehr.
 
 export const signatures = pgTable(
   "signatures",
@@ -516,10 +476,11 @@ export const signatures = pgTable(
     sessionId: uuid("session_id")
       .notNull()
       .references(() => sessions.id, { onDelete: "cascade" }),
-    courseParticipantId: uuid("course_participant_id").references(
-      () => courseParticipants.id,
-      { onDelete: "restrict" },
-    ),
+    // 1:1-Modell: Teilnehmer-Signaturen referenzieren den Kunden direkt
+    // (participants.id), Coach-Signaturen lassen das NULL.
+    participantId: uuid("participant_id").references(() => participants.id, {
+      onDelete: "restrict",
+    }),
     signerType: signerType("signer_type").notNull(),
     signatureUrl: text("signature_url").notNull(),
     signedAt: timestamp("signed_at", { withTimezone: true })
@@ -529,12 +490,12 @@ export const signatures = pgTable(
   },
   (t) => [
     index("signatures_session_id_idx").on(t.sessionId),
-    // Teilnehmer-Signaturen müssen genau eine course_participant-Zeile referenzieren,
-    // Coach-Signaturen dürfen das nicht (sie gehören dem Coach der Session, nicht einem Teilnehmer).
+    // Teilnehmer-Signaturen müssen genau einen Kunden (participant) referenzieren,
+    // Coach-Signaturen dürfen das nicht (sie gehören dem Coach der Session, nicht dem Kunden).
     check(
-      "signatures_signer_type_cp_consistency",
-      sql`(${t.signerType} = 'participant' AND ${t.courseParticipantId} IS NOT NULL)
-         OR (${t.signerType} = 'coach' AND ${t.courseParticipantId} IS NULL)`,
+      "signatures_signer_type_participant_consistency",
+      sql`(${t.signerType} = 'participant' AND ${t.participantId} IS NOT NULL)
+         OR (${t.signerType} = 'coach' AND ${t.participantId} IS NULL)`,
     ),
   ],
 );
@@ -778,12 +739,13 @@ export const abschlussberichte = pgTable(
     // Suche-Indizes für die Bildungsträger-Liste (TN-Name, Kd-Nr).
     index("abschlussberichte_tn_nachname_idx").on(t.tnNachname),
     index("abschlussberichte_tn_kunden_nr_idx").on(t.tnKundenNr),
-    // Integritäts-Anker für Kurs-gebundene BERs: muss eine echte Enrollment-
-    // Zeile geben. NULL-tolerant: bei Ad-hoc-Rows sind courseId/participantId
-    // null, dann wird der FK von Postgres übersprungen (NULL ≠ NULL).
+    // Integritäts-Anker für Kurs-gebundene BERs: der (course, participant) muss
+    // der 1:1-Paarung des Kurses entsprechen (courses.id ↔ courses.participant_id).
+    // NULL-tolerant: bei Ad-hoc-Rows sind courseId/participantId null, dann wird
+    // der FK von Postgres übersprungen (NULL ≠ NULL).
     foreignKey({
       columns: [t.courseId, t.participantId],
-      foreignColumns: [courseParticipants.courseId, courseParticipants.participantId],
+      foreignColumns: [courses.id, courses.participantId],
       name: "abschlussberichte_course_participant_enrollment_fk",
     }).onDelete("cascade"),
     // Submit-Invariante: 'submitted' nur mit Timestamp UND bestandener Prüfung.
@@ -817,8 +779,6 @@ export type Bedarfstraeger = typeof bedarfstraeger.$inferSelect;
 export type NewBedarfstraeger = typeof bedarfstraeger.$inferInsert;
 export type Participant = typeof participants.$inferSelect;
 export type NewParticipant = typeof participants.$inferInsert;
-export type CourseParticipant = typeof courseParticipants.$inferSelect;
-export type NewCourseParticipant = typeof courseParticipants.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type ParticipantAccessToken =

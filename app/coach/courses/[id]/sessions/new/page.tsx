@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
@@ -37,36 +37,17 @@ export default async function NewSessionPage({ params }: Props) {
 
   if (!course) notFound();
 
-  // Alle TN des Kurses für die Anwesenheits-Auswahl. Default: alle
-  // vorausgewählt (Standard-AVGS-Annahme „alle dabei").
-  const courseTns = await db
-    .select({
-      id: schema.courseParticipants.id,
-      name: schema.participants.name,
-    })
-    .from(schema.courseParticipants)
-    .innerJoin(
-      schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
-    )
-    .where(eq(schema.courseParticipants.courseId, course.id))
-    .orderBy(asc(schema.participants.name));
-
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Neue Session</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Neuer Termin</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Eine Kurseinheit erfassen. Coach-Signatur und Teilnehmer-Signaturen
-          erfolgen im nächsten Schritt.
+          Einen Termin erfassen. Coach-Signatur und Teilnehmer-Signatur erfolgen
+          im nächsten Schritt.
         </p>
       </header>
 
-      <SessionForm
-        courseId={course.id}
-        courseTitle={course.title}
-        courseTns={courseTns}
-      />
+      <SessionForm courseId={course.id} courseTitle={course.title} />
     </div>
   );
 }

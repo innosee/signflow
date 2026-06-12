@@ -34,16 +34,12 @@ async function requireOwnedTnContext(
   const [row] = await db
     .select({ id: schema.courses.id })
     .from(schema.courses)
-    .innerJoin(
-      schema.courseParticipants,
-      eq(schema.courseParticipants.courseId, schema.courses.id),
-    )
     .where(
       and(
         eq(schema.courses.id, courseId),
         eq(schema.courses.coachId, coachId),
         isNull(schema.courses.deletedAt),
-        eq(schema.courseParticipants.participantId, participantId),
+        eq(schema.courses.participantId, participantId),
       ),
     )
     .limit(1);

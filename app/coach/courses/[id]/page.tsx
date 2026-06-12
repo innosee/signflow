@@ -90,22 +90,21 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       phone: schema.participants.phone,
       kundenNr: schema.participants.kundenNr,
     })
-    .from(schema.courseParticipants)
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
-    .where(eq(schema.courseParticipants.courseId, id))
+    .where(eq(schema.courses.id, id))
     .orderBy(asc(schema.participants.name));
 
   // SMS ist Coach-getriggert per-TN (siehe SmsResendButton), nicht Bulk.
   // Feature-Gate steuert nur, ob der Per-TN-Button überhaupt erscheint.
   const smsEnabled = isSmsEnabled();
 
-  // Sessions + aggregierte Counts pro Session. signatures + session_participants
-  // beide via leftJoin → multipliziert Rows aus, deshalb DISTINCT-Counts.
-  // Zeigt "Coach ✓ · 2/3 TN" mit enrolled = explizit für die Session
-  // ausgewählte TN (nicht alle Kurs-TN).
+  // Termine + aggregierte Signatur-Counts pro Termin. 1:1: jeder Termin gehört
+  // dem einen Kunden, also "Coach ✓ · 0/1 TN". DISTINCT-Count, weil der
+  // signatures-leftJoin Rows ausmultipliziert.
   const sessions = await db
     .select({
       id: schema.sessions.id,
@@ -117,16 +116,11 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       status: schema.sessions.status,
       coachSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'coach')::int`,
       participantsSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'participant')::int`,
-      enrolledTns: sql<number>`count(distinct ${schema.sessionParticipants.id})::int`,
     })
     .from(schema.sessions)
     .leftJoin(
       schema.signatures,
       eq(schema.signatures.sessionId, schema.sessions.id),
-    )
-    .leftJoin(
-      schema.sessionParticipants,
-      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
     )
     .where(
       and(
@@ -250,36 +244,34 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="flex items-center justify-between border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">
-            Sessions ({sessions.length})
+            Termine ({sessions.length})
           </h2>
           {impersonating ? (
             <span
               title="Während Impersonation nicht möglich"
               className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white opacity-40"
             >
-              + Session anlegen
+              + Termin anlegen
             </span>
           ) : (
             <Link
               href={`/coach/courses/${course.id}/sessions/new`}
               className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
             >
-              + Session anlegen
+              + Termin anlegen
             </Link>
           )}
         </div>
         {sessions.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-zinc-500">
-            Noch keine Sessions. Lege die erste Kurseinheit an.
+            Noch keine Termine. Lege den ersten an.
           </p>
         ) : (
           <ul className="divide-y divide-zinc-200 text-sm">
             {sessions.map((s) => {
               const coachSigned = s.coachSigned > 0;
-              // tnTotal = explizit für diese Session ausgewählte TN (nicht
-              // alle Kurs-TN). Fallback auf participants.length nur falls
-              // (sehr unwahrscheinlich) keine SP-Einträge existieren.
-              const tnTotal = s.enrolledTns > 0 ? s.enrolledTns : participants.length;
+              // 1:1: Jeder Termin gehört genau dem einen Kunden des Kurses.
+              const tnTotal = 1;
               const tnSigned = s.participantsSigned;
               return (
                 <li key={s.id} className="px-6 py-4 space-y-2">
@@ -351,8 +343,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             <div>
               <h2 className="text-lg font-semibold">Abschluss</h2>
               <p className="mt-1 text-sm text-zinc-600">
-                Wenn alle Sessions signiert sind, sende den Teilnehmern die
-                Vorschau. Nach deren Freigabe versiegelst du das Dokument mit
+                Wenn alle Termine signiert sind, sende dem Teilnehmer die
+                Vorschau. Nach dessen Freigabe versiegelst du das Dokument mit
                 FES und übergibst es an deinen Bildungsträger zur Übermittlung
                 an die Agentur für Arbeit.
               </p>
@@ -378,11 +370,11 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
         <div className="divide-y divide-zinc-200">
           <Step
             index={1}
-            title="Sessions vollständig signiert"
+            title="Termine vollständig signiert"
             done={allSessionsCompleted}
             subtitle={
               allSessionsCompleted
-                ? "Alle Einheiten von Coach und Teilnehmern bestätigt."
+                ? "Alle Termine von Coach und Teilnehmer bestätigt."
                 : `${sessions.filter((s) => s.status === "completed").length} von ${sessions.length} vollständig.`
             }
           />
@@ -402,7 +394,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 disabled={sessions.length === 0}
                 disabledReason={
                   sessions.length === 0
-                    ? "Erst Sessions anlegen, dann prüfen"
+                    ? "Erst Termine anlegen, dann prüfen"
                     : undefined
                 }
               />
@@ -415,7 +407,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             subtitle={
               course.abgeschlossenAt
                 ? `Abgeschlossen am ${new Date(course.abgeschlossenAt).toLocaleString("de-DE")}.`
-                : `${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Coach-Bestätigung nötig: keine weiteren Sessions kommen mehr.`
+                : `${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Coach-Bestätigung nötig: keine weiteren Termine kommen mehr.`
             }
           >
             {!impersonating && !course.abgeschlossenAt && (
@@ -448,7 +440,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   participants.length === 0
                     ? "Keine Teilnehmer im Kurs"
                     : !allSessionsCompleted
-                      ? "Erst wenn alle Sessions signiert sind"
+                      ? "Erst wenn alle Termine signiert sind"
                       : !course.anwCheckPassedAt
                         ? "ANW-Compliance-Check muss durchlaufen sein"
                         : !course.abgeschlossenAt
@@ -480,7 +472,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 }
                 disabledReason={
                   !allSessionsCompleted
-                    ? "Erst wenn alle Sessions signiert sind"
+                    ? "Erst wenn alle Termine signiert sind"
                     : !allApproved
                       ? "Mindestens ein Teilnehmer hat noch nicht freigegeben"
                       : !course.anwCheckPassedAt
@@ -512,12 +504,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </h2>
           {!impersonating && (
             <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-start">
-              <Link
-                href={`/coach/courses/${course.id}/participants/new`}
-                className="rounded-lg border border-zinc-500 px-3 py-2 text-sm font-medium hover:bg-zinc-50"
-              >
-                + Teilnehmer hinzufügen
-              </Link>
+              {/* 1:1: Kein nachträgliches Hinzufügen — der Kunde wird bei der
+                  Anlage durch den Bildungsträger gesetzt. */}
               <NotifyParticipantsButton
                 courseId={course.id}
                 participantCount={participants.length}

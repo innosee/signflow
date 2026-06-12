@@ -16,8 +16,8 @@ export function ApproveForm({ token }: { token: string }) {
       <label className="flex items-start gap-2 text-sm">
         <input name="confirm" type="checkbox" required className="mt-0.5" />
         <span>
-          Ich habe den Stundennachweis geprüft und gebe ihn hiermit für die
-          Übermittlung an die Agentur für Arbeit frei.
+          Ich habe den Stundennachweis geprüft und bestätige die inhaltliche
+          Richtigkeit meiner Anwesenheiten.
         </span>
       </label>
       {state?.error && (

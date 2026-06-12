@@ -26,7 +26,7 @@ export function SignatureSetup({ existingUrl }: { existingUrl: string | null }) 
           {existingUrl ? "Neue Unterschrift aufnehmen" : "Unterschrift aufnehmen"}
         </h2>
         <p className="mt-1 mb-4 text-sm text-zinc-600">
-          Diese Unterschrift wird einmalig erfasst und pro Session mit aktiver
+          Diese Unterschrift wird einmalig erfasst und pro Termin mit aktiver
           Bestätigung (Klick + Zeitstempel) in den Anwesenheitsnachweis
           eingebunden — du musst sie also nicht pro Termin neu leisten.
         </p>

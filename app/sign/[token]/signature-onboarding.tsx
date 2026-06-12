@@ -19,7 +19,7 @@ export function ParticipantSignatureOnboarding({
         Hallo {participantName} — einmalig Unterschrift anlegen
       </h2>
       <p className="text-sm text-zinc-600">
-        Damit du die einzelnen Einheiten schnell bestätigen kannst, brauchen
+        Damit du die einzelnen Termine schnell bestätigen kannst, brauchen
         wir deine Unterschrift einmal. Die wird dann bei jeder Bestätigung mit
         aktivem Klick + Zeitstempel in den AfA-Nachweis übernommen.
       </p>

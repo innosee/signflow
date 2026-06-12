@@ -19,21 +19,16 @@ export function SessionEditForm({
   courseId,
   courseTitle,
   session,
-  courseTns,
-  enrolledIds,
 }: {
   courseId: string;
   courseTitle: string;
   session: SessionInitial;
-  courseTns: Array<{ id: string; name: string }>;
-  enrolledIds: string[];
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     updateSession,
     undefined,
   );
   const [isErstgespraech, setIsErstgespraech] = useState(session.isErstgespraech);
-  const enrolledSet = new Set(enrolledIds);
 
   return (
     <form action={action} className="space-y-8">
@@ -42,9 +37,9 @@ export function SessionEditForm({
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6 space-y-4">
         <header className="space-y-1">
-          <h2 className="text-lg font-semibold">Session bearbeiten</h2>
+          <h2 className="text-lg font-semibold">Termin bearbeiten</h2>
           <p className="text-sm text-zinc-500">
-            Für Kurs: <span className="font-medium">{courseTitle}</span>
+            Für Kunde: <span className="font-medium">{courseTitle}</span>
           </p>
         </header>
 
@@ -161,34 +156,6 @@ export function SessionEditForm({
           />
         </label>
 
-        <fieldset className="rounded-lg border border-zinc-300 bg-zinc-50 p-4 space-y-2">
-          <legend className="px-1 text-sm font-medium text-zinc-800">
-            Anwesende Teilnehmer:innen{" "}
-            <span className="text-red-600">*</span>
-          </legend>
-          {courseTns.length === 0 ? (
-            <p className="text-xs text-zinc-600">
-              Noch kein Teilnehmer im Kurs.
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {courseTns.map((tn) => (
-                <label
-                  key={tn.id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    name="courseParticipantIds"
-                    value={tn.id}
-                    defaultChecked={enrolledSet.has(tn.id)}
-                  />
-                  <span>{tn.name}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </fieldset>
       </section>
 
       {state?.error && (

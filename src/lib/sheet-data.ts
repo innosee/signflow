@@ -55,29 +55,27 @@ export async function loadStundennachweisSheet(params: {
     .limit(1);
   if (!ctx) return null;
 
+  // 1:1: Der angefragte Teilnehmer muss der Kunde dieses Kurses sein.
   const [enrollment] = await db
     .select({
-      cpId: schema.courseParticipants.id,
       participantName: schema.participants.name,
       kundenNr: schema.participants.kundenNr,
     })
-    .from(schema.courseParticipants)
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(
-        eq(schema.courseParticipants.courseId, params.courseId),
-        eq(schema.courseParticipants.participantId, params.participantId),
+        eq(schema.courses.id, params.courseId),
+        eq(schema.courses.participantId, params.participantId),
       ),
     )
     .limit(1);
   if (!enrollment) return null;
 
-  // Nur Sessions, für die dieser TN explizit enrolled ist. Sonst würden
-  // im pro-TN-Sheet Sessions auftauchen, an denen er gar nicht teilgenommen
-  // hat — verzerrt die UE-Summe und macht den Nachweis fachlich falsch.
+  // 1:1: Alle nicht-gelöschten Termine des Kurses gehören dem einen Kunden.
   const sessions = await db
     .select({
       id: schema.sessions.id,
@@ -89,15 +87,10 @@ export async function loadStundennachweisSheet(params: {
       geeignet: schema.sessions.geeignet,
     })
     .from(schema.sessions)
-    .innerJoin(
-      schema.sessionParticipants,
-      eq(schema.sessionParticipants.sessionId, schema.sessions.id),
-    )
     .where(
       and(
         eq(schema.sessions.courseId, params.courseId),
         isNull(schema.sessions.deletedAt),
-        eq(schema.sessionParticipants.courseParticipantId, enrollment.cpId),
       ),
     )
     .orderBy(asc(schema.sessions.sessionDate));
@@ -125,7 +118,7 @@ export async function loadStundennachweisSheet(params: {
           eq(schema.signatures.signerType, "coach"),
           and(
             eq(schema.signatures.signerType, "participant"),
-            eq(schema.signatures.courseParticipantId, enrollment.cpId),
+            eq(schema.signatures.participantId, params.participantId),
           ),
         ),
       ),

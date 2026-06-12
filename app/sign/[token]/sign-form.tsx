@@ -22,7 +22,7 @@ export function SignForm({
       <input type="hidden" name="sessionId" value={sessionId} />
       <label className="flex items-start gap-2 text-sm">
         <input name="confirm" type="checkbox" required className="mt-0.5" />
-        <span>Ich bestätige meine Teilnahme an dieser Einheit.</span>
+        <span>Ich bestätige meine Teilnahme an diesem Termin.</span>
       </label>
       {state?.error && (
         <p className="text-xs text-red-700" role="alert">

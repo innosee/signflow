@@ -37,7 +37,7 @@ export function MarkAbgeschlossenButton({
       onSubmit={(e) => {
         if (
           !window.confirm(
-            "Maßnahme jetzt als abgeschlossen markieren?\n\nDanach kann sie versiegelt werden. Falls du noch Sessions ergänzt oder eine zurücksetzt, musst du diese Bestätigung erneut geben.",
+            "Maßnahme jetzt als abgeschlossen markieren?\n\nDanach kann sie versiegelt werden. Falls du noch Termine ergänzt oder einen zurücksetzt, musst du diese Bestätigung erneut geben.",
           )
         ) {
           e.preventDefault();

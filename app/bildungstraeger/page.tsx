@@ -87,23 +87,19 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
       courseTitle: schema.courses.title,
       coachName: schema.users.name,
       courseStatus: schema.courses.status,
-      tnCount: sql<number>`count(distinct ${schema.courseParticipants.participantId})::int`,
+      tnCount: sql<number>`count(distinct ${schema.courses.participantId})::int`,
       submittedCount: sql<number>`count(distinct ${schema.abschlussberichte.participantId}) filter (where ${schema.abschlussberichte.status} = 'submitted')::int`,
       draftCount: sql<number>`count(distinct ${schema.abschlussberichte.participantId}) filter (where ${schema.abschlussberichte.status} = 'draft')::int`,
     })
     .from(schema.courses)
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
     .leftJoin(
-      schema.courseParticipants,
-      eq(schema.courseParticipants.courseId, schema.courses.id),
-    )
-    .leftJoin(
       schema.abschlussberichte,
       and(
         eq(schema.abschlussberichte.courseId, schema.courses.id),
         eq(
           schema.abschlussberichte.participantId,
-          schema.courseParticipants.participantId,
+          schema.courses.participantId,
         ),
       ),
     )

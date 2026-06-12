@@ -8,12 +8,9 @@ import { createSession, type SessionFormState } from "../../actions";
 export function SessionForm({
   courseId,
   courseTitle,
-  courseTns,
 }: {
   courseId: string;
   courseTitle: string;
-  /** Alle eingeschriebenen TN des Kurses (id = course_participant_id). */
-  courseTns: Array<{ id: string; name: string }>;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
@@ -27,9 +24,9 @@ export function SessionForm({
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6 space-y-4">
         <header className="space-y-1">
-          <h2 className="text-lg font-semibold">Neue Session</h2>
+          <h2 className="text-lg font-semibold">Neuer Termin</h2>
           <p className="text-sm text-zinc-500">
-            Für Kurs: <span className="font-medium">{courseTitle}</span>
+            Für Kunde: <span className="font-medium">{courseTitle}</span>
           </p>
         </header>
 
@@ -131,37 +128,6 @@ export function SessionForm({
           />
         </label>
 
-        <fieldset className="rounded-lg border border-zinc-300 bg-zinc-50 p-4 space-y-2">
-          <legend className="px-1 text-sm font-medium text-zinc-800">
-            Anwesende Teilnehmer:innen{" "}
-            <span className="text-red-600">*</span>
-          </legend>
-          {courseTns.length === 0 ? (
-            <p className="text-xs text-zinc-600">
-              Noch kein Teilnehmer im Kurs — bitte erst Teilnehmer hinzufügen.
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {courseTns.map((tn) => (
-                <label
-                  key={tn.id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    name="courseParticipantIds"
-                    value={tn.id}
-                    defaultChecked
-                  />
-                  <span>{tn.name}</span>
-                </label>
-              ))}
-              <p className="pt-1 text-xs text-zinc-500">
-                Standard ist alle dabei. Hake ab, wer gefehlt hat.
-              </p>
-            </div>
-          )}
-        </fieldset>
       </section>
 
       {state?.error && (
@@ -176,7 +142,7 @@ export function SessionForm({
           disabled={pending}
           className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
         >
-          {pending ? "Wird angelegt…" : "Session anlegen"}
+          {pending ? "Wird angelegt…" : "Termin anlegen"}
         </button>
         <Link
           href={`/coach/courses/${courseId}`}

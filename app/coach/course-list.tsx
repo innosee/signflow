@@ -46,7 +46,8 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
   if (courses.length === 0) {
     return (
       <p className="px-6 py-10 text-center text-sm text-zinc-500">
-        Noch keine Kurse. Lege deinen ersten Kurs an, um loszulegen.
+        Noch keine Kunden zugewiesen. Sobald der Bildungsträger dir einen
+        Kunden zuweist, erscheint er hier.
       </p>
     );
   }

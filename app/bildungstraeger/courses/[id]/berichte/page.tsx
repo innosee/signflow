@@ -55,10 +55,10 @@ export default async function BildungstraegerCourseBerListPage({ params }: Props
       berSubmittedAt: schema.abschlussberichte.submittedAt,
       berUpdatedAt: schema.abschlussberichte.updatedAt,
     })
-    .from(schema.courseParticipants)
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .leftJoin(
       schema.abschlussberichte,
@@ -66,11 +66,11 @@ export default async function BildungstraegerCourseBerListPage({ params }: Props
         eq(schema.abschlussberichte.courseId, courseId),
         eq(
           schema.abschlussberichte.participantId,
-          schema.courseParticipants.participantId,
+          schema.courses.participantId,
         ),
       ),
     )
-    .where(eq(schema.courseParticipants.courseId, courseId))
+    .where(eq(schema.courses.id, courseId))
     .orderBy(asc(schema.participants.name));
 
   return (

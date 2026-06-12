@@ -17,10 +17,10 @@ const countStar = () => sql<number>`count(*)::int`;
  * das Resultat auf `sessions.status`. Wird nach Coach- und Teilnehmer-Signatur
  * aufgerufen, damit die UI (Geleistete UE, Badges) konsistent bleibt.
  *
- * Regeln:
- * - Keine Coach-Signatur                      → `pending`
- * - Coach hat signiert, aber noch TN offen    → `coach_signed`
- * - Coach + alle eingeschriebenen TN signiert → `completed`
+ * Regeln (1:1-Modell — ein Termin gehört genau dem einen Kunden des Kurses):
+ * - Keine Coach-Signatur               → `pending`
+ * - Coach hat signiert, TN noch offen  → `coach_signed`
+ * - Coach + Kunde signiert             → `completed`
  *
  * Akzeptiert optional eine laufende Transaktion, damit Insert + Status-Update
  * atomar passieren.
@@ -48,15 +48,8 @@ export async function recomputeSessionStatus(
     .limit(1);
   const coachSigned = !!coachSig;
 
-  // Enrolled-Count = TN, die EXPLIZIT für diese Session ausgewählt sind
-  // (session_participants), nicht alle Kurs-TN. Erlaubt 1:1-Termine
-  // innerhalb von Gruppenkursen oder Abwesenheiten ohne dass die Session
-  // ewig auf eine TN-Signatur wartet, die nie kommt.
-  const [{ count: enrolledCount } = { count: 0 }] = await executor
-    .select({ count: countStar() })
-    .from(schema.sessionParticipants)
-    .where(eq(schema.sessionParticipants.sessionId, sess.id));
-
+  // 1:1: Ein Termin hat genau einen Kunden. Sobald dessen TN-Signatur vorliegt
+  // (signer_type='participant'), ist der Termin vollständig.
   const [{ count: tnSigned } = { count: 0 }] = await executor
     .select({ count: countStar() })
     .from(schema.signatures)
@@ -70,7 +63,7 @@ export async function recomputeSessionStatus(
   let next: "pending" | "coach_signed" | "completed";
   if (!coachSigned) {
     next = "pending";
-  } else if (enrolledCount > 0 && tnSigned >= enrolledCount) {
+  } else if (tnSigned >= 1) {
     next = "completed";
   } else {
     next = "coach_signed";

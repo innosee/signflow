@@ -101,9 +101,9 @@ export default async function ParticipantSignPage({ params }: Props) {
         <header className="preview-header">
           <h1 className="text-lg font-semibold">Dein Stundennachweis</h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Bitte prüfe das Dokument — so wird es an die Agentur für Arbeit
-            gemeldet. Mit der Freigabe bestätigst du die inhaltliche
-            Richtigkeit.
+            Bitte prüfe deinen Stundennachweis auf Richtigkeit. Mit der
+            Freigabe bestätigst du, dass deine Anwesenheiten korrekt erfasst
+            sind.
           </p>
         </header>
         <div className="preview-sheet">
@@ -136,10 +136,11 @@ export default async function ParticipantSignPage({ params }: Props) {
           </h1>
         </header>
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
-          Danke, {resolved.participantName}! Du hast den Nachweis freigegeben.
-          Dein Coach setzt im nächsten Schritt das digitale Siegel und übergibt
-          das Dokument an den Bildungsträger, der die Übermittlung an die
-          Agentur für Arbeit übernimmt.
+          <strong>
+            Danke, {resolved.participantName} – Vorgang abgeschlossen.
+          </strong>{" "}
+          Du hast deinen Stundennachweis geprüft und freigegeben. Du musst
+          nichts weiter tun.
         </div>
         <DataProtectionNotice />
       </div>
@@ -156,7 +157,7 @@ export default async function ParticipantSignPage({ params }: Props) {
         <p className="mt-1 text-sm text-zinc-600">
           {hasSignature
             ? `Hallo ${resolved.participantName}, bitte bestätige die unten aufgeführten Termine. Du kannst alle offenen Einheiten in einem Rutsch erledigen.`
-            : "Kurze Einrichtung, dann kannst du die einzelnen Einheiten bestätigen."}
+            : "Kurze Einrichtung, dann kannst du die einzelnen Termine bestätigen."}
         </p>
       </header>
 
@@ -167,7 +168,7 @@ export default async function ParticipantSignPage({ params }: Props) {
         />
       ) : open.length === 0 ? (
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
-          Alle Einheiten sind bestätigt – danke! Sobald dein Coach den Kurs
+          Alle Termine sind bestätigt – danke! Sobald dein Coach die Maßnahme
           abschließt, bekommst du eine Vorschau zur finalen Freigabe.
         </div>
       ) : (

@@ -45,12 +45,8 @@ export default async function CheckerDashboard() {
     })
     .from(schema.courses)
     .innerJoin(
-      schema.courseParticipants,
-      eq(schema.courseParticipants.courseId, schema.courses.id),
-    )
-    .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .leftJoin(
       schema.abschlussberichte,
@@ -58,7 +54,7 @@ export default async function CheckerDashboard() {
         eq(schema.abschlussberichte.courseId, schema.courses.id),
         eq(
           schema.abschlussberichte.participantId,
-          schema.courseParticipants.participantId,
+          schema.courses.participantId,
         ),
       ),
     )

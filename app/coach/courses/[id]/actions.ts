@@ -123,26 +123,26 @@ function validateSessionFormFields(formData: FormData):
  * Spalte nachrüsten.
  */
 async function autoNotifyAllParticipants(courseId: string): Promise<void> {
-  const enrolled = await db
-    .select({ participantId: schema.courseParticipants.participantId })
-    .from(schema.courseParticipants)
-    .where(eq(schema.courseParticipants.courseId, courseId));
+  // 1:1: Der Kurs hat genau einen Kunden.
+  const [course] = await db
+    .select({ participantId: schema.courses.participantId })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, courseId))
+    .limit(1);
+  if (!course) return;
 
-  for (const p of enrolled) {
-    try {
-      await sendParticipantInvite({
-        courseId,
-        participantId: p.participantId,
-      });
-    } catch (err) {
-      // Mailversand-Fehler dürfen die Coach-Signatur nicht blockieren —
-      // der Coach kann über "Teilnehmer benachrichtigen" manuell
-      // nachlegen.
-      console.error(
-        `auto-notify failed for participant ${p.participantId}:`,
-        err,
-      );
-    }
+  try {
+    await sendParticipantInvite({
+      courseId,
+      participantId: course.participantId,
+    });
+  } catch (err) {
+    // Mailversand-Fehler dürfen die Coach-Signatur nicht blockieren —
+    // der Coach kann über "Teilnehmer benachrichtigen" manuell nachlegen.
+    console.error(
+      `auto-notify failed for participant ${course.participantId}:`,
+      err,
+    );
   }
 }
 
@@ -181,27 +181,8 @@ export async function createSession(
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
 
-  // course_participant_ids aus dem Form: Multi-Checkbox-Group, FormData
-  // liefert `getAll(...)` → string[]. Validierung: alle IDs müssen zu
-  // diesem Kurs gehören (sonst könnte ein DevTools-Edit fremde TN
-  // verlinken). Mind. 1 TN ist Pflicht — sonst wäre die Session
-  // teilnehmer-leer, was sinnlos ist.
-  const participantIds = formData
-    .getAll("courseParticipantIds")
-    .map((v) => String(v).trim())
-    .filter(Boolean);
-  if (participantIds.length === 0) {
-    return { error: "Mindestens ein Teilnehmer muss ausgewählt sein." };
-  }
-  const validCpIds = await db
-    .select({ id: schema.courseParticipants.id })
-    .from(schema.courseParticipants)
-    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
-  const validIdSet = new Set(validCpIds.map((r) => r.id));
-  if (participantIds.some((id) => !validIdSet.has(id))) {
-    return { error: "Ein ausgewählter Teilnehmer gehört nicht zu diesem Kurs." };
-  }
-
+  // 1:1: Der Termin gehört implizit dem einen Kunden des Kurses — keine
+  // Teilnehmer-Auswahl pro Termin mehr.
   try {
     await db.transaction(async (tx) => {
       const [created] = await tx
@@ -217,15 +198,7 @@ export async function createSession(
         })
         .returning({ id: schema.sessions.id });
       if (!created) throw new Error("INSERT_FAILED");
-      // Pro ausgewähltem TN ein session_participants-Eintrag — das ist
-      // die explizite Anwesenheits-Markierung pro Session.
-      await tx.insert(schema.sessionParticipants).values(
-        participantIds.map((cpId) => ({
-          sessionId: created.id,
-          courseParticipantId: cpId,
-        })),
-      );
-      // FES-Gates resetten: neue Session ändert den Stand → alte
+      // FES-Gates resetten: neuer Termin ändert den Stand → alte
       // Maßnahme-Abschluss-Bestätigung + ANW-Check-Status sind nicht
       // mehr aussagekräftig.
       await tx
@@ -235,7 +208,7 @@ export async function createSession(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { error: `Session konnte nicht angelegt werden (${message}).` };
+    return { error: `Termin konnte nicht angelegt werden (${message}).` };
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
@@ -296,22 +269,6 @@ export async function updateSession(
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
 
-  const participantIds = formData
-    .getAll("courseParticipantIds")
-    .map((v) => String(v).trim())
-    .filter(Boolean);
-  if (participantIds.length === 0) {
-    return { error: "Mindestens ein Teilnehmer muss ausgewählt sein." };
-  }
-  const validCpIds = await db
-    .select({ id: schema.courseParticipants.id })
-    .from(schema.courseParticipants)
-    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
-  const validIdSet = new Set(validCpIds.map((r) => r.id));
-  if (participantIds.some((id) => !validIdSet.has(id))) {
-    return { error: "Ein ausgewählter Teilnehmer gehört nicht zu diesem Kurs." };
-  }
-
   try {
     await db.transaction(async (tx) => {
       await tx
@@ -325,19 +282,6 @@ export async function updateSession(
           geeignet: v.geeignet,
         })
         .where(eq(schema.sessions.id, sessionId));
-      // Session-Participants neu setzen: kompletter Replace statt Diff,
-      // weil unsignierte Sessions sowieso keine Signaturen mit Foreign-
-      // Keys auf SP haben (Signatur referenziert course_participant
-      // direkt, nicht das SP-Mapping).
-      await tx
-        .delete(schema.sessionParticipants)
-        .where(eq(schema.sessionParticipants.sessionId, sessionId));
-      await tx.insert(schema.sessionParticipants).values(
-        participantIds.map((cpId) => ({
-          sessionId,
-          courseParticipantId: cpId,
-        })),
-      );
       // FES-Gates resetten — Inhalts-Edit ändert den Stand.
       await tx
         .update(schema.courses)
@@ -346,7 +290,7 @@ export async function updateSession(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { error: `Session konnte nicht aktualisiert werden (${message}).` };
+    return { error: `Termin konnte nicht aktualisiert werden (${message}).` };
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
@@ -392,7 +336,7 @@ export async function reopenSession(
   if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
     return {
       error:
-        "Dieser Kurs ist bereits mit FES versiegelt und kann rechtlich nicht mehr verändert werden. Bitte einen neuen Kurs anlegen.",
+        "Dieser Kunde ist bereits mit FES versiegelt und kann rechtlich nicht mehr verändert werden. Für eine neue Maßnahme bitte den Bildungsträger einen neuen Kunden anlegen lassen.",
     };
   }
 
@@ -460,144 +404,32 @@ export async function reopenSession(
   );
 }
 
-export type AddParticipantState =
-  | { error?: string; reused?: boolean }
-  | undefined;
-
 function looksLikeEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
 
-/**
- * Nachträglich einen Teilnehmer zu einem bestehenden Kurs einschreiben.
- * Analog zur Teilnehmer-Logik in `createCourse`: existiert die E-Mail
- * schon in `participants` → bestehender Datensatz wird wiederverwendet
- * (Name + Kunden-Nr. bleiben), ansonsten neuer Teilnehmer anlegen. In
- * beiden Fällen landet eine Zeile in `course_participants`.
- */
-export async function addParticipant(
-  _prev: AddParticipantState,
-  formData: FormData,
-): Promise<AddParticipantState> {
-  const session = await requireSigningEnabled();
-  assertNotImpersonating(session);
-  const coachId = session.user.id;
-  const tenantId = getTenantId(session);
-
-  const courseId = String(formData.get("courseId") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const kundenNr = String(formData.get("kundenNr") ?? "").trim();
-  const phoneRaw = String(formData.get("phone") ?? "").trim();
-
-  if (!courseId) return { error: "Kurs fehlt." };
-  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
-  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
-
-  if (!name || !email || !kundenNr) {
-    return { error: "Name, E-Mail und Kunden-Nr. sind Pflicht." };
-  }
-  if (!looksLikeEmail(email)) {
-    // E-Mail nicht in die Fehlermeldung echo'en — PII gehört nicht in
-    // Error-Logs oder Browser-DevTools.
-    return { error: "Ungültige E-Mail-Adresse." };
-  }
-
-  // Phone ist optional; wenn gesetzt, normalisieren + strikt validieren.
-  // Bei Reuse eines bestehenden TN überschreiben wir die hinterlegte Nummer
-  // bewusst NICHT — sonst würde ein zweiter Coach versehentlich die im
-  // anderen Kurs eingetragene Nummer überschreiben.
-  let phone: string | null = null;
-  if (phoneRaw.length > 0) {
-    const normalized = normalizePhoneInput(phoneRaw);
-    if (!isValidE164(normalized)) {
-      return {
-        error:
-          "Mobilnummer ist ungültig — bitte im Format +4915712345678 eingeben (oder Feld leer lassen).",
-      };
-    }
-    phone = normalized;
-  }
-
-  let reused = false;
-  try {
-    await db.transaction(async (tx) => {
-      // Tenant-scoped Lookup — Email ist nur innerhalb eines Tenants unique.
-      const [existing] = await tx
-        .select({ id: schema.participants.id })
-        .from(schema.participants)
-        .where(
-          and(
-            eq(schema.participants.email, email),
-            eq(schema.participants.tenantId, tenantId),
-          ),
-        )
-        .limit(1);
-
-      let participantId: string;
-      if (existing) {
-        participantId = existing.id;
-        reused = true;
-      } else {
-        const [created] = await tx
-          .insert(schema.participants)
-          .values({ tenantId, name, email, kundenNr, phone })
-          .returning({ id: schema.participants.id });
-        if (!created) throw new Error("PARTICIPANT_INSERT_FAILED");
-        participantId = created.id;
-      }
-
-      // Double-Enrollment vermeiden — es gibt einen UNIQUE-Index auf
-      // (courseId, participantId), der uns sonst einen rohen Fehler gäbe.
-      const [already] = await tx
-        .select({ id: schema.courseParticipants.id })
-        .from(schema.courseParticipants)
-        .where(
-          and(
-            eq(schema.courseParticipants.courseId, ownedCourseId),
-            eq(schema.courseParticipants.participantId, participantId),
-          ),
-        )
-        .limit(1);
-      if (already) throw new Error("ALREADY_ENROLLED");
-
-      await tx.insert(schema.courseParticipants).values({
-        courseId: ownedCourseId,
-        participantId,
-      });
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message === "ALREADY_ENROLLED") {
-      return { error: "Dieser Teilnehmer ist bereits im Kurs." };
-    }
-    return { error: `Teilnehmer konnte nicht hinzugefügt werden (${message}).` };
-  }
-
-  redirect(
-    `/coach/courses/${ownedCourseId}${reused ? "?reused=1" : ""}`,
-  );
-}
+// 1:1-Modell: `addParticipant` ist entfallen — der eine Kunde wird bei der
+// Anlage (durch den Bildungsträger) gesetzt, nicht nachträglich eingeschrieben.
+// Stammdaten-Korrekturen laufen über `updateParticipant`.
 
 export type UpdateParticipantState = { error?: string } | undefined;
 
 /**
  * Update der TN-Stammdaten (Name, Email, Kunden-Nr., Phone). Coach muss
- * den Kurs besitzen, kein Impersonation. TN ist über `course_participants`
- * an den Kurs gebunden — wir prüfen die Paarung, bevor der zentrale
- * `participants`-Datensatz angefasst wird, sonst könnte ein Coach durch
- * URL-Manipulation an einen TN ran, den er gar nicht betreut.
+ * den Kurs besitzen, kein Impersonation. Der TN ist im 1:1-Modell über
+ * `courses.participant_id` an den Kurs gebunden — wir prüfen die Paarung,
+ * bevor der zentrale `participants`-Datensatz angefasst wird, sonst könnte
+ * ein Coach durch URL-Manipulation an einen TN ran, den er gar nicht betreut.
  *
  * Email-Wechsel ist erlaubt — `participantId` bleibt stabil, aktive Magic-
  * Link-Tokens hängen nicht an der Mail. Bei Konflikt mit existierender
  * Email im selben Tenant (tenant-scoped UNIQUE) wirft DB und wir geben
  * eine saubere Fehlermeldung zurück.
  *
- * Beachtung: bei Reuse über mehrere Kurse (siehe addParticipant) teilen
- * sich die Kurse den Stammdatensatz. Eine Stammdaten-Änderung wirkt
- * also auf ALLE Kurse, in denen der TN eingeschrieben ist — das ist
- * gewollt (Stammdaten sind eben Stamm). Coach wird durch den Confirm-
- * Step im UI darauf hingewiesen, falls der TN mehrfach enrollt ist.
+ * Beachtung: Derselbe Mensch (gleiche E-Mail) kann Kunde mehrerer Maßnahmen
+ * im selben Tenant sein und teilt sich den `participants`-Stammdatensatz.
+ * Eine Stammdaten-Änderung wirkt damit auf ALLE seine Kurse — das ist
+ * gewollt (Stammdaten sind eben Stamm).
  */
 export async function updateParticipant(
   _prev: UpdateParticipantState,
@@ -643,20 +475,20 @@ export async function updateParticipant(
     phone = normalized;
   }
 
-  // TN muss tatsächlich in diesem Kurs eingeschrieben sein — verhindert,
-  // dass ein Coach einen TN aus einem fremden Kurs ändert. tenant_id
-  // filtert zusätzlich gegen Cross-Tenant-Zugriffe (Defense-in-Depth).
+  // 1:1: Der TN muss der Kunde genau dieses Kurses sein — verhindert, dass ein
+  // Coach einen TN aus einem fremden Kurs ändert. tenant_id filtert zusätzlich
+  // gegen Cross-Tenant-Zugriffe (Defense-in-Depth).
   const [enrollment] = await db
-    .select({ id: schema.courseParticipants.id })
-    .from(schema.courseParticipants)
+    .select({ id: schema.courses.id })
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(
-        eq(schema.courseParticipants.courseId, ownedCourseId),
-        eq(schema.courseParticipants.participantId, participantId),
+        eq(schema.courses.id, ownedCourseId),
+        eq(schema.courses.participantId, participantId),
         eq(schema.participants.tenantId, tenantId),
       ),
     )
@@ -714,16 +546,16 @@ export async function createParticipantQrLink(params: {
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
   const [enrollment] = await db
-    .select({ id: schema.courseParticipants.id })
-    .from(schema.courseParticipants)
+    .select({ id: schema.courses.id })
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(
-        eq(schema.courseParticipants.courseId, ownedCourseId),
-        eq(schema.courseParticipants.participantId, params.participantId),
+        eq(schema.courses.id, ownedCourseId),
+        eq(schema.courses.participantId, params.participantId),
         eq(schema.participants.tenantId, tenantId),
       ),
     )
@@ -791,15 +623,15 @@ export async function notifyParticipants(
       participantId: schema.participants.id,
       email: schema.participants.email,
     })
-    .from(schema.courseParticipants)
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
-    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+    .where(eq(schema.courses.id, ownedCourseId));
 
   if (participants.length === 0) {
-    return { error: "Kurs hat noch keine Teilnehmer." };
+    return { error: "Kurs hat noch keinen Kunden." };
   }
 
   const failedEmails: string[] = [];
@@ -971,15 +803,15 @@ export async function sendPreviewToParticipants(
       participantId: schema.participants.id,
       email: schema.participants.email,
     })
-    .from(schema.courseParticipants)
+    .from(schema.courses)
     .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
-    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+    .where(eq(schema.courses.id, ownedCourseId));
 
   if (participants.length === 0) {
-    return { error: "Kurs hat keine Teilnehmer." };
+    return { error: "Kurs hat keinen Kunden." };
   }
 
   const failedEmails: string[] = [];
@@ -1291,14 +1123,14 @@ export async function sealCourse(
     };
   }
 
-  // Approval-Gate: jeder enrollte Teilnehmer muss freigegeben haben.
+  // Approval-Gate (1:1): der eine Kunde muss freigegeben haben.
   const enrolled = await db
-    .select({ participantId: schema.courseParticipants.participantId })
-    .from(schema.courseParticipants)
-    .where(eq(schema.courseParticipants.courseId, ownedCourseId));
+    .select({ participantId: schema.courses.participantId })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId));
 
   if (enrolled.length === 0) {
-    return { error: "Kurs hat keine Teilnehmer." };
+    return { error: "Kurs hat keinen Kunden." };
   }
 
   const approvals = await db
@@ -1309,7 +1141,8 @@ export async function sealCourse(
   const missing = enrolled.filter((e) => !approvedSet.has(e.participantId));
   if (missing.length > 0) {
     return {
-      error: `Noch ${missing.length} Teilnehmer haben nicht freigegeben — Siegel erst möglich, wenn alle zugestimmt haben.`,
+      error:
+        "Der Kunde hat den Nachweis noch nicht freigegeben — Siegel erst danach möglich.",
     };
   }
 
@@ -1507,7 +1340,7 @@ export async function signSessionAsCoach(
 
       await tx.insert(schema.signatures).values({
         sessionId: sess.id,
-        courseParticipantId: null,
+        participantId: null,
         signerType: "coach",
         signatureUrl: coachSignatureUrl,
         ipAddress,

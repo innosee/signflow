@@ -27,7 +27,7 @@ export function CoachSignForm({
           required
           className="mt-0.5"
         />
-        <span>Ich bestätige diese Einheit.</span>
+        <span>Ich bestätige diesen Termin.</span>
       </label>
       <button
         type="submit"

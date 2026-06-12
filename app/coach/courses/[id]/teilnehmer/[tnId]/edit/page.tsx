@@ -37,12 +37,8 @@ export default async function EditParticipantPage({ params }: Props) {
     })
     .from(schema.courses)
     .innerJoin(
-      schema.courseParticipants,
-      eq(schema.courseParticipants.courseId, schema.courses.id),
-    )
-    .innerJoin(
       schema.participants,
-      eq(schema.participants.id, schema.courseParticipants.participantId),
+      eq(schema.participants.id, schema.courses.participantId),
     )
     .where(
       and(
@@ -57,20 +53,16 @@ export default async function EditParticipantPage({ params }: Props) {
 
   if (!row) notFound();
 
-  // Wieviele ANDERE Kurse enthält diesen TN noch? Coach soll wissen,
+  // Wieviele ANDERE Kurse haben diesen Kunden noch? Coach soll wissen,
   // dass Stammdaten-Änderungen dort mitwirken (Stamm = ein Datensatz).
   const [{ count: othersRaw }] = await db
     .select({
       count: drizzleSql<number>`count(*) filter (where ${schema.courses.deletedAt} is null)::int`,
     })
-    .from(schema.courseParticipants)
-    .innerJoin(
-      schema.courses,
-      eq(schema.courses.id, schema.courseParticipants.courseId),
-    )
+    .from(schema.courses)
     .where(
       and(
-        eq(schema.courseParticipants.participantId, tnId),
+        eq(schema.courses.participantId, tnId),
         ne(schema.courses.id, id),
       ),
     );

@@ -28,7 +28,7 @@ export default async function CoachSignaturePage() {
             Deine Unterschrift
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Einmalig anlegen — wird bei jeder Session-Bestätigung wiederverwendet.
+            Einmalig anlegen — wird bei jeder Termin-Bestätigung wiederverwendet.
           </p>
         </div>
         <Link
