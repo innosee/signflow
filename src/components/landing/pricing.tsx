@@ -6,7 +6,7 @@ const TIERS = [
     limit: "bis 10 Coaches",
     perCoach: "ab 9,90 € pro Coach",
     features: [
-      "Unbegrenzt Kurse + Teilnehmer:innen",
+      "Unbegrenzt Kunden + Termine",
       "Canvas-Signatur für Coach + TN",
       "Magic-Link-Versand via Resend",
       "A4-PDF-Export mit FES",

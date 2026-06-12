@@ -7,7 +7,7 @@ type Q = { q: string; a: string };
 const COACH_FAQ: Q[] = [
   {
     q: "Muss ich mir einen Account anlegen?",
-    a: "Nein — dein Arbeitgeber (der Bildungsträger) lädt dich per E-Mail ein. Du klickst den Link, setzt dein Passwort und legst einmalig deine Unterschrift im Browser-Canvas an. Danach brauchst du sie pro Session nur noch mit einem Klick zu bestätigen.",
+    a: "Nein — dein Arbeitgeber (der Bildungsträger) lädt dich per E-Mail ein. Du klickst den Link, setzt dein Passwort und legst einmalig deine Unterschrift im Browser-Canvas an. Danach brauchst du sie pro Termin nur noch mit einem Klick zu bestätigen.",
   },
   {
     q: "Brauche ich ein Tablet oder einen Stift?",
@@ -15,18 +15,18 @@ const COACH_FAQ: Q[] = [
   },
   {
     q: "Wie bestätigen meine Teilnehmer:innen?",
-    a: "Nach jeder Coach-Signatur wird automatisch ein kurs-scoped Magic-Link an die Teilnehmer:in verschickt (24 h gültig). Beim ersten Öffnen legt sie einmalig ihre Unterschrift an; alle danach anstehenden Sessions werden per Klick-Bestätigung quittiert. Kein Account, kein Passwort.",
+    a: "Nach jeder Coach-Signatur wird automatisch ein Magic-Link pro Kunde an die Teilnehmer:in verschickt (24 h gültig). Beim ersten Öffnen legt sie einmalig ihre Unterschrift an; alle danach anstehenden Termine werden per Klick-Bestätigung quittiert. Kein Account, kein Passwort.",
   },
   {
-    q: "Kann ich Sessions nachträglich hinzufügen?",
-    a: 'Ja. Solange der Kurs läuft, kannst du Sessions anlegen — inkl. Erstgespräch mit „geeignet JA/NEIN". Wochenenden (Sa/So) sind aktuell gesperrt, weil AfA-Coachings an Werktagen stattfinden müssen. Neue Sessions tauchen beim nächsten Magic-Link-Öffnen automatisch in der TN-Liste auf.',
+    q: "Kann ich Termine nachträglich hinzufügen?",
+    a: 'Ja. Solange die Maßnahme läuft, kannst du Termine anlegen — inkl. Erstgespräch mit „geeignet JA/NEIN". Termine sind im Voraus planbar, aber erst ab dem Termindatum signierbar. Wochenenden (Sa/So) sind gesperrt, weil AfA-Coachings an Werktagen stattfinden müssen. Neue Termine tauchen beim nächsten Magic-Link-Öffnen automatisch beim Teilnehmer auf.',
   },
   {
     q: "Was passiert mit meinen Daten?",
-    a: "Alle Daten liegen in der EU (Frankfurt-Region): Neon Postgres für die Kurs-/Session-Daten, Vercel Blob für die Unterschriftsbilder, Resend für den E-Mail-Versand. Pro Signatur wird IP-Adresse + Zeitstempel + Signer-Rolle (Coach/TN) im Audit-Log festgehalten — DSGVO-konform und rechtssicher.",
+    a: "Alle Daten liegen in der EU (Frankfurt-Region): Neon Postgres für die Kunden-/Termin-Daten, Vercel Blob für die Unterschriftsbilder, Resend für den E-Mail-Versand. Pro Signatur wird IP-Adresse + Zeitstempel + Signer-Rolle (Coach/TN) im Audit-Log festgehalten — DSGVO-konform und rechtssicher.",
   },
   {
-    q: "Kann ich einen Kurs nach Abschluss korrigieren?",
+    q: "Kann ich eine Maßnahme nach Abschluss korrigieren?",
     a: "Vor der FES-Versiegelung: ja, alle Felder editierbar. Nach der Versiegelung ist das PDF unveränderlich (das ist Sinn der elektronischen Signatur). Bei echten Fehlern kannst du einen Korrektur-Nachtrag mit neuer FES erzeugen.",
   },
 ];
@@ -42,7 +42,7 @@ const BILDUNGSTRAEGER_FAQ: Q[] = [
   },
   {
     q: "Wie übernimmt Signflow die Daten-Isolation zwischen Coaches?",
-    a: "Jeder Coach sieht nur seine eigenen Kurse — Data-Isolation auf DB-Query-Ebene via `coach_id`-Filter, nicht nur UI-seitig. Bildungsträger-Admins können über Impersonation in die Coach-Sicht wechseln, schreibende Aktionen (Signaturen!) sind während Impersonation hart gesperrt, damit Beweiskraft der Unterschrift nicht kippt.",
+    a: "Jeder Coach sieht nur seine zugewiesenen Kunden — Data-Isolation auf DB-Query-Ebene via `coach_id`-Filter, nicht nur UI-seitig. Bildungsträger-Admins können über Impersonation in die Coach-Sicht wechseln, schreibende Aktionen (Signaturen!) sind während Impersonation hart gesperrt, damit Beweiskraft der Unterschrift nicht kippt.",
   },
   {
     q: "Wie laufen Onboarding und Rollout?",
@@ -54,11 +54,11 @@ const BILDUNGSTRAEGER_FAQ: Q[] = [
   },
   {
     q: "Gibt es eine API oder Zapier-Integration?",
-    a: "In Phase 2 planen wir eine JSON-API für den Import bestehender Kurs-Daten und den Export der finalen PDFs + Audit-Logs in euer CRM/Bestandssystem. Bis dahin: manueller Upload bei der AfA + PDF-Download pro Teilnehmer:in.",
+    a: "In Phase 2 planen wir eine JSON-API für den Import bestehender Kunden-Daten und den Export der finalen PDFs + Audit-Logs in euer CRM/Bestandssystem. Bis dahin: manueller Upload bei der AfA + PDF-Download pro Teilnehmer:in.",
   },
   {
     q: "Was, wenn ein Coach ausscheidet?",
-    a: "Bildungsträger-Admin kann den Coach deaktivieren (Soft-Delete). Session + Unterschriftenhistorie bleiben für die Audit-Anforderung erhalten, der Coach verliert sofort Zugriff. Eine erneute Einladung derselben E-Mail ist später problemlos möglich.",
+    a: "Bildungsträger-Admin kann den Coach deaktivieren (Soft-Delete). Termin- + Unterschriftenhistorie bleiben für die Audit-Anforderung erhalten, der Coach verliert sofort Zugriff. Eine erneute Einladung derselben E-Mail ist später problemlos möglich.",
   },
 ];
 

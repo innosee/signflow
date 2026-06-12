@@ -9,12 +9,12 @@ const FEATURES = [
   {
     icon: PenIcon,
     title: "Canvas-Signatur einmalig",
-    desc: "Coach und Teilnehmer:in erstellen ihre Unterschrift einmal — jede Session braucht nur noch eine aktive Bestätigung mit Zeitstempel.",
+    desc: "Coach und Teilnehmer:in erstellen ihre Unterschrift einmal — jeder Termin braucht nur noch eine aktive Bestätigung mit Zeitstempel.",
   },
   {
     icon: MailIcon,
     title: "Magic-Link für Teilnehmer:innen",
-    desc: "Kein Account, keine Passwort-Registrierung. 24 h gültig, Kurs-scoped, bei jedem Coach-Sign wird ein frischer Link verschickt.",
+    desc: "Kein Account, keine Passwort-Registrierung. 24 h gültig, pro Kunde, bei jedem Coach-Sign wird ein frischer Link verschickt.",
   },
   {
     icon: ShieldIcon,
@@ -24,7 +24,7 @@ const FEATURES = [
   {
     icon: ClockIcon,
     title: "Vollständiges Audit-Log",
-    desc: "Pro Signatur: IP-Adresse, Zeitstempel, Rolle (Coach oder TN), Session-Kontext. Nachvollziehbar, exportierbar.",
+    desc: "Pro Signatur: IP-Adresse, Zeitstempel, Rolle (Coach oder TN), Termin-Kontext. Nachvollziehbar, exportierbar.",
   },
   {
     icon: GlobeIcon,

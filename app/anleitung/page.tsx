@@ -18,33 +18,33 @@ const SIGN_STEPS: Array<{ num: string; title: string; body: string }> = [
   },
   {
     num: "02",
-    title: "Kurs + Teilnehmer:innen anlegen",
-    body: 'Im Coach-Dashboard auf „Neuer Kurs". Trag Titel, Maßnahme, Bedarfsträger und Zeitraum ein. Teilnehmer:innen ergänzt du mit Name, E-Mail und Kunden-Nr. — die E-Mail wird später für den Magic-Link gebraucht.',
+    title: "Kunde wird zugewiesen",
+    body: 'Der Bildungsträger legt den Kunden an (Titel, Maßnahme, Bedarfsträger, Zeitraum + Name, E-Mail und Kunden-Nr.) und weist ihn dir als Coach zu. Danach erscheint der Kunde in deinem Dashboard unter „Meine Kunden" — eine Maßnahme = ein:e Teilnehmer:in.',
   },
   {
     num: "03",
-    title: "Sessions dokumentieren",
-    body: 'Pro Termin: Datum, Unterrichtseinheiten, Modus (Präsenz/online), Themen. Auch nachträglich möglich, solange der Kurs läuft. Wochenenden sind aktuell gesperrt — AfA-Coachings finden an Werktagen statt.',
+    title: "Termine dokumentieren",
+    body: 'Öffne den Kunden, lege Termine an: Datum, Unterrichtseinheiten, Modus (Präsenz/online), Themen. Auch im Voraus planbar; signierbar erst ab dem Termindatum. Wochenenden sind gesperrt — AfA-Coachings finden an Werktagen statt.',
   },
   {
     num: "04",
-    title: "Pro Session bestätigen",
-    body: 'In der Kursansicht klickst du je Session auf „Ich bestätige". Deine vorhandene Unterschrift wird mit Zeitstempel + IP-Adresse im Audit-Log festgehalten — kein erneutes Zeichnen nötig.',
+    title: "Pro Termin bestätigen",
+    body: 'In der Kunden-Ansicht klickst du je Termin auf „Ich bestätige". Deine vorhandene Unterschrift wird mit Zeitstempel + IP-Adresse im Audit-Log festgehalten — kein erneutes Zeichnen nötig.',
   },
   {
     num: "05",
     title: "Magic-Link an TN auslösen",
-    body: 'Sobald du fertig signiert hast: Button „Teilnehmer:in benachrichtigen". Pro Kurs × TN ein Link, 24 h gültig. Bei neuen Sessions später wird automatisch ein frischer Link verschickt — der alte wird ungültig.',
+    body: 'Sobald du fertig signiert hast: Button „Teilnehmer:in benachrichtigen". Ein Link pro Kunde, 24 h gültig. Bei neuen Terminen später wird automatisch ein frischer Link verschickt — der alte wird ungültig.',
   },
   {
     num: "06",
     title: "TN signiert mobil",
-    body: 'TN öffnet den Link am Handy, zeichnet beim ersten Mal die eigene Unterschrift, bestätigt offene Sessions per Klick. Kein Account, kein Passwort, kein Download.',
+    body: 'TN öffnet den Link am Handy, zeichnet beim ersten Mal die eigene Unterschrift, bestätigt offene Termine per Klick. Kein Account, kein Passwort, kein Download.',
   },
   {
     num: "07",
     title: "Preview freigeben lassen",
-    body: 'Wenn alle Sessions von allen TN signiert sind, schickst du einen Preview-Link. TN sieht das vollständige Dokument — pixelgleich zum späteren PDF — und klickt „Freigeben" (Audit-Log, keine FES).',
+    body: 'Wenn alle Termine signiert sind, schickst du einen Preview-Link. TN sieht das vollständige Dokument — pixelgleich zum späteren PDF — und klickt „Freigeben" (Audit-Log, keine FES).',
   },
   {
     num: "08",
@@ -173,7 +173,7 @@ function ModuleNav() {
             Anwesenheitsnachweise
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-zinc-600">
-            Kurs anlegen, Sessions dokumentieren, Coach + TN unterschreiben,
+            Kunde zugewiesen, Termine dokumentieren, Coach + TN unterschreiben,
             FES-versiegeltes A4-PDF an die AfA.
           </p>
         </a>
@@ -210,7 +210,7 @@ function SigningSection() {
         <SectionHeader
           eyebrow="Modul A"
           title="Anwesenheitsnachweise mit FES"
-          intro="Vom Kurs-Setup über die Coach- und Teilnehmer:innen-Signatur bis zum versiegelten PDF an die Agentur für Arbeit. Acht Schritte, einmal verstanden, danach Routine."
+          intro="Vom Kunden-Setup über die Coach- und Teilnehmer:innen-Signatur bis zum versiegelten PDF an die Agentur für Arbeit. Acht Schritte, einmal verstanden, danach Routine."
         />
         <StepList steps={SIGN_STEPS} />
       </div>

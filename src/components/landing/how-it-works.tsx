@@ -1,18 +1,18 @@
 const STEPS = [
   {
     num: "01",
-    title: "Kurs + Teilnehmer:innen anlegen",
-    desc: "Bildungsträger legt Kurse an, Coach ergänzt Teilnehmer:innen, Sessions laufend dokumentieren — Datum, UE, Themen, Modus.",
+    title: "Kunde anlegen + Coach zuweisen",
+    desc: "Bildungsträger legt den Kunden (1 Maßnahme = 1 Teilnehmer:in) an und weist ihn einem Coach zu. Der Coach dokumentiert dann laufend Termine — Datum, UE, Themen, Modus.",
   },
   {
     num: "02",
-    title: "Coach signiert pro Einheit",
-    desc: "Canvas-Unterschrift einmalig anlegen, pro Session eine aktive Bestätigung mit Klick + Zeitstempel.",
+    title: "Coach signiert pro Termin",
+    desc: "Canvas-Unterschrift einmalig anlegen, pro Termin eine aktive Bestätigung mit Klick + Zeitstempel.",
   },
   {
     num: "03",
     title: "Teilnehmer:in bestätigt per Magic-Link",
-    desc: "Automatische Mail nach Coach-Sign. Kein Account nötig — TN unterschreibt einmalig im Browser, bestätigt dann offene Einheiten.",
+    desc: "Automatische Mail nach Coach-Sign. Kein Account nötig — TN unterschreibt einmalig im Browser, bestätigt dann offene Termine.",
   },
   {
     num: "04",
@@ -30,7 +30,7 @@ export function LandingHowItWorks() {
             Workflow
           </p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">
-            In vier Schritten von der Session zum rechtssicheren Nachweis.
+            In vier Schritten vom Termin zum rechtssicheren Nachweis.
           </h2>
         </div>
 
