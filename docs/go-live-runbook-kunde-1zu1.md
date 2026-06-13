@@ -1,5 +1,22 @@
 # Prod-Go-Live Runbook — `feat/kunde-1zu1`
 
+> ## ⛔ ÜBERHOLT (Stand 2026-06-13)
+> **Die Prod-DB ist bereits vollständig auf dem aktuellen Schema** (Collapse +
+> bundesland + BT-Review) und **leer** (0 Kurse/Signaturen). Grund: die lokale
+> `.env.local` zeigte versehentlich auf den **Prod**-Endpoint
+> (`ep-crimson-mode-alc2thuw`), also liefen alle Branch-Migrationen direkt gegen
+> Prod. **Steps 0–3 (Daten-Check / Snapshot / TRUNCATE / destruktiver Push) sind
+> damit hinfällig** — es gibt nichts zu truncaten oder destruktiv zu migrieren.
+> Verbleibend für den echten Launch (29.06.): **(1)** Env-Setup sauber trennen
+> (`.env.local` → Staging/Dev, nicht Prod; Vercel-Env-Vars pro Umgebung), **(2)**
+> Staging-Schema auf Stand bringen, **(3)** Secret-Rotation-Batch, **(4)** Code
+> nach `main` mergen → Vercel-Prod-Deploy, **(5)** Smoke-Test. Snapshot-Branch
+> `br-odd-butterfly-al430v5k` existiert als Rollback-Anker.
+>
+> Der Rest unten ist nur noch **historischer Kontext**.
+
+
+
 Bringt Production vom alten Modell auf **Kurs = Kunde (1:1) + Feiertags-Warnung +
 Bildungsträger-Prüfung (FES-Gate 3/3)**. Die Prod-DB (`br-old-art-alnooacc`)
 steht noch auf dem **alten Schema**. Neuer Code crasht gegen das alte Schema →
