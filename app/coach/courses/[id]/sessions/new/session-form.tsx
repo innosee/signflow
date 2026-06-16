@@ -55,7 +55,7 @@ export function SessionForm({
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
             <span className="text-xs text-zinc-500">
-              Nur Werktage (Mo–Fr). Wochenenden sind gesperrt.
+              Mo–Sa möglich. Sonntage sind gesperrt, Feiertage werden markiert.
             </span>
           </label>
 

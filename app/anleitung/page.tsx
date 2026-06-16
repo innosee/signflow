@@ -24,7 +24,7 @@ const SIGN_STEPS: Array<{ num: string; title: string; body: string }> = [
   {
     num: "03",
     title: "Termine dokumentieren",
-    body: 'Öffne den Kunden, lege Termine an: Datum, Unterrichtseinheiten, Modus (Präsenz/online), Themen. Auch im Voraus planbar; signierbar erst ab dem Termindatum. Wochenenden sind gesperrt — AfA-Coachings finden an Werktagen statt.',
+    body: 'Öffne den Kunden, lege Termine an: Datum, Unterrichtseinheiten, Modus (Präsenz/online), Themen. Auch im Voraus planbar; signierbar erst ab dem Termindatum. Montag bis Samstag möglich; Sonntage sind gesperrt, Feiertage werden markiert.',
   },
   {
     num: "04",

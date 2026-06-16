@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { BUNDESLAENDER } from "@/lib/feiertage";
+import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
 import { createCourse, type CourseFormState } from "../actions";
 
@@ -33,7 +34,6 @@ export function CourseForm({
   // automatisch zurück — über useState überleben die Eingaben bei Fehler.
   const [head, setHead] = useState({
     coachId: "",
-    title: "",
     avgsNummer: "",
     durchfuehrungsort: "",
     anzahlBewilligteUe: "",
@@ -80,13 +80,6 @@ export function CourseForm({
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            name="title"
-            label="Titel (AVGS-Maßnahme)"
-            required
-            value={head.title}
-            onChange={setField("title")}
-          />
           <Field
             name="avgsNummer"
             label="AVGS-Nr."
@@ -148,10 +141,11 @@ export function CourseForm({
               onChange={setField("massnahmeTyp")}
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             >
-              <option value="EKC">EKC — Karriere-Coaching</option>
-              <option value="ESC">ESC — Standort-Coaching</option>
-              <option value="EGC">EGC — Gründungs-Coaching</option>
-              <option value="ESCA">ESCA — Ausbildungs-Coaching / Probezeit</option>
+              {MASSNAHME_TYPEN.map((t) => (
+                <option key={t} value={t}>
+                  {MASSNAHME_TYP_LABEL[t]}
+                </option>
+              ))}
             </select>
           </label>
           <label className="block space-y-1.5">

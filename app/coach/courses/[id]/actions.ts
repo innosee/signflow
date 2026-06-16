@@ -68,10 +68,10 @@ function validateSessionFormFields(formData: FormData):
     return { ok: false, error: "Ungültiges Datum (Monat/Tag existiert nicht)." };
   }
   const weekday = parsed.getUTCDay();
-  if (weekday === 0 || weekday === 6) {
+  if (weekday === 0) {
     return {
       ok: false,
-      error: "Am Wochenende (Sa/So) können keine Coachings stattfinden.",
+      error: "An Sonntagen können keine Coachings stattfinden.",
     };
   }
 

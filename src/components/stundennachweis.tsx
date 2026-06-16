@@ -123,7 +123,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
           <div>
             <h2>Maßnahme</h2>
             <dl>
-              <MetaRow label="Titel" value={course.title} />
+              <MetaRow label="Typ" value={course.title} />
               <MetaRow label="Durchführungsort" value={course.durchfuehrungsort} />
               <MetaRow
                 label="Zeitraum"

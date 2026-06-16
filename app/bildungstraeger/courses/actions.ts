@@ -10,6 +10,7 @@ import {
   requireBildungstraeger,
 } from "@/lib/dal";
 import { isBundesland } from "@/lib/feiertage";
+import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
 export type CourseFormState = { error?: string } | undefined;
 
@@ -33,7 +34,6 @@ export async function createCourse(
   assertNotImpersonating(session);
   const tenantId = getTenantId(session);
 
-  const title = String(formData.get("title") ?? "").trim();
   const avgsNummer = String(formData.get("avgsNummer") ?? "").trim();
   const durchfuehrungsort = String(
     formData.get("durchfuehrungsort") ?? "",
@@ -55,15 +55,14 @@ export async function createCourse(
     .toLowerCase();
   const customerKundenNr = String(formData.get("p_kundennr") ?? "").trim();
 
-  const allowedMassnahmeTyp = ["EKC", "ESC", "EGC", "ESCA"] as const;
   if (
-    !allowedMassnahmeTyp.includes(
-      massnahmeTypRaw as (typeof allowedMassnahmeTyp)[number],
-    )
+    !MASSNAHME_TYPEN.includes(massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number])
   ) {
     return { error: "Ungültiger Maßnahme-Typ. Bitte aus der Liste wählen." };
   }
-  const massnahmeTyp = massnahmeTypRaw as (typeof allowedMassnahmeTyp)[number];
+  const massnahmeTyp = massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number];
+  // Kein Freitext-Titel mehr: der Titel ist das Label des Maßnahmentyps.
+  const title = MASSNAHME_TYP_LABEL[massnahmeTyp];
 
   // Bundesland ist Pflicht für neue Kunden — Grundlage der Feiertags-Warnung.
   if (!isBundesland(bundeslandRaw)) {
@@ -72,7 +71,6 @@ export async function createCourse(
   const bundesland = bundeslandRaw;
 
   if (
-    !title ||
     !avgsNummer ||
     !durchfuehrungsort ||
     !anzahlBewilligteUeRaw ||
