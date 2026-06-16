@@ -85,6 +85,7 @@ export async function loadStundennachweisSheet(params: {
       modus: schema.sessions.modus,
       isErstgespraech: schema.sessions.isErstgespraech,
       geeignet: schema.sessions.geeignet,
+      eignungsanalyse: schema.sessions.eignungsanalyse,
     })
     .from(schema.sessions)
     .where(
@@ -237,6 +238,7 @@ export async function loadStundennachweisSheet(params: {
         modus: s.modus,
         isErstgespraech: s.isErstgespraech,
         geeignet: s.geeignet,
+        eignungsanalyse: s.eignungsanalyse,
         coachSignatureUrl: sig?.coachSignatureUrl ?? null,
         coachSignedAt: sig?.coachSignedAt ?? null,
         participantSignatureUrl: sig?.participantSignatureUrl ?? null,

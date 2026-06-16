@@ -10,6 +10,12 @@
  * abgeschlossen bleibt.
  */
 
+import {
+  EIGNUNG_KRITERIEN,
+  EIGNUNG_RATINGS,
+  type Eignungsanalyse,
+} from "@/lib/eignung";
+
 export type StundennachweisSheet = {
   course: {
     title: string;
@@ -41,6 +47,7 @@ export type StundennachweisSheet = {
     modus: "praesenz" | "online";
     isErstgespraech: boolean;
     geeignet: boolean | null;
+    eignungsanalyse: Eignungsanalyse | null;
     coachSignatureUrl: string | null;
     coachSignedAt: string | null;
     participantSignatureUrl: string | null;
@@ -211,6 +218,49 @@ export function Stundennachweis(props: StundennachweisSheet) {
             </table>
           )}
         </section>
+
+        {sessions.some((s) => s.isErstgespraech && s.eignungsanalyse) && (
+          <section className="sheet-eignung">
+            {sessions
+              .filter((s) => s.isErstgespraech && s.eignungsanalyse)
+              .map((s) => (
+                <div key={s.id}>
+                  <h2>Eignungsanalyse (Erstgespräch {formatDate(s.sessionDate)})</h2>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Kriterium</th>
+                        {EIGNUNG_RATINGS.map((r) => (
+                          <th key={r.value} className="num" style={{ width: "10%" }}>
+                            {r.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {EIGNUNG_KRITERIEN.map((k) => (
+                        <tr key={k.key}>
+                          <td>{k.label}</td>
+                          {EIGNUNG_RATINGS.map((r) => (
+                            <td key={r.value} className="num">
+                              <Checkbox
+                                checked={s.eignungsanalyse?.[k.key] === r.value}
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="sheet-eignung-result">
+                    <strong>Ergebnis — TN ist geeignet:</strong>{" "}
+                    <Checkbox checked={s.geeignet === true} /> Ja{"   "}
+                    <Checkbox checked={s.geeignet === false} /> Nein
+                  </p>
+                </div>
+              ))}
+          </section>
+        )}
 
         {(course.flagUnter2Termine ||
           course.flagVorzeitigesEnde ||

@@ -6,6 +6,7 @@ import { useActionState, useState } from "react";
 import { type Bundesland, getFeiertag } from "@/lib/feiertage";
 
 import { createSession, type SessionFormState } from "../../actions";
+import { EignungAnalyseFieldset } from "../eignung-fieldset";
 
 export function SessionForm({
   courseId,
@@ -115,29 +116,12 @@ export function SessionForm({
           <span>
             <span className="font-medium">Erstgespräch</span>
             <span className="block text-xs text-zinc-500">
-              Zählt keine UE, braucht aber Entscheidung „geeignet JA/NEIN”.
+              Zählt keine UE, braucht aber die Eignungsanalyse.
             </span>
           </span>
         </label>
 
-        {isErstgespraech && (
-          <fieldset className="rounded-lg border border-zinc-300 bg-zinc-50 p-4 space-y-2">
-            <legend className="px-1 text-sm font-medium text-zinc-800">
-              Teilnehmerin für diese Maßnahme geeignet?{" "}
-              <span className="text-red-600">*</span>
-            </legend>
-            <div className="flex gap-6 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="radio" name="geeignet" value="ja" required />
-                Ja
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="radio" name="geeignet" value="nein" required />
-                Nein
-              </label>
-            </div>
-          </fieldset>
-        )}
+        {isErstgespraech && <EignungAnalyseFieldset />}
 
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-zinc-800">

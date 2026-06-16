@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { Eignungsanalyse } from "@/lib/eignung";
 import {
   boolean,
   check,
@@ -481,8 +482,16 @@ export const sessions = pgTable(
      * Zusatzangabe "geeignet JA/NEIN".
      */
     isErstgespraech: boolean("is_erstgespraech").notNull().default(false),
-    /** Nur beim Erstgespräch relevant: TN*in für diese Maßnahme geeignet? */
+    /** Nur beim Erstgespräch relevant: TN*in für diese Maßnahme geeignet? (Gesamtergebnis) */
     geeignet: boolean("geeignet"),
+    /**
+     * Eignungsanalyse beim Erstgespräch: 4 Kriterien (Motivation, Bedarfe,
+     * Sprachniveau, Kompetenzen) je Bewertung '++'/'o'/'--'. Nur beim
+     * Erstgespräch gesetzt. Alt-Erstgespräche (vor 2026-06-16) haben nur
+     * `geeignet` und hier NULL — die DB-CHECK bleibt deshalb unverändert,
+     * Vollständigkeit wird app-seitig für neue Erstgespräche erzwungen.
+     */
+    eignungsanalyse: jsonb("eignungsanalyse").$type<Eignungsanalyse>(),
     status: sessionStatus("status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

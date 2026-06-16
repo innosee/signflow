@@ -8,6 +8,10 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { sendReviewRequestedToBildungstraeger } from "@/lib/email";
+import {
+  parseEignungsanalyseFromForm,
+  type Eignungsanalyse,
+} from "@/lib/eignung";
 import { isFutureSessionDate } from "@/lib/dates";
 import {
   assertNotImpersonating,
@@ -40,6 +44,7 @@ function validateSessionFormFields(formData: FormData):
         anzahlUe: string;
         isErstgespraech: boolean;
         geeignet: boolean | null;
+        eignungsanalyse: Eignungsanalyse | null;
       };
     }
   | { ok: false; error: string } {
@@ -77,16 +82,25 @@ function validateSessionFormFields(formData: FormData):
 
   let anzahlUe: string;
   let geeignet: boolean | null;
+  let eignungsanalyse: Eignungsanalyse | null;
   if (isErstgespraech) {
     anzahlUe = "0";
     if (geeignetRaw !== "ja" && geeignetRaw !== "nein") {
       return {
         ok: false,
         error:
-          "Beim Erstgespräch musst du angeben, ob die Teilnehmerin für die Maßnahme geeignet ist.",
+          "Beim Erstgespräch muss das Ergebnis der Eignungsanalyse (geeignet Ja/Nein) gesetzt sein.",
       };
     }
     geeignet = geeignetRaw === "ja";
+    const eignung = parseEignungsanalyseFromForm(formData);
+    if (!eignung.ok) {
+      return {
+        ok: false,
+        error: `Bitte alle Kriterien der Eignungsanalyse bewerten (fehlt: ${eignung.missingLabel}).`,
+      };
+    }
+    eignungsanalyse = eignung.value;
   } else {
     const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
     if (!Number.isFinite(ue) || ue <= 0) {
@@ -100,11 +114,20 @@ function validateSessionFormFields(formData: FormData):
     }
     anzahlUe = ue.toFixed(1);
     geeignet = null;
+    eignungsanalyse = null;
   }
 
   return {
     ok: true,
-    values: { sessionDate, topic, modus, anzahlUe, isErstgespraech, geeignet },
+    values: {
+      sessionDate,
+      topic,
+      modus,
+      anzahlUe,
+      isErstgespraech,
+      geeignet,
+      eignungsanalyse,
+    },
   };
 }
 
@@ -238,6 +261,7 @@ export async function createSession(
           anzahlUe: v.anzahlUe,
           isErstgespraech: v.isErstgespraech,
           geeignet: v.geeignet,
+          eignungsanalyse: v.eignungsanalyse,
         })
         .returning({ id: schema.sessions.id });
       if (!created) throw new Error("INSERT_FAILED");
@@ -332,6 +356,7 @@ export async function updateSession(
           anzahlUe: v.anzahlUe,
           isErstgespraech: v.isErstgespraech,
           geeignet: v.geeignet,
+          eignungsanalyse: v.eignungsanalyse,
         })
         .where(eq(schema.sessions.id, sessionId));
       // FES-Gates resetten — Inhalts-Edit ändert den Stand.

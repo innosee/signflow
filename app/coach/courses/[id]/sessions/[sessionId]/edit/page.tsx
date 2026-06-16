@@ -48,6 +48,7 @@ export default async function EditSessionPage({ params }: Props) {
       modus: schema.sessions.modus,
       isErstgespraech: schema.sessions.isErstgespraech,
       geeignet: schema.sessions.geeignet,
+      eignungsanalyse: schema.sessions.eignungsanalyse,
     })
     .from(schema.sessions)
     .where(
@@ -93,6 +94,7 @@ export default async function EditSessionPage({ params }: Props) {
           modus: sess.modus,
           isErstgespraech: sess.isErstgespraech,
           geeignet: sess.geeignet,
+          eignungsanalyse: sess.eignungsanalyse,
         }}
       />
     </div>

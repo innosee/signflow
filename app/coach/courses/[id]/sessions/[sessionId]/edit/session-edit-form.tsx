@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { type Bundesland, getFeiertag } from "@/lib/feiertage";
+import { type Eignungsanalyse } from "@/lib/eignung";
 
 import { updateSession, type SessionFormState } from "../../../actions";
+import { EignungAnalyseFieldset } from "../../eignung-fieldset";
 
 type SessionInitial = {
   id: string;
@@ -15,6 +17,7 @@ type SessionInitial = {
   modus: "praesenz" | "online";
   isErstgespraech: boolean;
   geeignet: boolean | null;
+  eignungsanalyse: Eignungsanalyse | null;
 };
 
 export function SessionEditForm({
@@ -126,40 +129,16 @@ export function SessionEditForm({
           <span>
             <span className="font-medium">Erstgespräch</span>
             <span className="block text-xs text-zinc-500">
-              Zählt keine UE, braucht aber Entscheidung &bdquo;geeignet JA/NEIN&ldquo;.
+              Zählt keine UE, braucht aber die Eignungsanalyse.
             </span>
           </span>
         </label>
 
         {isErstgespraech && (
-          <fieldset className="rounded-lg border border-zinc-300 bg-zinc-50 p-4 space-y-2">
-            <legend className="px-1 text-sm font-medium text-zinc-800">
-              Teilnehmerin für diese Maßnahme geeignet?{" "}
-              <span className="text-red-600">*</span>
-            </legend>
-            <div className="flex gap-6 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="geeignet"
-                  value="ja"
-                  defaultChecked={session.geeignet === true}
-                  required
-                />
-                Ja
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="geeignet"
-                  value="nein"
-                  defaultChecked={session.geeignet === false}
-                  required
-                />
-                Nein
-              </label>
-            </div>
-          </fieldset>
+          <EignungAnalyseFieldset
+            defaultGeeignet={session.geeignet}
+            defaultEignung={session.eignungsanalyse}
+          />
         )}
 
         <label className="block space-y-1.5">
