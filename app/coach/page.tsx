@@ -30,6 +30,7 @@ export default async function CoachDashboard() {
     .select({
       id: schema.courses.id,
       title: schema.courses.title,
+      customerName: schema.participants.name,
       avgsNummer: schema.courses.avgsNummer,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
@@ -37,6 +38,10 @@ export default async function CoachDashboard() {
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
     })
     .from(schema.courses)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courses.participantId),
+    )
     .where(
       and(
         eq(schema.courses.coachId, session.user.id),

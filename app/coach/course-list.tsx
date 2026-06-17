@@ -18,6 +18,7 @@ const STATUS_BADGE: Record<string, string> = {
 export type CoachCourseListItem = {
   id: string;
   title: string;
+  customerName: string;
   avgsNummer: string | null;
   startDate: string;
   endDate: string;
@@ -33,6 +34,7 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
     if (!q) return courses;
     return courses.filter((c) => {
       const haystack = [
+        c.customerName,
         c.title,
         c.avgsNummer ?? "",
         STATUS_LABELS[c.status] ?? c.status,
@@ -59,7 +61,7 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Suche nach Titel, AVGS-Nr. oder Status…"
+          placeholder="Suche nach Name, Maßnahme, AVGS-Nr. oder Status…"
           className="block w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
       </div>
@@ -78,7 +80,9 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium truncate">{c.title}</span>
+                    <span className="font-medium truncate">
+                      {c.customerName}
+                    </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs ${STATUS_BADGE[c.status] ?? ""}`}
                     >
@@ -86,8 +90,8 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-zinc-500">
-                    AVGS {c.avgsNummer} · {c.startDate} bis {c.endDate} ·{" "}
-                    {c.anzahlBewilligteUe} UE bewilligt
+                    {c.title} · AVGS {c.avgsNummer} · {c.startDate} bis{" "}
+                    {c.endDate} · {c.anzahlBewilligteUe} UE bewilligt
                   </div>
                 </div>
                 <span aria-hidden className="text-zinc-400">
