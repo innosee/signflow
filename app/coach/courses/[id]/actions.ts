@@ -499,6 +499,104 @@ export async function reopenSession(
   );
 }
 
+export type CorrectTopicState = { error?: string; success?: boolean } | undefined;
+
+/**
+ * „Inhalt korrigieren": ändert NUR den Themen-/ANW-Text eines Termins —
+ * **ohne** die Signaturen zurückzusetzen und **ohne** die Teilnehmer-Freigabe
+ * zu verwerfen (User-Entscheidung 2026-06-19). Begründung: Die Unterschrift
+ * des Kunden bezeugt die **Anwesenheit am Datum**, nicht den exakten Wortlaut
+ * der Themen-Beschreibung; eine AZAV-Konkretisierung der Formulierung ändert
+ * die bezeugte Tatsache nicht. Der Edit wird audit-geloggt.
+ *
+ * Da sich der INHALT ändert, werden die inhaltsabhängigen Compliance-Gates
+ * zurückgesetzt — ANW-Check (`anwCheckPassedAt`) und Bildungsträger-Prüfung
+ * (`reviewStatus`) müssen neu laufen. `abgeschlossenAt`, Signaturen und
+ * Freigaben bleiben erhalten. Datum/UE/Erstgespräch/Eignung sind hier NICHT
+ * änderbar — die hängen an der Signatur und gehen weiter über „Bearbeiten
+ * (Signaturen zurücksetzen)".
+ */
+export async function correctSessionTopic(
+  _prev: CorrectTopicState,
+  formData: FormData,
+): Promise<CorrectTopicState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  const topic = String(formData.get("topic") ?? "").trim();
+  if (!courseId || !sessionId) return { error: "Kurs oder Termin fehlt." };
+  if (!topic) return { error: "Themen / Inhalte dürfen nicht leer sein." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Versiegelter Kurs ist rechtlich unveränderbar — wie beim Reopen.
+  const [doc] = await db
+    .select({ fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, ownedCourseId))
+    .limit(1);
+  if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
+    return {
+      error:
+        "Dieser Kunde ist bereits mit FES versiegelt und kann rechtlich nicht mehr verändert werden.",
+    };
+  }
+
+  const [sess] = await db
+    .select({ id: schema.sessions.id })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Termin nicht gefunden." };
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.sessions)
+        .set({ topic })
+        .where(eq(schema.sessions.id, sessionId));
+      // Inhaltsabhängige Gates zurücksetzen (Signaturen/Freigaben bleiben!).
+      await tx
+        .update(schema.courses)
+        .set({
+          anwCheckPassedAt: null,
+          reviewStatus: "none",
+          reviewRequestedAt: null,
+          reviewDecidedAt: null,
+          reviewDecidedBy: null,
+        })
+        .where(eq(schema.courses.id, ownedCourseId));
+      await logAudit(
+        {
+          actorType: "coach",
+          actorId: coachId,
+          action: "session.topic_corrected",
+          resourceType: "session",
+          resourceId: sessionId,
+          metadata: { courseId: ownedCourseId },
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Korrektur fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
+}
+
 function looksLikeEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }

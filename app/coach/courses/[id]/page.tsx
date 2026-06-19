@@ -13,6 +13,7 @@ import { ReviewThread } from "@/components/review-thread";
 
 import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
+import { CorrectTopicButton } from "./correct-topic-button";
 import { MarkAbgeschlossenButton } from "./mark-abgeschlossen-button";
 import { NotifyParticipantsButton } from "./notify-button";
 import { SendPreviewButton } from "./preview-button";
@@ -349,6 +350,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                               Bearbeiten
                             </Link>
                           )}
+                        {!impersonating && (coachSigned || tnSigned > 0) && (
+                          <CorrectTopicButton
+                            courseId={course.id}
+                            sessionId={s.id}
+                            topic={s.topic}
+                          />
+                        )}
                         {!impersonating && (coachSigned || tnSigned > 0) && (
                           <ReopenSessionButton
                             courseId={course.id}

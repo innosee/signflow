@@ -26,6 +26,7 @@ export type AuditAction =
   | "course.review_approved"
   | "course.review_changes_requested"
   | "anw.soft_flags.acknowledged"
+  | "session.topic_corrected"
   | "impersonation.start"
   | "impersonation.end"
   | "checker.report_submitted"
