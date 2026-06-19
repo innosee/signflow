@@ -2,7 +2,12 @@
 
 import { useActionState } from "react";
 
-import { runAnwCheckAction, type AnwCheckState } from "./actions";
+import {
+  acknowledgeAnwCheckAction,
+  runAnwCheckAction,
+  type AnwAcknowledgeState,
+  type AnwCheckState,
+} from "./actions";
 
 /**
  * Empfohlener KI-gestützter Pre-Step vor „Vorschau an Teilnehmer senden":
@@ -28,6 +33,16 @@ export function AnwCheckButton({
     runAnwCheckAction,
     undefined,
   );
+  const [ackState, ackAction, ackPending] = useActionState<
+    AnwAcknowledgeState,
+    FormData
+  >(acknowledgeAnwCheckAction, undefined);
+
+  const result = state?.result;
+  // Acknowledge-Override nur anbieten, wenn der Check „nacharbeit" lieferte
+  // und noch nicht quittiert wurde. Bei „freigabe" ist eh alles offen.
+  const showAcknowledge =
+    !!result && result.status !== "freigabe" && !ackState?.acknowledged;
 
   return (
     <div className="space-y-3">
@@ -50,7 +65,50 @@ export function AnwCheckButton({
         </p>
       )}
 
-      {state?.result && <AnwCheckResultCard result={state.result} />}
+      {result && <AnwCheckResultCard result={result} />}
+
+      {showAcknowledge && (
+        <form
+          action={ackAction}
+          onSubmit={(e) => {
+            if (
+              !window.confirm(
+                "Die KI-Hinweise sind eine unverbindliche Hilfestellung. Du bestätigst, dass du sie gesehen hast und die Liste trotzdem zur Prüfung freigeben möchtest. Der Bildungsträger prüft sie anschließend.",
+              )
+            ) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <input type="hidden" name="courseId" value={courseId} />
+          <input
+            type="hidden"
+            name="warningsCount"
+            value={result?.warnings.length ?? 0}
+          />
+          <button
+            type="submit"
+            disabled={ackPending}
+            className="rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
+          >
+            {ackPending
+              ? "Wird freigegeben…"
+              : "Hinweise gesehen — trotzdem freigeben"}
+          </button>
+        </form>
+      )}
+
+      {ackState?.acknowledged && (
+        <p className="text-sm text-emerald-700">
+          Freigegeben — du kannst fortfahren. (Lade die Seite ggf. neu, falls der
+          Schritt oben noch nicht grün ist.)
+        </p>
+      )}
+      {ackState?.error && (
+        <p role="alert" className="text-sm text-red-700">
+          {ackState.error}
+        </p>
+      )}
     </div>
   );
 }

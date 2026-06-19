@@ -1041,6 +1041,65 @@ export async function runAnwCheckAction(
   }
 }
 
+export type AnwAcknowledgeState =
+  | { error?: string; acknowledged?: boolean }
+  | undefined;
+
+/**
+ * Acknowledge-Override für den ANW-Check: Der ANW-Check ist eine **nicht
+ * rechtsverbindliche KI-Hilfestellung**. Liefert er „nacharbeit" (Soft-Flags),
+ * darf der Coach die Hinweise bewusst quittieren und trotzdem fortfahren —
+ * statt hart blockiert zu sein. Setzt `anwCheckPassedAt` (schaltet die
+ * Folge-Schritte frei) und schreibt einen Audit-Eintrag, der den Override
+ * dokumentiert. Die menschliche Compliance-Sicherung bleibt: der
+ * Bildungsträger prüft die Liste anschließend ohnehin ([[BT-Prüfung]]).
+ *
+ * Wird bei jeder Session-Änderung — wie ein normaler Check — wieder
+ * zurückgesetzt (anwCheckPassedAt: null), der Coach muss dann neu quittieren.
+ */
+export async function acknowledgeAnwCheckAction(
+  _prev: AnwAcknowledgeState,
+  formData: FormData,
+): Promise<AnwAcknowledgeState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const warningsCount =
+    Number.parseInt(String(formData.get("warningsCount") ?? "0"), 10) || 0;
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.courses)
+        .set({ anwCheckPassedAt: new Date() })
+        .where(eq(schema.courses.id, ownedCourseId));
+      await logAudit(
+        {
+          actorType: "coach",
+          actorId: coachId,
+          action: "anw.soft_flags.acknowledged",
+          resourceType: "course",
+          resourceId: ownedCourseId,
+          metadata: { warningsCount, override: true },
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Freigabe fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { acknowledged: true };
+}
+
 export type MarkAbgeschlossenState =
   | { error?: string; success?: boolean }
   | undefined;
