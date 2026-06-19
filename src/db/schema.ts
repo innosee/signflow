@@ -516,9 +516,11 @@ export const sessions = pgTable(
 /**
  * Magic-Link-Tokens, scope: **ein Kurs × ein Teilnehmer**, 24 h gültig.
  * Nicht one-shot: innerhalb der 24 h kann der Teilnehmer beliebige noch
- * offene Sessions des Kurses signieren. Wenn der Coach einen neuen Link
- * auslöst, wird der alte per `used_at=now()` invalidiert und ein neuer
- * angelegt.
+ * offene Sessions des Kurses signieren. Löst der Coach einen neuen Link aus,
+ * wird der alte NICHT mehr invalidiert (geändert 2026-06-19) — jeder Link
+ * lebt bis zu seinem eigenen `expires_at`, mehrere aktive Links pro Paarung
+ * sind erlaubt (alle zeigen auf dieselbe Sign-Seite). So funktioniert auch
+ * eine ältere Mail noch, solange sie nicht abgelaufen ist.
  */
 export const participantAccessTokens = pgTable(
   "participant_access_tokens",

@@ -34,9 +34,9 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 1. Coach legt Kurs an (Header-Daten + Teilnehmer mit Name/E-Mail/Kunden-Nr.)
 2. Coach erstellt Sessions laufend (auch nachträglich möglich) – Datum, UE, Modus, Themen
 3. Coach unterschreibt jede Session inline in der Kurs-Ansicht (Canvas, aktive Bestätigung + Zeitstempel)
-4. Coach triggert manuell **"Teilnehmer benachrichtigen"** → System erzeugt einen **Kurs-scoped Magic Link pro Teilnehmer** (24 h gültig); vorheriger Token für dieselbe Paarung wird invalidiert
+4. Coach triggert manuell **"Teilnehmer benachrichtigen"** → System erzeugt einen **Kurs-scoped Magic Link pro Teilnehmer** (24 h gültig); vorherige Tokens bleiben gültig bis zu ihrem eigenen 24-h-Ablauf (mehrere Links gleichzeitig möglich — eine ältere Mail funktioniert weiter)
 5. Teilnehmer öffnet den Link auf dem Handy, sieht den Kurs als Ganzes und alle noch offenen Sessions; signiert alle offenen inline
-6. Nach neuen Sessions triggert der Coach einen neuen Magic Link (ersetzt den alten)
+6. Nach neuen Sessions triggert der Coach einen neuen Magic Link (zusätzlich; alte bleiben bis Ablauf gültig)
 7. Wenn jeder Teilnehmer jede (nicht-gelöschte) Session des Kurses signiert hat: Coach triggert "Preview an Teilnehmer senden"
 8. Teilnehmer öffnet den Preview-Link, sieht das vollständige Dokument **pixel-identisch zum späteren PDF** und klickt "Freigeben" (Audit-Log + Timestamp, keine FES)
 9. Coach sieht "Teilnehmer hat freigegeben" → klickt "Mit FES versiegeln und an AfA übermitteln"
@@ -64,7 +64,7 @@ Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seit
 ### Teilnehmer-Flow
 - Kein Account für Teilnehmer – nur E-Mail-Adresse im System
 - Magic Link **pro Kurs × Teilnehmer** (`participant_access_tokens`-Tabelle, siehe Schema), 24 h gültig ab Versand
-- Nicht one-shot: Innerhalb der 24 h kann der Teilnehmer so viele Sessions signieren wie gerade offen sind. Vom Coach bei neuen Sessions neu ausgelöst → alter Token wird invalidiert (`used_at` gesetzt), neuer Token ersetzt ihn.
+- Nicht one-shot: Innerhalb der 24 h kann der Teilnehmer so viele Sessions signieren wie gerade offen sind. Vom Coach bei neuen Sessions neu ausgelöst → ein zusätzlicher Token wird ausgestellt; alte Links werden **nicht** invalidiert, sie laufen einfach nach ihren eigenen 24 h ab (mehrere gleichzeitig gültig, alle zeigen auf dieselbe Sign-Seite).
 - Mobile-optimierte Webseite mit Canvas – keine React Native App (Phase 2)
 
 ### Auth & Berechtigungen
@@ -142,10 +142,10 @@ course_id: uuid FK -> courses.id (cascade delete)
 participant_id: uuid FK -> participants.id (restrict delete)
 token_hash: string (unique, SHA-256 base64url des Klartexts)
 expires_at: timestamp     // +24h ab Ausstellung
-used_at: timestamp | null // null = aktiv; beim Re-Issue invalidiert
+used_at: timestamp | null // null = aktiv; reserviert für späteren expliziten Revoke (Re-Issue invalidiert NICHT)
 ```
 
-**Semantik:** Ein Link pro Kurs × Teilnehmer gleichzeitig aktiv. Wenn der Coach einen neuen Link auslöst, bekommt der alte `used_at = now()` gesetzt (Invalidierung) und ein neuer Datensatz wird angelegt. Innerhalb der 24 h kann der Teilnehmer beliebige offene Session-Zeilen signieren — der Token wird NICHT pro Session verbraucht.
+**Semantik:** Mehrere Links pro Kurs × Teilnehmer können gleichzeitig gültig sein — jeder läuft 24 h ab seiner Ausstellung. Re-Issue legt einfach einen neuen Datensatz an, **ohne** alte zu invalidieren (geändert 2026-06-19, damit eine ältere Mail nicht ins Leere läuft). Gültigkeit hängt nur an `expires_at`; alle aktiven Links zeigen auf dieselbe Sign-Seite. Innerhalb der 24 h kann der Teilnehmer beliebige offene Session-Zeilen signieren — der Token wird NICHT pro Session verbraucht.
 
 #### `signatures`
 ```ts

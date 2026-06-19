@@ -51,10 +51,15 @@ function hashToken(token: string): string {
 
 /**
  * Erzeugt einen neuen Magic-Link-Token für die Paarung (course × participant).
- * Revoke + Insert laufen in einer Transaktion — sonst könnten zwei parallele
- * Aufrufe beide die alten Zeilen invalidieren und danach zwei neue Zeilen
- * einfügen, was die Invariante „genau ein aktiver Link pro Paarung" brechen
- * würde.
+ *
+ * Alte Links werden bewusst NICHT mehr invalidiert (geändert 2026-06-19): jeder
+ * ausgestellte Link bleibt bis zu seinem eigenen 24-h-Ablauf gültig. Damit
+ * funktioniert auch eine kürzlich erhaltene Mail noch, wenn der Coach
+ * zwischenzeitlich erneut benachrichtigt hat — mehrere aktive Links pro Paarung
+ * sind erlaubt. Sie zeigen alle auf dieselbe Sign-Seite (aktueller Stand der
+ * offenen Sessions), sind also funktional gleichwertig. Gültigkeit hängt nur
+ * noch an `expires_at`; `used_at` bleibt für einen späteren expliziten
+ * Revoke-Flow reserviert.
  */
 export async function createParticipantMagicLink(params: {
   courseId: string;
@@ -64,27 +69,11 @@ export async function createParticipantMagicLink(params: {
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(schema.participantAccessTokens)
-      .set({ usedAt: new Date() })
-      .where(
-        and(
-          eq(schema.participantAccessTokens.courseId, params.courseId),
-          eq(
-            schema.participantAccessTokens.participantId,
-            params.participantId,
-          ),
-          isNull(schema.participantAccessTokens.usedAt),
-        ),
-      );
-
-    await tx.insert(schema.participantAccessTokens).values({
-      courseId: params.courseId,
-      participantId: params.participantId,
-      tokenHash,
-      expiresAt,
-    });
+  await db.insert(schema.participantAccessTokens).values({
+    courseId: params.courseId,
+    participantId: params.participantId,
+    tokenHash,
+    expiresAt,
   });
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
