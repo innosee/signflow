@@ -70,7 +70,6 @@ export default async function EditCustomerPage({ params }: Props) {
     .select({
       id: schema.users.id,
       name: schema.users.name,
-      signingEnabled: schema.users.signingEnabled,
     })
     .from(schema.users)
     .where(

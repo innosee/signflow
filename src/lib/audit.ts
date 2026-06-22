@@ -33,8 +33,6 @@ export type AuditAction =
   | "ber.draft_saved"
   | "ber.submitted"
   | "ber.edited_after_submit"
-  | "coach.signing_enabled.on"
-  | "coach.signing_enabled.off"
   | "coach.delete"
   | "ber.soft_flags.acknowledged"
   | "bildungstraeger.invite"

@@ -16,7 +16,6 @@ type BedarfstraegerOption = {
 type CoachOption = {
   id: string;
   name: string;
-  signingEnabled: boolean;
 };
 
 type CourseFormValues = {
@@ -107,7 +106,6 @@ export function CourseForm({
             {coaches.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
-                {c.signingEnabled ? "" : " (Signatur nicht freigeschaltet)"}
               </option>
             ))}
           </select>

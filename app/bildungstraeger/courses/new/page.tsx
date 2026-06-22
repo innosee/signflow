@@ -30,7 +30,6 @@ export default async function NewCustomerPage() {
     .select({
       id: schema.users.id,
       name: schema.users.name,
-      signingEnabled: schema.users.signingEnabled,
     })
     .from(schema.users)
     .where(

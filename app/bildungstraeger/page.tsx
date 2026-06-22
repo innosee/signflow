@@ -78,7 +78,6 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
       email: schema.users.email,
       emailVerified: schema.users.emailVerified,
       banned: schema.users.banned,
-      signingEnabled: schema.users.signingEnabled,
       createdAt: schema.users.createdAt,
     })
     .from(schema.users)

@@ -191,34 +191,29 @@ export function assertNotImpersonating(session: SessionData): void {
 }
 
 /**
- * Liest den `signing_enabled`-Flag eines Coaches direkt aus der DB. Cached
- * innerhalb eines Renders (React.cache), damit wiederholte Checks im selben
- * Request keine N+1 erzeugen. Wird nicht aus der Session gezogen, damit ein
- * frisches Togglen durch den Bildungsträger beim nächsten Request greift —
- * ohne dass der Coach erst aus-/einloggen muss.
+ * Das Signatur-Modul ist seit 2026-06 für **jeden** Coach freigeschaltet — das
+ * frühere per-Coach `signing_enabled`-Gate (Pilot-Rollout, BT-Toggle) wurde
+ * entfernt. Diese Funktion bleibt als stabiler Chokepoint für die vorhandenen
+ * Aufrufer (Layout/Nav/Redirects) erhalten und liefert konstant `true`.
+ * Die DB-Spalte `users.signing_enabled` bleibt bestehen, wird aber nicht mehr
+ * gelesen.
  */
 export const getSigningEnabled = cache(
   async (userId: string): Promise<boolean> => {
-    const [row] = await db
-      .select({ signingEnabled: schema.users.signingEnabled })
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-    return !!row?.signingEnabled;
+    // Argument bleibt für die bestehenden Aufrufer in der Signatur erhalten,
+    // wird aber nicht mehr ausgewertet — jeder Coach ist freigeschaltet.
+    void userId;
+    return true;
   },
 );
 
 /**
  * Server-Gate für Signatur-Routen (`/coach/courses*`, `/coach/signature`,
- * Server-Actions darin). Coach ohne Flag wird hart auf `/coach/checker`
- * umgeleitet — Checker ist für alle freigeschaltet. Der Bildungsträger
- * öffnet das Flag pro Pilot-Coach per Admin-UI.
+ * Server-Actions darin). Seit der Freischaltung für alle Coaches identisch mit
+ * `requireCoach` — es gibt kein per-Coach-Flag mehr, das jemanden aussperrt.
  */
 export async function requireSigningEnabled() {
-  const session = await requireCoach();
-  const enabled = await getSigningEnabled(session.user.id);
-  if (!enabled) redirect("/coach/checker");
-  return session;
+  return requireCoach();
 }
 
 /**

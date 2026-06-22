@@ -1,6 +1,6 @@
 "use client";
 
-import { deleteCoach, impersonateCoach, setCoachSigningEnabled } from "./actions";
+import { deleteCoach, impersonateCoach } from "./actions";
 
 export type CoachRow = {
   id: string;
@@ -8,7 +8,6 @@ export type CoachRow = {
   email: string;
   emailVerified: boolean;
   banned: boolean;
-  signingEnabled: boolean;
 };
 
 export function CoachListItem({
@@ -44,37 +43,9 @@ export function CoachListItem({
               Deaktiviert
             </span>
           )}
-          {coach.signingEnabled ? (
-            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800">
-              Signatur freigeschaltet
-            </span>
-          ) : (
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700">
-              Nur Checker
-            </span>
-          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <form action={setCoachSigningEnabled}>
-          <input type="hidden" name="coachId" value={coach.id} />
-          <input
-            type="hidden"
-            name="enabled"
-            value={coach.signingEnabled ? "false" : "true"}
-          />
-          <button
-            type="submit"
-            className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-            title={
-              coach.signingEnabled
-                ? "Signatur-Modul für diesen Coach sperren"
-                : "Signatur-Modul für diesen Coach freischalten"
-            }
-          >
-            {coach.signingEnabled ? "Signatur sperren" : "Signatur freischalten"}
-          </button>
-        </form>
         {canImpersonate && (
           <form action={impersonateCoach}>
             <input type="hidden" name="userId" value={coach.id} />

@@ -85,9 +85,9 @@ export type AssignableCoach = { id: string; name: string };
 /**
  * Coaches eines Tenants, die einem Termin zugewiesen werden können
  * (Kompetenzteams). Bedingungen: aktive (angenommene, nicht gelöschte)
- * Coach-Mitgliedschaft im Tenant, User nicht soft-deleted, und Signatur-Recht
- * (`signing_enabled`) — denn ein zugewiesener Coach muss den Termin später auch
- * signieren können. Reihenfolge nach Name (stabile Dropdown-Anzeige).
+ * Coach-Mitgliedschaft im Tenant, User nicht soft-deleted. Das Signatur-Modul
+ * ist seit 2026-06 für jeden Coach frei (kein `signing_enabled`-Gate mehr),
+ * daher wird darauf nicht mehr gefiltert. Reihenfolge nach Name.
  *
  * Bewusst membership-basiert (nicht über `users.tenant_id`): die Zuweisung
  * folgt dem Membership-Modell ([[project_multitenant_membership]]). Der
@@ -112,7 +112,6 @@ export async function getAssignableCoaches(
         isNotNull(schema.tenantMemberships.acceptedAt),
         isNull(schema.tenantMemberships.deletedAt),
         isNull(schema.users.deletedAt),
-        eq(schema.users.signingEnabled, true),
       ),
     )
     .orderBy(asc(schema.users.name));
@@ -120,8 +119,8 @@ export async function getAssignableCoaches(
 
 /**
  * Prüft, ob `coachId` einem Termin im Tenant `tenantId` zugewiesen werden darf
- * — d.h. eine aktive, angenommene Coach-Mitgliedschaft mit Signatur-Recht hat.
- * Server-seitiges Gate für die Termin-Zuweisung (UI nie vertrauen).
+ * — d.h. eine aktive, angenommene Coach-Mitgliedschaft hat. Server-seitiges
+ * Gate für die Termin-Zuweisung (UI nie vertrauen).
  */
 export async function isAssignableCoach(
   tenantId: string,
@@ -142,7 +141,6 @@ export async function isAssignableCoach(
         isNotNull(schema.tenantMemberships.acceptedAt),
         isNull(schema.tenantMemberships.deletedAt),
         isNull(schema.users.deletedAt),
-        eq(schema.users.signingEnabled, true),
       ),
     )
     .limit(1);
