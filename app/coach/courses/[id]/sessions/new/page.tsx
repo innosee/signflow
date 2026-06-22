@@ -38,6 +38,20 @@ export default async function NewSessionPage({ params }: Props) {
 
   if (!course) notFound();
 
+  // #4: Pro Maßnahme nur ein Erstgespräch — existiert schon eins, blendet das
+  // Formular die Option aus (die Server-Action lehnt es zusätzlich hart ab).
+  const [erstgespraech] = await db
+    .select({ id: schema.sessions.id })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, course.id),
+        eq(schema.sessions.isErstgespraech, true),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
@@ -52,6 +66,7 @@ export default async function NewSessionPage({ params }: Props) {
         courseId={course.id}
         courseTitle={course.title}
         bundesland={course.bundesland}
+        erstgespraechExists={!!erstgespraech}
       />
     </div>
   );

@@ -3,10 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { getFeiertag } from "@/lib/feiertage";
 import { sendReviewRequestedToBildungstraeger } from "@/lib/email";
 import {
   parseEignungsanalyseFromForm,
@@ -230,6 +231,101 @@ async function requireOwnedCourseId(
   return row?.id ?? null;
 }
 
+/**
+ * Kursübergreifende Termin-Regeln, die `validateSessionFormFields` (rein,
+ * feldbasiert) nicht prüfen kann, weil sie andere Sessions / Kursdaten brauchen:
+ *
+ *  - #4: Pro Maßnahme ist nur **ein** Erstgespräch erlaubt.
+ *  - #5: Die **erste reguläre UE** (chronologisch früheste Nicht-Erstgespräch-
+ *        Session) muss an einem Wochentag (Mo–Fr) liegen und darf kein
+ *        gesetzlicher Feiertag (im Bundesland des Kunden) sein. Spätere UEs
+ *        dürfen weiter samstags/an Feiertagen liegen (nur Warnung).
+ *
+ * `excludeSessionId` blendet beim Update die Session selbst aus, damit sie
+ * nicht mit sich selbst kollidiert.
+ */
+async function validateCrossSessionRules(params: {
+  courseId: string;
+  sessionDate: string;
+  isErstgespraech: boolean;
+  excludeSessionId?: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  // #4 — nur ein Erstgespräch je Maßnahme.
+  if (params.isErstgespraech) {
+    const [existing] = await db
+      .select({ id: schema.sessions.id })
+      .from(schema.sessions)
+      .where(
+        and(
+          eq(schema.sessions.courseId, params.courseId),
+          eq(schema.sessions.isErstgespraech, true),
+          isNull(schema.sessions.deletedAt),
+          ...(params.excludeSessionId
+            ? [ne(schema.sessions.id, params.excludeSessionId)]
+            : []),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      return {
+        ok: false,
+        error:
+          "Es gibt bereits ein Erstgespräch für diese Maßnahme — ein zweites ist nicht möglich.",
+      };
+    }
+    // Erstgespräch zählt 0 UE → die Erste-UE-Regel (#5) gilt dafür nicht.
+    return { ok: true };
+  }
+
+  // #5 — gilt nur für die chronologisch früheste reguläre UE.
+  const others = await db
+    .select({ sessionDate: schema.sessions.sessionDate })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, params.courseId),
+        eq(schema.sessions.isErstgespraech, false),
+        isNull(schema.sessions.deletedAt),
+        ...(params.excludeSessionId
+          ? [ne(schema.sessions.id, params.excludeSessionId)]
+          : []),
+      ),
+    );
+  // ISO-Datum (YYYY-MM-DD) ist lexikografisch = chronologisch sortierbar.
+  const earliestOther = others.reduce<string | null>(
+    (min, r) => (min === null || r.sessionDate < min ? r.sessionDate : min),
+    null,
+  );
+  const istErsteUe =
+    earliestOther === null || params.sessionDate <= earliestOther;
+  if (!istErsteUe) return { ok: true };
+
+  const [y, m, d] = params.sessionDate
+    .split("-")
+    .map((s) => Number.parseInt(s, 10));
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=So … 6=Sa
+  if (weekday === 0 || weekday === 6) {
+    return {
+      ok: false,
+      error:
+        "Die erste UE der Maßnahme muss an einem Wochentag (Mo–Fr) liegen — Wochenende ist nur für spätere Termine erlaubt.",
+    };
+  }
+  const [course] = await db
+    .select({ bundesland: schema.courses.bundesland })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, params.courseId))
+    .limit(1);
+  const feiertag = getFeiertag(params.sessionDate, course?.bundesland ?? null);
+  if (feiertag) {
+    return {
+      ok: false,
+      error: `Die erste UE der Maßnahme darf nicht auf einen Feiertag fallen (${feiertag}).`,
+    };
+  }
+  return { ok: true };
+}
+
 export async function createSession(
   _prev: SessionFormState,
   formData: FormData,
@@ -246,6 +342,13 @@ export async function createSession(
   const validation = validateSessionFormFields(formData);
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
+
+  const rules = await validateCrossSessionRules({
+    courseId: ownedCourseId,
+    sessionDate: v.sessionDate,
+    isErstgespraech: v.isErstgespraech,
+  });
+  if (!rules.ok) return { error: rules.error };
 
   // 1:1: Der Termin gehört implizit dem einen Kunden des Kurses — keine
   // Teilnehmer-Auswahl pro Termin mehr.
@@ -281,6 +384,14 @@ export async function createSession(
           reviewDecidedBy: null,
         })
         .where(eq(schema.courses.id, ownedCourseId));
+      // #1: TN-Freigabe verwerfen. Ein neuer Termin ändert das Dokument →
+      // eine bereits erteilte Freigabe bezeugt einen Stand, den es nicht
+      // mehr gibt. Ohne das landet der TN beim Öffnen des Magic-Links auf
+      // dem „Vorgang abgeschlossen"-Screen und kann den neuen Termin nicht
+      // signieren. (Analog zu reopenSession.)
+      await tx
+        .delete(schema.participantApprovals)
+        .where(eq(schema.participantApprovals.courseId, ownedCourseId));
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -344,6 +455,14 @@ export async function updateSession(
   const validation = validateSessionFormFields(formData);
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
+
+  const rules = await validateCrossSessionRules({
+    courseId: ownedCourseId,
+    sessionDate: v.sessionDate,
+    isErstgespraech: v.isErstgespraech,
+    excludeSessionId: sessionId,
+  });
+  if (!rules.ok) return { error: rules.error };
 
   try {
     await db.transaction(async (tx) => {
