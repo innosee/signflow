@@ -18,14 +18,30 @@ if (!process.env.BETTER_AUTH_SECRET) {
 const configuredUrl =
   process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL;
 
-if (!configuredUrl && process.env.NODE_ENV === "production") {
+// Vercel-Preview-Deployments (Feature-Branches) bekommen die URL-Env-Variablen
+// NICHT — die sind bewusst nur im Production-Scope gesetzt, damit Reset/Invite-
+// Links immer auf die echte Domain (signflow.coach) zeigen. Ohne Fallback wirft
+// der `next build` im Preview aber (er läuft mit NODE_ENV=production). Vercel
+// setzt für JEDES Deployment automatisch `VERCEL_URL` (= die Deploy-URL ohne
+// Protokoll) und `VERCEL_ENV`. Im Preview fallen wir darauf zurück, sodass jeder
+// Preview self-configured auf seine eigene URL baut und läuft.
+const previewFallbackUrl =
+  process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : undefined;
+
+const resolvedUrl = configuredUrl ?? previewFallbackUrl;
+
+// In echter Production (nicht Preview) bleibt der harte Guard: fehlt die explizit
+// gesetzte URL, brechen wir laut ab, statt still auf localhost zu fallen.
+if (!resolvedUrl && process.env.NODE_ENV === "production") {
   throw new Error(
     "BETTER_AUTH_URL (or NEXT_PUBLIC_APP_URL) must be set in production — " +
       "otherwise Better Auth falls back to localhost and breaks Reset/Invite links.",
   );
 }
 
-const appUrl = configuredUrl ?? "http://localhost:3000";
+const appUrl = resolvedUrl ?? "http://localhost:3000";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
