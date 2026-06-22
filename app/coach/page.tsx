@@ -3,7 +3,13 @@ import { redirect } from "next/navigation";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
+import {
+  getSigningEnabled,
+  getTenantId,
+  isImpersonating,
+  requireCoach,
+} from "@/lib/dal";
+import { courseVisibleToCoach } from "@/lib/course-access";
 
 import { CoachCourseList } from "./course-list";
 
@@ -26,6 +32,10 @@ export default async function CoachDashboard() {
     .limit(1);
   const hasSignature = !!me?.signatureUrl;
 
+  // Kompetenzteams: Coach sieht eine Maßnahme, wenn er Lead ODER mind. einem
+  // Termin zugewiesen ist. Zusätzlich tenant-gescoped (Defense-in-Depth über
+  // die Teilnehmer-Tenant-Spalte — Kurse selbst tragen keine tenant_id).
+  const tenantId = getTenantId(session);
   const courses = await db
     .select({
       id: schema.courses.id,
@@ -44,8 +54,9 @@ export default async function CoachDashboard() {
     )
     .where(
       and(
-        eq(schema.courses.coachId, session.user.id),
+        eq(schema.participants.tenantId, tenantId),
         isNull(schema.courses.deletedAt),
+        courseVisibleToCoach(session.user.id),
       ),
     )
     .orderBy(desc(schema.courses.createdAt));
