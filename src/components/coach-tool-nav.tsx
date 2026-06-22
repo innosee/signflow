@@ -25,7 +25,10 @@ const SIGN_TOOL: Tool = {
   label: "Signatur",
   href: "/coach",
   pathPrefixes: ["/coach/courses", "/coach/signature"],
-  navLinks: [{ href: "/coach", label: "Meine Kurse" }],
+  // Keine Sub-Nav: der „Signatur"-Tab landet selbst auf der Kundenliste
+  // (/coach). Ein zusätzlicher „Meine Kurse"-Link auf dieselbe URL wäre
+  // redundant (anders als der Checker, der mehrere Unterseiten hat).
+  navLinks: [],
 };
 
 const CHECK_TOOL: Tool = {
