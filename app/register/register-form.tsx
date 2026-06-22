@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Script from "next/script";
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { registerBildungstraeger, type RegisterState } from "./actions";
 
@@ -15,6 +15,14 @@ export function RegisterForm() {
   );
 
   const timestampRef = useRef<HTMLInputElement>(null);
+
+  // Controlled inputs: React 19 setzt ein `<form action>` nach jedem
+  // Action-Durchlauf zurück — auch bei reinem Fehler-State. Uncontrolled
+  // Felder würden dann geleert (Turnstile-Fehler → alles neu tippen). Mit
+  // eigenem State bleiben die Eingaben über Fehler hinweg erhalten.
+  const [company, setCompany] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
 
   // Min-Time-Check braucht einen client-gesetzten Timestamp. Per useEffect,
   // damit SSR/CSR keinen Hydration-Mismatch auf Date.now() haben. Bots ohne
@@ -79,6 +87,8 @@ export function RegisterForm() {
             autoComplete="organization"
             placeholder="Muster Bildungsträger GmbH"
             className={inputClass}
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
           />
         </label>
         <label className="block space-y-1.5">
@@ -92,6 +102,8 @@ export function RegisterForm() {
             autoComplete="name"
             placeholder="Vor- und Nachname"
             className={inputClass}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
         </label>
         <label className="block space-y-1.5">
@@ -105,6 +117,8 @@ export function RegisterForm() {
             autoComplete="email"
             placeholder="du@bildungstraeger.de"
             className={inputClass}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
         </label>
 
