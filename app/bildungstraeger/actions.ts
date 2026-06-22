@@ -18,7 +18,8 @@ import {
   isTenantOwner,
   requireBildungstraeger,
 } from "@/lib/dal";
-import { ensureMembership } from "@/lib/memberships";
+import { ensureMembership, getActiveMemberships } from "@/lib/memberships";
+import { sendCoachAddedToTenant } from "@/lib/email";
 
 export type InviteFormState =
   | { error?: string; success?: string }
@@ -38,6 +39,86 @@ export async function inviteCoach(
 
   if (!email || !name) {
     return { error: "Name und E-Mail sind erforderlich." };
+  }
+
+  // Cross-Tenant-Invite (Membership-Modell): existiert die E-Mail bereits als
+  // AKTIVES Konto (irgendwo), legen wir KEINEN zweiten User an — Better Auth
+  // meldet global per E-Mail an, das ginge gar nicht. Stattdessen bekommt die
+  // bestehende Identität eine zusätzliche Coach-Mitgliedschaft in DIESEM Tenant.
+  // Eine Person, mehrere Bildungsträger.
+  const [activeUser] = await db
+    .select({
+      id: schema.users.id,
+      tenantId: schema.users.tenantId,
+      role: schema.users.role,
+    })
+    .from(schema.users)
+    .where(and(eq(schema.users.email, email), isNull(schema.users.deletedAt)))
+    .limit(1);
+
+  if (activeUser) {
+    // Schon Mitglied dieses Tenants? (Heimat-Tenant ODER bestehende Membership)
+    const memberships = await getActiveMemberships(activeUser.id);
+    const alreadyHere =
+      activeUser.tenantId === tenantId ||
+      memberships.some((m) => m.tenantId === tenantId);
+    if (alreadyHere) {
+      return {
+        error:
+          "Diese Person ist bereits Mitglied dieses Bildungsträgers.",
+      };
+    }
+
+    try {
+      await db.transaction(async (tx) => {
+        // Heimat-Mitgliedschaft materialisieren, falls noch keine existiert —
+        // sonst würde die Identität auf die neue (einzige) Coach-Mitgliedschaft
+        // kollabieren und ihren bisherigen Kontext verlieren.
+        if (memberships.length === 0) {
+          await ensureMembership(tx, {
+            userId: activeUser.id,
+            tenantId: activeUser.tenantId,
+            role:
+              activeUser.role === "bildungstraeger"
+                ? "bildungstraeger"
+                : "coach",
+          });
+        }
+        await ensureMembership(tx, {
+          userId: activeUser.id,
+          tenantId,
+          role: "coach",
+        });
+      });
+    } catch {
+      return { error: "Coach konnte nicht hinzugefügt werden." };
+    }
+
+    // Bestehendes Konto → kein Passwort-Reset, nur eine Info-Mail. Mail-Fehler
+    // soll die bereits geschriebene Mitgliedschaft nicht zurückrollen.
+    try {
+      const [tenant] = await db
+        .select({ name: schema.tenants.name })
+        .from(schema.tenants)
+        .where(eq(schema.tenants.id, tenantId))
+        .limit(1);
+      const base =
+        process.env.BETTER_AUTH_URL ??
+        process.env.NEXT_PUBLIC_APP_URL ??
+        "http://localhost:3000";
+      await sendCoachAddedToTenant({
+        to: email,
+        name,
+        tenantName: tenant?.name ?? "deinem neuen Bildungsträger",
+        url: `${base}/login`,
+      });
+    } catch {
+      // non-fatal — Mitgliedschaft besteht; Info-Mail kann manuell folgen.
+    }
+
+    return {
+      success: `${email} wurde als Coach hinzugefügt. Die Person meldet sich mit ihrem bestehenden Konto an.`,
+    };
   }
 
   // Random placeholder password. The coach sets their real one via the reset
