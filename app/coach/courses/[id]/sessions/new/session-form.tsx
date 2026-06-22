@@ -6,6 +6,7 @@ import { useActionState, useState } from "react";
 import { type Bundesland, getFeiertag } from "@/lib/feiertage";
 
 import { createSession, type SessionFormState } from "../../actions";
+import { CoachAssignmentField } from "../coach-assignment-field";
 import { EignungAnalyseFieldset } from "../eignung-fieldset";
 
 export function SessionForm({
@@ -13,12 +14,18 @@ export function SessionForm({
   courseTitle,
   bundesland,
   erstgespraechExists = false,
+  coaches,
+  defaultCoachId,
 }: {
   courseId: string;
   courseTitle: string;
   bundesland: Bundesland | null;
   /** #4: Existiert schon ein Erstgespräch, wird die Option ausgeblendet. */
   erstgespraechExists?: boolean;
+  /** Kompetenzteams: zuweisbare Coaches des Tenants (inkl. Lead). */
+  coaches: Array<{ id: string; name: string }>;
+  /** Vorausgewählter Coach (= Lead-Coach des Kurses). */
+  defaultCoachId: string;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
@@ -96,6 +103,8 @@ export function SessionForm({
             </label>
           )}
         </div>
+
+        <CoachAssignmentField coaches={coaches} defaultCoachId={defaultCoachId} />
 
         {feiertag && (
           <p

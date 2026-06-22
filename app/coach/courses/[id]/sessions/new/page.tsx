@@ -2,7 +2,12 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
+import {
+  assertNotImpersonating,
+  getTenantId,
+  requireSigningEnabled,
+} from "@/lib/dal";
+import { getAssignableCoaches } from "@/lib/memberships";
 
 import { SessionForm } from "./session-form";
 
@@ -52,6 +57,11 @@ export default async function NewSessionPage({ params }: Props) {
     )
     .limit(1);
 
+  // Kompetenzteams: zuweisbare Coaches des Tenants (Default = der anlegende
+  // Lead-Coach). getTenantId liefert den aktiven Tenant des Coaches = Tenant
+  // des Kurses (er besitzt ihn).
+  const coaches = await getAssignableCoaches(getTenantId(session));
+
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
@@ -67,6 +77,8 @@ export default async function NewSessionPage({ params }: Props) {
         courseTitle={course.title}
         bundesland={course.bundesland}
         erstgespraechExists={!!erstgespraech}
+        coaches={coaches}
+        defaultCoachId={session.user.id}
       />
     </div>
   );

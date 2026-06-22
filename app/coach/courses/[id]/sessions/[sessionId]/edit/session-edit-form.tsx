@@ -7,6 +7,7 @@ import { type Bundesland, getFeiertag } from "@/lib/feiertage";
 import { type Eignungsanalyse } from "@/lib/eignung";
 
 import { updateSession, type SessionFormState } from "../../../actions";
+import { CoachAssignmentField } from "../../coach-assignment-field";
 import { EignungAnalyseFieldset } from "../../eignung-fieldset";
 
 type SessionInitial = {
@@ -25,11 +26,17 @@ export function SessionEditForm({
   courseTitle,
   bundesland,
   session,
+  coaches,
+  defaultCoachId,
 }: {
   courseId: string;
   courseTitle: string;
   bundesland: Bundesland | null;
   session: SessionInitial;
+  /** Kompetenzteams: zuweisbare Coaches des Tenants (inkl. Lead). */
+  coaches: Array<{ id: string; name: string }>;
+  /** Aktuell zugewiesener Coach (Fallback = Lead-Coach des Kurses). */
+  defaultCoachId: string;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     updateSession,
@@ -106,6 +113,8 @@ export function SessionEditForm({
             </label>
           )}
         </div>
+
+        <CoachAssignmentField coaches={coaches} defaultCoachId={defaultCoachId} />
 
         {feiertag && (
           <p
