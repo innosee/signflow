@@ -80,6 +80,75 @@ export async function getPendingInvitations(
     .orderBy(asc(schema.tenants.name));
 }
 
+export type AssignableCoach = { id: string; name: string };
+
+/**
+ * Coaches eines Tenants, die einem Termin zugewiesen werden können
+ * (Kompetenzteams). Bedingungen: aktive (angenommene, nicht gelöschte)
+ * Coach-Mitgliedschaft im Tenant, User nicht soft-deleted, und Signatur-Recht
+ * (`signing_enabled`) — denn ein zugewiesener Coach muss den Termin später auch
+ * signieren können. Reihenfolge nach Name (stabile Dropdown-Anzeige).
+ *
+ * Bewusst membership-basiert (nicht über `users.tenant_id`): die Zuweisung
+ * folgt dem Membership-Modell ([[project_multitenant_membership]]). Der
+ * Lead-Coach des Kurses ist üblicherweise selbst in dieser Liste; falls eine
+ * Alt-Identität ohne Mitgliedschaft existiert, lässt die Action den Lead
+ * trotzdem zu (er ist per Definition für seinen eigenen Kurs zuweisbar).
+ */
+export async function getAssignableCoaches(
+  tenantId: string,
+): Promise<AssignableCoach[]> {
+  return db
+    .select({ id: schema.users.id, name: schema.users.name })
+    .from(schema.tenantMemberships)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.tenantMemberships.userId),
+    )
+    .where(
+      and(
+        eq(schema.tenantMemberships.tenantId, tenantId),
+        eq(schema.tenantMemberships.role, "coach"),
+        isNotNull(schema.tenantMemberships.acceptedAt),
+        isNull(schema.tenantMemberships.deletedAt),
+        isNull(schema.users.deletedAt),
+        eq(schema.users.signingEnabled, true),
+      ),
+    )
+    .orderBy(asc(schema.users.name));
+}
+
+/**
+ * Prüft, ob `coachId` einem Termin im Tenant `tenantId` zugewiesen werden darf
+ * — d.h. eine aktive, angenommene Coach-Mitgliedschaft mit Signatur-Recht hat.
+ * Server-seitiges Gate für die Termin-Zuweisung (UI nie vertrauen).
+ */
+export async function isAssignableCoach(
+  tenantId: string,
+  coachId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.tenantMemberships.id })
+    .from(schema.tenantMemberships)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.tenantMemberships.userId),
+    )
+    .where(
+      and(
+        eq(schema.tenantMemberships.userId, coachId),
+        eq(schema.tenantMemberships.tenantId, tenantId),
+        eq(schema.tenantMemberships.role, "coach"),
+        isNotNull(schema.tenantMemberships.acceptedAt),
+        isNull(schema.tenantMemberships.deletedAt),
+        isNull(schema.users.deletedAt),
+        eq(schema.users.signingEnabled, true),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
 export type TenantSwitcherData = {
   memberships: MembershipView[];
   activeTenantId: string;
