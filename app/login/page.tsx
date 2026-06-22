@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession } from "@/lib/dal";
@@ -34,6 +35,15 @@ export default async function LoginPage({ searchParams }: Props) {
           </div>
         )}
         <LoginForm />
+        <p className="text-center text-sm text-zinc-600">
+          Noch kein Konto?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-zinc-900 underline"
+          >
+            Als Bildungsträger registrieren
+          </Link>
+        </p>
       </div>
     </div>
   );

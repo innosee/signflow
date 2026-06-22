@@ -8,7 +8,7 @@ const TIERS = [
     features: [
       "Unbegrenzt Kunden + Termine",
       "Canvas-Signatur für Coach + TN",
-      "Magic-Link-Versand via Resend",
+      "Magic-Link-Versand per E-Mail & QR-Code",
       "A4-PDF-Export mit FES",
       "Audit-Log + EU-Hosting",
       "14 Tage kostenlos testen",
@@ -23,10 +23,11 @@ const TIERS = [
     perCoach: "ab 1,99 € pro Coach",
     features: [
       "Alles aus Starter",
-      "Bildungsträger-Dashboard + Impersonation",
+      "Bildungsträger-Dashboard + Freigabe-Gate",
+      "Team: mehrere BT-Personen + Impersonation",
+      "KI-Anwesenheits-Check",
       "Priority-Support per E-Mail",
       "Monatsreports (Phase 2)",
-      "Rechnungswesen-Vorbereitung",
     ],
     highlighted: true,
   },

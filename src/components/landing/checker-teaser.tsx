@@ -23,8 +23,13 @@ export function LandingCheckerTeaser() {
               KI-gestützte Regelprüfung gegen die häufigsten AfA-Ablehnungs-Trigger
             </Bullet>
             <Bullet>
-              Pseudonymisierung mit GLiNER + Llama 3.3 in der EU — dein Klartext
-              verlässt Deutschland nie
+              Pflichtbausteine, Tonalität und Konkretheit in einem Durchlauf —
+              inklusive der starken Stellen, die du behalten solltest
+            </Bullet>
+            <Bullet>
+              Pseudonymisierung in Frankfurt vor jeder Prüfung — dein Klartext
+              (Namen, Kunden-Nr.) verlässt Deutschland nie, nur pseudonymisierter
+              Text geht an das EU-Sprachmodell
             </Bullet>
             <Bullet>
               Vorschläge stückweise übernehmen — pro Stelle ein Klick,
