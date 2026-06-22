@@ -10,9 +10,12 @@ import {
 export function ProfileForm({
   initialName,
   email,
+  tenantName,
 }: {
   initialName: string;
   email: string;
+  /** Name des Bildungsträgers (Tenant). Nur in der BT-Sicht gesetzt. */
+  tenantName?: string;
 }) {
   const [state, action, pending] = useActionState<SettingsFormState, FormData>(
     updateProfileAction,
@@ -21,8 +24,24 @@ export function ProfileForm({
 
   return (
     <form action={action} className="space-y-4">
+      {tenantName ? (
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-zinc-800">
+            Bildungsträger
+          </span>
+          <input
+            type="text"
+            value={tenantName}
+            readOnly
+            className="block w-full cursor-not-allowed rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-500 outline-none"
+          />
+        </label>
+      ) : null}
+
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-zinc-800">Name</span>
+        <span className="text-sm font-medium text-zinc-800">
+          {tenantName ? "Ansprechpartner" : "Name"}
+        </span>
         <input
           name="name"
           type="text"
