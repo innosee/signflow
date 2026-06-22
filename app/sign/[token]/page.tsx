@@ -128,7 +128,12 @@ export default async function ParticipantSignPage({ params }: Props) {
     );
   }
 
-  if (resolved.hasApproved) {
+  // „Vorgang abgeschlossen" nur, wenn der TN freigegeben hat UND es keine
+  // offenen Termine gibt. Legt der Coach nach der Freigabe einen neuen Termin
+  // an, wird die Freigabe serverseitig verworfen (siehe createSession) — als
+  // zusätzliche Absicherung haben offene Termine hier Vorrang vor dem
+  // „Fertig"-Screen, damit der TN den neuen Termin signieren kann.
+  if (resolved.hasApproved && open.length === 0) {
     return (
       <div className="mx-auto max-w-xl px-4 py-8 space-y-6">
         <header>

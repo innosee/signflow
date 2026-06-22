@@ -12,10 +12,13 @@ export function SessionForm({
   courseId,
   courseTitle,
   bundesland,
+  erstgespraechExists = false,
 }: {
   courseId: string;
   courseTitle: string;
   bundesland: Bundesland | null;
+  /** #4: Existiert schon ein Erstgespräch, wird die Option ausgeblendet. */
+  erstgespraechExists?: boolean;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
@@ -105,23 +108,30 @@ export function SessionForm({
           </p>
         )}
 
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="isErstgespraech"
-            checked={isErstgespraech}
-            onChange={(e) => setIsErstgespraech(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span>
-            <span className="font-medium">Erstgespräch</span>
-            <span className="block text-xs text-zinc-500">
-              Zählt keine UE, braucht aber die Eignungsanalyse.
+        {erstgespraechExists ? (
+          <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500">
+            Für diese Maßnahme ist bereits ein Erstgespräch erfasst — ein
+            zweites ist nicht möglich.
+          </p>
+        ) : (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="isErstgespraech"
+              checked={isErstgespraech}
+              onChange={(e) => setIsErstgespraech(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Erstgespräch</span>
+              <span className="block text-xs text-zinc-500">
+                Zählt keine UE, braucht aber die Eignungsanalyse.
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        )}
 
-        {isErstgespraech && <EignungAnalyseFieldset />}
+        {!erstgespraechExists && isErstgespraech && <EignungAnalyseFieldset />}
 
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-zinc-800">
