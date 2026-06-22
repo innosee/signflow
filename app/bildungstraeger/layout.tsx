@@ -34,7 +34,10 @@ export default async function BildungstraegerLayout({
             { href: "/bildungstraeger/courses", label: "Kunden" },
             { href: "/bildungstraeger/checker", label: "Bericht prüfen" },
             { href: "/bildungstraeger/bedarfstraeger", label: "Bedarfsträger" },
-            { href: "/bildungstraeger/team", label: "Team" },
+            // „Team" bewusst ausgeblendet: der erste Kunde nutzt EINE
+            // gemeinsame Login-Adresse für alle. Die Route /bildungstraeger/team
+            // bleibt per URL erreichbar (Coach-Einladung/-Verwaltung), ist aber
+            // nicht mehr prominent in der Navigation.
           ]}
           tenantSwitcher={
             <TenantSwitcher
