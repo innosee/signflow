@@ -36,5 +36,18 @@ export async function resetPasswordAction(
     throw err;
   }
 
+  // Edge-Case: Der Reset ist token-basiert (setzt das Passwort des
+  // eingeladenen Coaches), berührt aber NICHT eine evtl. im selben Browser noch
+  // aktive ANDERE Session. Ohne das hier bliebe man nach dem Setzen im vorher
+  // eingeloggten Konto „hängen" statt sich als der neue Coach anzumelden.
+  // Deshalb eine bestehende Session aktiv beenden → sauberer Login. Best-effort:
+  // ist niemand eingeloggt (Normalfall: Coach auf eigenem Gerät), ist das ein
+  // No-op.
+  try {
+    await auth.api.signOut({ headers: await headers() });
+  } catch {
+    // kein aktiver Login / bereits abgemeldet — egal.
+  }
+
   redirect("/login?reset=1");
 }
