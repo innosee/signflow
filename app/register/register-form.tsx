@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Script from "next/script";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import { registerBildungstraeger, type RegisterState } from "./actions";
 
@@ -14,8 +14,6 @@ export function RegisterForm() {
     undefined,
   );
 
-  const timestampRef = useRef<HTMLInputElement>(null);
-
   // Controlled inputs: React 19 setzt ein `<form action>` nach jedem
   // Action-Durchlauf zurück — auch bei reinem Fehler-State. Uncontrolled
   // Felder würden dann geleert (Turnstile-Fehler → alles neu tippen). Mit
@@ -24,14 +22,18 @@ export function RegisterForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
 
-  // Min-Time-Check braucht einen client-gesetzten Timestamp. Per useEffect,
-  // damit SSR/CSR keinen Hydration-Mismatch auf Date.now() haben. Bots ohne
-  // JS bekommen kein Feld → Server-Check verwirft sie.
+  // Min-Time-Check braucht einen client-gesetzten Timestamp. MUSS controlled
+  // sein: ein uncontrolled Feld (defaultValue + Ref) wird bei JEDEM Re-Render
+  // der controlled Geschwister (= jeder Tastendruck) wieder auf den
+  // defaultValue zurückgesetzt → Timestamp leer beim Submit → Server hält uns
+  // fälschlich für einen No-JS-Bot. Per useEffect gesetzt (nicht im
+  // useState-Initializer), damit SSR (leer) und erste CSR-Render kein
+  // Hydration-Mismatch auf Date.now() bekommen. Bots ohne JS bekommen kein
+  // Feld → Server-Check verwirft sie.
+  const [renderedAt, setRenderedAt] = useState("");
   useEffect(() => {
-    if (timestampRef.current) {
-      timestampRef.current.value = String(Date.now());
-    }
-  }, [state]);
+    setRenderedAt(String(Date.now()));
+  }, []);
 
   if (state?.ok) {
     return (
@@ -69,10 +71,10 @@ export function RegisterForm() {
       <form action={action} className="space-y-4">
         <HoneypotField />
         <input
-          ref={timestampRef}
           type="hidden"
           name="rendered_at"
-          defaultValue=""
+          value={renderedAt}
+          readOnly
         />
 
         <label className="block space-y-1.5">
