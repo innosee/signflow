@@ -133,6 +133,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       isErstgespraech: schema.sessions.isErstgespraech,
       topic: schema.sessions.topic,
       status: schema.sessions.status,
+      // Kompetenzteams: zugewiesener Coach des Termins (+ Name für die Anzeige).
+      coachId: schema.sessions.coachId,
+      coachName: schema.users.name,
       coachSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'coach')::int`,
       participantsSigned: sql<number>`count(distinct ${schema.signatures.id}) filter (where ${schema.signatures.signerType} = 'participant')::int`,
     })
@@ -141,14 +144,21 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       schema.signatures,
       eq(schema.signatures.sessionId, schema.sessions.id),
     )
+    .leftJoin(schema.users, eq(schema.users.id, schema.sessions.coachId))
     .where(
       and(
         eq(schema.sessions.courseId, id),
         isNull(schema.sessions.deletedAt),
       ),
     )
-    .groupBy(schema.sessions.id)
+    .groupBy(schema.sessions.id, schema.users.name)
     .orderBy(asc(schema.sessions.sessionDate));
+
+  // Mehrere Coaches im Spiel? Dann zeigen wir pro Termin, wer zugewiesen ist.
+  const distinctCoachIds = new Set(
+    sessions.map((s) => s.coachId).filter((v): v is string => v !== null),
+  );
+  const isKompetenzteam = distinctCoachIds.size > 1;
 
   // "Geleistet" zählt nur Sessions, bei denen Coach UND alle Teilnehmer
   // signiert haben (status='completed'). Reine Coach-Signatur oder noch
@@ -318,6 +328,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               // 1:1: Jeder Termin gehört genau dem einen Kunden des Kurses.
               const tnTotal = 1;
               const tnSigned = s.participantsSigned;
+              // Kompetenzteams: NUR der zugewiesene Coach darf diesen Termin
+              // signieren (Alt-Termine ohne Zuweisung: der Lead). Spiegelt das
+              // harte Server-Gate in signSessionAsCoach.
+              const assignedToMe =
+                s.coachId === session.user.id ||
+                (s.coachId === null && isLead);
+              const canSignThis = assignedToMe && !impersonating;
               // Zukunfts-Termine sind noch nicht signierbar.
               const isFuture = isFutureSessionDate(s.sessionDate);
               // Feiertag im Bundesland des Kunden? Nur Markierung — Coaching an
@@ -346,6 +363,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       <p className="text-zinc-700">{s.topic}</p>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                         <SessionStatusBadge status={s.status} />
+                        {isKompetenzteam && s.coachName && (
+                          <span
+                            className="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800"
+                            title="Diesem Termin zugewiesener Coach"
+                          >
+                            {s.coachName}
+                          </span>
+                        )}
                         <span>
                           Coach {coachSigned ? "✓" : "–"}
                         </span>
@@ -378,9 +403,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       </div>
                     </div>
                   </div>
-                  {/* Phase 3: nur der Lead signiert. Phase 4 weitet das auf den
-                      dem Termin zugewiesenen Team-Coach aus. */}
-                  {!coachSigned && canManage && coachHasSignature && (
+                  {/* Kompetenzteams: nur der dem Termin zugewiesene Coach
+                      signiert (Lead-Fallback für Alt-Termine ohne Zuweisung). */}
+                  {!coachSigned && canSignThis && coachHasSignature && (
                     <div className="pl-28">
                       {isFuture ? (
                         <p className="text-xs text-zinc-500">
@@ -392,7 +417,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       )}
                     </div>
                   )}
-                  {!coachSigned && canManage && !coachHasSignature && (
+                  {!coachSigned && canSignThis && !coachHasSignature && (
                     <p className="pl-28 text-xs text-amber-700">
                       Zum Signieren bitte zuerst{" "}
                       <Link

@@ -20,6 +20,7 @@ import {
   requireSigningEnabled,
 } from "@/lib/dal";
 import { sealWithFes } from "@/lib/firma";
+import { coachCanAccessCourse } from "@/lib/course-access";
 import { isAssignableCoach } from "@/lib/memberships";
 import {
   sendParticipantInvite,
@@ -1872,8 +1873,12 @@ export async function signSessionAsCoach(
   if (!courseId || !sessionId) return { error: "Kurs oder Session fehlt." };
   if (!confirmed) return { error: "Bitte aktiv bestätigen." };
 
-  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
-  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+  // Kompetenzteams: nicht mehr Lead-only — auch ein zugewiesener Team-Coach
+  // darf zugreifen. Welchen Termin er signieren darf, entscheidet das harte
+  // Per-Termin-Gate weiter unten (session.coach_id == coachId).
+  const canAccess = await coachCanAccessCourse(courseId, coachId);
+  if (!canAccess) return { error: "Kurs nicht gefunden." };
+  const ownedCourseId = courseId;
 
   const [coach] = await db
     .select({ signatureUrl: schema.users.signatureUrl })
@@ -1899,6 +1904,7 @@ export async function signSessionAsCoach(
         .select({
           id: schema.sessions.id,
           sessionDate: schema.sessions.sessionDate,
+          coachId: schema.sessions.coachId,
         })
         .from(schema.sessions)
         .where(
@@ -1910,6 +1916,26 @@ export async function signSessionAsCoach(
         )
         .limit(1);
       if (!sess) throw new Error("SESSION_NOT_FOUND");
+
+      // Kompetenzteams — HARTES Per-Termin-Gate: ein Coach darf NUR Termine
+      // signieren, die ihm zugewiesen sind. Sonst wäre die Beweiskraft kaputt
+      // (Coach A könnte für Coach B signieren). Fallback für Alt-Termine ohne
+      // Zuweisung (coach_id NULL, nicht gebackfillt): nur der Lead darf.
+      if (sess.coachId !== coachId) {
+        if (sess.coachId === null) {
+          const [courseRow] = await tx
+            .select({ leadCoachId: schema.courses.coachId })
+            .from(schema.courses)
+            .where(eq(schema.courses.id, ownedCourseId))
+            .limit(1);
+          if (courseRow?.leadCoachId !== coachId) {
+            throw new Error("NOT_ASSIGNED");
+          }
+        } else {
+          throw new Error("NOT_ASSIGNED");
+        }
+      }
+
       // Zukunfts-Termine sind nicht signierbar — Anwesenheit für etwas, das
       // noch nicht stattgefunden hat, wäre fachlich + rechtlich unsinnig.
       if (isFutureSessionDate(sess.sessionDate)) {
@@ -1934,6 +1960,10 @@ export async function signSessionAsCoach(
       await tx.insert(schema.signatures).values({
         sessionId: sess.id,
         participantId: null,
+        // Kompetenzteams: durable festhalten, WER signiert hat (unabhängig von
+        // späteren Zuweisungs-Änderungen — die nach Signatur ohnehin geblockt
+        // sind, aber das Audit soll für sich stehen).
+        coachId,
         signerType: "coach",
         signatureUrl: coachSignatureUrl,
         ipAddress,
@@ -1945,6 +1975,12 @@ export async function signSessionAsCoach(
     const message = err instanceof Error ? err.message : String(err);
     if (message === "SESSION_NOT_FOUND") {
       return { error: "Termin nicht gefunden." };
+    }
+    if (message === "NOT_ASSIGNED") {
+      return {
+        error:
+          "Dieser Termin ist einem anderen Coach zugewiesen — nur der zugewiesene Coach kann ihn signieren.",
+      };
     }
     if (message === "FUTURE_SESSION") {
       return {
