@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import {
@@ -191,5 +192,255 @@ export async function createCourse(
     return { error: "Kunde konnte nicht angelegt werden." };
   }
 
+  redirect("/bildungstraeger/courses");
+}
+
+/**
+ * Bildungsträger bearbeitet die Stammdaten eines bestehenden Kunden — Maßnahme-
+ * Felder (AVGS, Ort, UE, Bedarfsträger, Typ, Bundesland, Zeitraum, zugewiesener
+ * Coach) UND die Kunden-Person (Name, E-Mail, Kunden-Nr.). Reine Stammdaten:
+ * Signaturen, Termine und FES-Gates bleiben unangetastet — geändert wird nur,
+ * was nicht an einer Unterschrift hängt. `courseId` kommt als Hidden-Feld.
+ */
+export async function updateCourse(
+  _prev: CourseFormState,
+  formData: FormData,
+): Promise<CourseFormState> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kunde nicht angegeben." };
+
+  // Besitz prüfen: Kurs muss zum Tenant des BT gehören (Coach-Join).
+  const [course] = await db
+    .select({
+      id: schema.courses.id,
+      participantId: schema.courses.participantId,
+    })
+    .from(schema.courses)
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .where(
+      and(
+        eq(schema.courses.id, courseId),
+        eq(schema.users.tenantId, tenantId),
+        isNull(schema.courses.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!course) return { error: "Kunde nicht gefunden." };
+
+  const avgsNummer = String(formData.get("avgsNummer") ?? "").trim();
+  const durchfuehrungsort = String(
+    formData.get("durchfuehrungsort") ?? "",
+  ).trim();
+  const anzahlBewilligteUeRaw = String(
+    formData.get("anzahlBewilligteUe") ?? "",
+  ).trim();
+  const bedarfstraegerId = String(formData.get("bedarfstraegerId") ?? "").trim();
+  const coachId = String(formData.get("coachId") ?? "").trim();
+  const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
+  const bundeslandRaw = String(formData.get("bundesland") ?? "").trim();
+  const startDate = String(formData.get("startDate") ?? "").trim();
+  const endDate = String(formData.get("endDate") ?? "").trim();
+  const customerName = String(formData.get("p_name") ?? "").trim();
+  const customerEmail = String(formData.get("p_email") ?? "")
+    .trim()
+    .toLowerCase();
+  const customerKundenNr = String(formData.get("p_kundennr") ?? "").trim();
+
+  if (
+    !MASSNAHME_TYPEN.includes(massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number])
+  ) {
+    return { error: "Ungültiger Maßnahme-Typ. Bitte aus der Liste wählen." };
+  }
+  const massnahmeTyp = massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number];
+  const title = MASSNAHME_TYP_LABEL[massnahmeTyp];
+
+  if (!isBundesland(bundeslandRaw)) {
+    return { error: "Bitte ein Bundesland aus der Liste wählen." };
+  }
+  const bundesland = bundeslandRaw;
+
+  if (
+    !avgsNummer ||
+    !durchfuehrungsort ||
+    !anzahlBewilligteUeRaw ||
+    !bedarfstraegerId ||
+    !coachId ||
+    !startDate ||
+    !endDate
+  ) {
+    return { error: "Bitte alle Kurs-Felder ausfüllen (inkl. Coach)." };
+  }
+  if (!customerName || !customerEmail || !customerKundenNr) {
+    return { error: "Kunde braucht Name, E-Mail und Kunden-Nr. (AfA)." };
+  }
+  if (!looksLikeEmail(customerEmail)) {
+    return { error: "Ungültige E-Mail-Adresse des Kunden." };
+  }
+
+  const anzahlBewilligteUe = Number.parseInt(anzahlBewilligteUeRaw, 10);
+  if (!Number.isInteger(anzahlBewilligteUe) || anzahlBewilligteUe <= 0) {
+    return { error: "Bewilligte UE muss eine positive ganze Zahl sein." };
+  }
+  if (endDate < startDate) {
+    return { error: "Enddatum darf nicht vor dem Startdatum liegen." };
+  }
+
+  const [coach] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, coachId),
+        eq(schema.users.tenantId, tenantId),
+        eq(schema.users.role, "coach"),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!coach) return { error: "Der gewählte Coach existiert nicht (mehr)." };
+
+  const [bt] = await db
+    .select({ id: schema.bedarfstraeger.id })
+    .from(schema.bedarfstraeger)
+    .where(
+      and(
+        eq(schema.bedarfstraeger.id, bedarfstraegerId),
+        eq(schema.bedarfstraeger.tenantId, tenantId),
+        isNull(schema.bedarfstraeger.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!bt) return { error: "Der gewählte Bedarfsträger existiert nicht (mehr)." };
+
+  try {
+    await db.transaction(async (tx) => {
+      // Kunden-Person aktualisieren (tenant-scoped). Achtung: bei geteilter
+      // E-Mail/Person über mehrere Maßnahmen wirkt das auf alle.
+      await tx
+        .update(schema.participants)
+        .set({
+          name: customerName,
+          email: customerEmail,
+          kundenNr: customerKundenNr,
+        })
+        .where(
+          and(
+            eq(schema.participants.id, course.participantId),
+            eq(schema.participants.tenantId, tenantId),
+          ),
+        );
+
+      await tx
+        .update(schema.courses)
+        .set({
+          coachId,
+          title,
+          avgsNummer,
+          durchfuehrungsort,
+          anzahlBewilligteUe,
+          bedarfstraegerId,
+          massnahmeTyp,
+          bundesland,
+          startDate,
+          endDate,
+        })
+        .where(eq(schema.courses.id, courseId));
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Häufigster Fehler: E-Mail kollidiert mit einem anderen Kunden im Tenant.
+    if (/unique|duplicate/i.test(message)) {
+      return {
+        error:
+          "Diese Kunden-E-Mail ist im Tenant bereits einem anderen Kunden zugeordnet.",
+      };
+    }
+    return { error: `Änderung fehlgeschlagen (${message}).` };
+  }
+
+  redirect("/bildungstraeger/courses");
+}
+
+async function requireOwnedCourse(courseId: string, tenantId: string) {
+  const [course] = await db
+    .select({ id: schema.courses.id })
+    .from(schema.courses)
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .where(
+      and(
+        eq(schema.courses.id, courseId),
+        eq(schema.users.tenantId, tenantId),
+        isNull(schema.courses.deletedAt),
+      ),
+    )
+    .limit(1);
+  return course ?? null;
+}
+
+/** Einzelnen Kunden archivieren (status='archived'). */
+export async function archiveCourse(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (courseId && (await requireOwnedCourse(courseId, tenantId))) {
+    await db
+      .update(schema.courses)
+      .set({ status: "archived" })
+      .where(eq(schema.courses.id, courseId));
+  }
+  revalidatePath("/bildungstraeger/courses");
+  redirect("/bildungstraeger/courses");
+}
+
+/** Archivierung rückgängig machen (status zurück auf 'active'). */
+export async function unarchiveCourse(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (courseId && (await requireOwnedCourse(courseId, tenantId))) {
+    await db
+      .update(schema.courses)
+      .set({ status: "active" })
+      .where(eq(schema.courses.id, courseId));
+  }
+  revalidatePath("/bildungstraeger/courses");
+  redirect("/bildungstraeger/courses");
+}
+
+/**
+ * Alle ABGESCHLOSSENEN Kunden (Maßnahme als abgeschlossen markiert,
+ * `abgeschlossen_at` gesetzt) auf einmal archivieren — tenant-scoped, nur
+ * noch nicht archivierte. Bequemes Aufräumen am Ende eines Durchlaufs.
+ */
+export async function archiveAllCompleted(): Promise<void> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+
+  const owned = await db
+    .select({ id: schema.courses.id })
+    .from(schema.courses)
+    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .where(
+      and(
+        eq(schema.users.tenantId, tenantId),
+        isNull(schema.courses.deletedAt),
+        isNotNull(schema.courses.abgeschlossenAt),
+        ne(schema.courses.status, "archived"),
+      ),
+    );
+  for (const c of owned) {
+    await db
+      .update(schema.courses)
+      .set({ status: "archived" })
+      .where(eq(schema.courses.id, c.id));
+  }
+  revalidatePath("/bildungstraeger/courses");
   redirect("/bildungstraeger/courses");
 }
