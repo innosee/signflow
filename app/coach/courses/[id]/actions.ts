@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -1706,6 +1706,41 @@ export async function sealCourse(
   if (allSessions.some((s) => s.status !== "completed")) {
     return {
       error: "Mindestens eine Session ist noch nicht vollständig signiert.",
+    };
+  }
+
+  // Kompetenzteams-Invariante (Defense-in-Depth vor dem irreversiblen Siegel):
+  // „alle Termine signiert" heißt „jeder Termin von SEINEM zugewiesenen Coach
+  // signiert". Das harte Per-Termin-Gate in signSessionAsCoach garantiert das
+  // bereits beim Signieren — hier wird es vor der FES nochmals explizit geprüft,
+  // damit eine etwaige Alt-/Fremddaten-Inkonsistenz nicht ins gesiegelte PDF
+  // gelangt. Geflaggt wird nur ein echter Mismatch (beide coach_id gesetzt und
+  // verschieden); NULL-Fälle (un-gebackfillte Alt-Daten) lösen keine
+  // False-Positives aus.
+  const wrongCoach = await db
+    .select({ id: schema.sessions.id })
+    .from(schema.sessions)
+    .innerJoin(
+      schema.signatures,
+      and(
+        eq(schema.signatures.sessionId, schema.sessions.id),
+        eq(schema.signatures.signerType, "coach"),
+      ),
+    )
+    .where(
+      and(
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+        isNotNull(schema.sessions.coachId),
+        isNotNull(schema.signatures.coachId),
+        ne(schema.signatures.coachId, schema.sessions.coachId),
+      ),
+    )
+    .limit(1);
+  if (wrongCoach.length > 0) {
+    return {
+      error:
+        "Mindestens ein Termin wurde nicht von seinem zugewiesenen Coach signiert — die Versiegelung ist blockiert. Bitte den betroffenen Termin wieder öffnen und vom zugewiesenen Coach neu signieren lassen.",
     };
   }
 
