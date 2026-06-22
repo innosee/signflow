@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
@@ -10,9 +10,104 @@ import { auth } from "@/lib/auth";
 
 export type SessionData = Awaited<ReturnType<typeof auth.api.getSession>>;
 
+/**
+ * Cookie, in dem ab Phase 2 der vom User gewählte „aktive Tenant" liegt
+ * (Login-Träger-Auswahl / In-App-Switcher). In Phase 1 setzt ihn noch
+ * niemand — er wird nur gelesen und greift erst, sobald ein User mehr als
+ * eine Mitgliedschaft hat. Single-Membership-User (alle aktuell) merken
+ * dadurch nichts.
+ */
+const ACTIVE_TENANT_COOKIE = "active_tenant_id";
+
+type ActiveMembership = {
+  tenantId: string;
+  role: (typeof schema.tenantMemberships.role.enumValues)[number];
+};
+
+/**
+ * Auflösung des aktiven Tenants + der aktiven Rolle für einen User.
+ *
+ * Das ist der Kern des Membership-Modells (Phase 1): EINE Identität (E-Mail,
+ * Login) kann bei mehreren Bildungsträgern Mitglied sein. Welche Mitgliedschaft
+ * gerade „aktiv" ist, entscheidet sich hier — und nur hier. `getTenantId` /
+ * `getActiveRole` lesen das Ergebnis dann synchron aus der angereicherten
+ * Session, sodass die 23 Aufrufer unverändert bleiben.
+ *
+ * Reihenfolge:
+ *  1. Keine aktive Mitgliedschaft (z. B. User angelegt NACH dem Phase-0-Backfill,
+ *     Membership-Zeilen werden erst ab Phase 3 beim Invite mitgeschrieben) →
+ *     Fallback auf die „Heimat" `users.tenant_id/role`.
+ *  2. Genau eine Mitgliedschaft → die.
+ *  3. Mehrere → `active_tenant_id`-Cookie (außer bei Impersonation), sonst die
+ *     Heimat-`tenant_id`, sonst die erste. (Cookie wird erst ab Phase 2 gesetzt.)
+ */
+async function resolveActiveMembership(
+  user: { id: string; tenantId?: string | null; role?: string | null },
+  opts: { impersonating: boolean },
+): Promise<ActiveMembership | null> {
+  const fallback: ActiveMembership | null = user.tenantId
+    ? {
+        tenantId: user.tenantId,
+        role:
+          user.role === "bildungstraeger" ? "bildungstraeger" : "coach",
+      }
+    : null;
+
+  const memberships = await db
+    .select({
+      tenantId: schema.tenantMemberships.tenantId,
+      role: schema.tenantMemberships.role,
+    })
+    .from(schema.tenantMemberships)
+    .where(
+      and(
+        eq(schema.tenantMemberships.userId, user.id),
+        isNull(schema.tenantMemberships.deletedAt),
+      ),
+    );
+
+  if (memberships.length === 0) return fallback;
+  if (memberships.length === 1) return memberships[0];
+
+  // Mehrere Mitgliedschaften — gibt es in Phase 1 noch nicht (Backfill spiegelt
+  // 1:1 die User-Zeile). Logik steht trotzdem schon, damit Phase 2/3 nur noch
+  // das Cookie setzen müssen, ohne diesen Chokepoint anzufassen.
+  let cookieTenant: string | undefined;
+  if (!opts.impersonating) {
+    const jar = await cookies();
+    cookieTenant = jar.get(ACTIVE_TENANT_COOKIE)?.value;
+  }
+  const chosen =
+    (cookieTenant &&
+      memberships.find((m) => m.tenantId === cookieTenant)) ||
+    (user.tenantId &&
+      memberships.find((m) => m.tenantId === user.tenantId)) ||
+    memberships[0];
+  return chosen;
+}
+
 export const getCurrentSession = cache(async (): Promise<SessionData> => {
   const h = await headers();
-  return auth.api.getSession({ headers: h });
+  const session = await auth.api.getSession({ headers: h });
+  if (!session?.user) return session;
+
+  // Aktiven Tenant + aktive Rolle EINMAL pro Request auflösen und auf die
+  // Session legen. Ab hier liest die ganze App den aktiven Tenant aus
+  // `session.user.tenantId` (überschrieben) und die aktive Rolle aus
+  // `session.user.activeRole` — beides synchron, kein async im Hot Path der
+  // 23 `getTenantId`-Aufrufer.
+  const active = await resolveActiveMembership(session.user, {
+    impersonating: !!session.session?.impersonatedBy,
+  });
+  if (active) {
+    const u = session.user as {
+      tenantId?: string | null;
+      activeRole?: string;
+    };
+    u.tenantId = active.tenantId;
+    u.activeRole = active.role;
+  }
+  return session;
 });
 
 export async function requireSession() {
@@ -46,15 +141,30 @@ export function getTenantId(session: SessionData): string {
   return tenantId;
 }
 
+/**
+ * Aktive Rolle des Users IM aktiven Tenant. Quelle ist die in der Session
+ * aufgelöste Mitgliedschaft (`activeRole`); Fallback auf die globale
+ * `users.role`, falls keine Anreicherung stattfand (sollte nicht vorkommen,
+ * solange `getCurrentSession` läuft). Ab Phase 1 IMMER hierüber prüfen, nicht
+ * mehr direkt `session.user.role` — dieselbe Person kann bei Träger A Coach,
+ * bei Träger B Bildungsträger sein.
+ */
+export function getActiveRole(session: SessionData): string | undefined {
+  const u = session?.user as
+    | { activeRole?: string; role?: string }
+    | undefined;
+  return u?.activeRole ?? u?.role;
+}
+
 export async function requireBildungstraeger() {
   const session = await requireSession();
-  if (session.user.role !== "bildungstraeger") redirect("/");
+  if (getActiveRole(session) !== "bildungstraeger") redirect("/");
   return session;
 }
 
 export async function requireCoach() {
   const session = await requireSession();
-  if (session.user.role !== "coach") redirect("/");
+  if (getActiveRole(session) !== "coach") redirect("/");
   return session;
 }
 
@@ -137,7 +247,7 @@ export const getTenantOwnerId = cache(
 );
 
 export async function isTenantOwner(session: SessionData): Promise<boolean> {
-  if (!session || session.user.role !== "bildungstraeger") return false;
+  if (!session || getActiveRole(session) !== "bildungstraeger") return false;
   if (isImpersonating(session)) return false;
   const tenantId = (session.user as { tenantId?: string }).tenantId;
   if (!tenantId) return false;
