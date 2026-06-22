@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { requireCoach } from "@/lib/dal";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import { renderPdfFromUrl } from "@/lib/pdf";
 
 // Serverless-Function-Runtime: Node (Edge kann keine nativen Binärpakete
@@ -27,16 +28,17 @@ export async function GET(
   const session = await requireCoach();
   const { id: courseId, participantId } = await ctx.params;
 
-  // Ownership + Enrollment-Gate spiegelt den Print-Route-Check, damit ein
+  // Zugriffs- + Enrollment-Gate spiegelt den Print-Route-Check, damit ein
   // Coach keine fremden Nachweise headless rendern + downloaden kann.
+  // Kompetenzteams: Lead ODER zugewiesener Team-Coach.
   const [ctxRow] = await db
     .select({ id: schema.courses.id, title: schema.courses.title })
     .from(schema.courses)
     .where(
       and(
         eq(schema.courses.id, courseId),
-        eq(schema.courses.coachId, session.user.id),
         isNull(schema.courses.deletedAt),
+        courseVisibleToCoach(session.user.id),
       ),
     )
     .limit(1);

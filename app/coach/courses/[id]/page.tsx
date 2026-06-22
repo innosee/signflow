@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import { isFutureSessionDate } from "@/lib/dates";
 import { getFeiertag } from "@/lib/feiertage";
 import { isSmsEnabled } from "@/lib/sms";
@@ -47,10 +48,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
   const reusedCount = reused ? Number.parseInt(reused, 10) : NaN;
   const showReusedBanner = Number.isFinite(reusedCount) && reusedCount > 0;
 
-  // Data-Isolation serverseitig: coach_id muss zum angemeldeten User passen.
+  // Data-Isolation serverseitig (Kompetenzteams): Coach sieht die Maßnahme,
+  // wenn er Lead ODER mind. einem Termin zugewiesen ist.
   const [course] = await db
     .select({
       id: schema.courses.id,
+      coachId: schema.courses.coachId,
       title: schema.courses.title,
       avgsNummer: schema.courses.avgsNummer,
       durchfuehrungsort: schema.courses.durchfuehrungsort,
@@ -76,13 +79,20 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .where(
       and(
         eq(schema.courses.id, id),
-        eq(schema.courses.coachId, session.user.id),
         isNull(schema.courses.deletedAt),
+        courseVisibleToCoach(session.user.id),
       ),
     )
     .limit(1);
 
   if (!course) notFound();
+
+  // Lead-Coach steuert Gates/Abschluss/FES und die Termin-Verwaltung;
+  // zugewiesene Team-Coaches sehen die Maßnahme (read) und signieren ab
+  // Phase 4 ihre eigenen Termine. `canManage` = Lead UND nicht unter
+  // Impersonation (schreibende Lead-Aktionen).
+  const isLead = course.coachId === session.user.id;
+  const canManage = isLead && !impersonating;
 
   const [me] = await db
     .select({ signatureUrl: schema.users.signatureUrl })
@@ -279,21 +289,23 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           <h2 className="text-lg font-semibold">
             Termine ({sessions.length})
           </h2>
-          {impersonating ? (
-            <span
-              title="Während Impersonation nicht möglich"
-              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white opacity-40"
-            >
-              + Termin anlegen
-            </span>
-          ) : (
-            <Link
-              href={`/coach/courses/${course.id}/sessions/new`}
-              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-            >
-              + Termin anlegen
-            </Link>
-          )}
+          {/* Termin-Verwaltung steuert der Lead-Coach. */}
+          {isLead &&
+            (impersonating ? (
+              <span
+                title="Während Impersonation nicht möglich"
+                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white opacity-40"
+              >
+                + Termin anlegen
+              </span>
+            ) : (
+              <Link
+                href={`/coach/courses/${course.id}/sessions/new`}
+                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+              >
+                + Termin anlegen
+              </Link>
+            ))}
         </div>
         {sessions.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-zinc-500">
@@ -340,7 +352,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         <span>
                           TN {tnSigned}/{tnTotal}
                         </span>
-                        {!impersonating &&
+                        {canManage &&
                           !coachSigned &&
                           tnSigned === 0 && (
                             <Link
@@ -350,14 +362,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                               Bearbeiten
                             </Link>
                           )}
-                        {!impersonating && (coachSigned || tnSigned > 0) && (
+                        {canManage && (coachSigned || tnSigned > 0) && (
                           <CorrectTopicButton
                             courseId={course.id}
                             sessionId={s.id}
                             topic={s.topic}
                           />
                         )}
-                        {!impersonating && (coachSigned || tnSigned > 0) && (
+                        {canManage && (coachSigned || tnSigned > 0) && (
                           <ReopenSessionButton
                             courseId={course.id}
                             sessionId={s.id}
@@ -366,7 +378,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       </div>
                     </div>
                   </div>
-                  {!coachSigned && !impersonating && coachHasSignature && (
+                  {/* Phase 3: nur der Lead signiert. Phase 4 weitet das auf den
+                      dem Termin zugewiesenen Team-Coach aus. */}
+                  {!coachSigned && canManage && coachHasSignature && (
                     <div className="pl-28">
                       {isFuture ? (
                         <p className="text-xs text-zinc-500">
@@ -378,7 +392,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       )}
                     </div>
                   )}
-                  {!coachSigned && !impersonating && !coachHasSignature && (
+                  {!coachSigned && canManage && !coachHasSignature && (
                     <p className="pl-28 text-xs text-amber-700">
                       Zum Signieren bitte zuerst{" "}
                       <Link
@@ -397,6 +411,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
         )}
       </section>
 
+      {/* Abschluss-Workflow (Gates → FES) steuert ausschließlich der Lead-Coach. */}
+      {isLead && (
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="border-b border-zinc-300 px-6 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -604,13 +620,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </Step>
         </div>
       </section>
+      )}
 
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="flex items-start justify-between gap-4 border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">
             Teilnehmer ({participants.length})
           </h2>
-          {!impersonating && (
+          {canManage && (
             <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-start">
               {/* 1:1: Kein nachträgliches Hinzufügen — der Kunde wird bei der
                   Anlage durch den Bildungsträger gesetzt. */}
@@ -686,7 +703,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 </div>
 
                 <div className="flex items-center gap-3 text-xs">
-                  {!impersonating && (
+                  {canManage && (
                     <Link
                       href={`/coach/courses/${course.id}/teilnehmer/${p.id}/bericht`}
                       className="text-zinc-700 underline-offset-2 hover:underline"
@@ -702,7 +719,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   >
                     Nachweis
                   </Link>
-                  {!impersonating && (
+                  {canManage && (
                     <>
                       {smsEnabled && p.phone && (
                         <SmsResendButton

@@ -5,6 +5,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Stundennachweis } from "@/components/stundennachweis";
 import { db, schema } from "@/db";
 import { requireSigningEnabled } from "@/lib/dal";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import { loadStundennachweisSheet } from "@/lib/sheet-data";
 
 export const dynamic = "force-dynamic";
@@ -17,17 +18,18 @@ export default async function PrintSheetPage({ params }: Props) {
   const session = await requireSigningEnabled();
   const { id: courseId, participantId } = await params;
 
-  // Ownership-Gate BEVOR wir das Sheet laden — sonst könnte ein Coach die
+  // Zugriffs-Gate BEVOR wir das Sheet laden — sonst könnte ein Coach die
   // Nachweise fremder Kurse abfragen. Der Sheet-Helper selbst prüft kein
   // Coach-Scoping, weil er auch vom Teilnehmer-Preview genutzt wird.
+  // Kompetenzteams: Lead ODER zugewiesener Team-Coach darf den Nachweis lesen.
   const [owned] = await db
     .select({ id: schema.courses.id })
     .from(schema.courses)
     .where(
       and(
         eq(schema.courses.id, courseId),
-        eq(schema.courses.coachId, session.user.id),
         isNull(schema.courses.deletedAt),
+        courseVisibleToCoach(session.user.id),
       ),
     )
     .limit(1);
