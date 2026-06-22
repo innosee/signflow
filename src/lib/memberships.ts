@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 
@@ -19,9 +19,11 @@ export type MembershipView = {
 };
 
 /**
- * Alle aktiven Mitgliedschaften eines Users (mit Tenant-Name), für den
- * Tenant-Switcher und das Login-Routing. Nur nicht-gelöschte Mitgliedschaften
- * in nicht-gelöschten Tenants, alphabetisch nach Tenant-Name.
+ * Alle AKTIVEN (angenommenen) Mitgliedschaften eines Users (mit Tenant-Name),
+ * für den Tenant-Switcher und das Login-Routing. Nur nicht-gelöschte,
+ * **angenommene** Mitgliedschaften (`accepted_at` gesetzt) in nicht-gelöschten
+ * Tenants. Offene Einladungen (accepted_at IS NULL) sind hier bewusst NICHT
+ * dabei — die liefert `getPendingInvitations`.
  */
 export async function getActiveMemberships(
   userId: string,
@@ -41,6 +43,37 @@ export async function getActiveMemberships(
       and(
         eq(schema.tenantMemberships.userId, userId),
         isNull(schema.tenantMemberships.deletedAt),
+        isNotNull(schema.tenantMemberships.acceptedAt),
+        isNull(schema.tenants.deletedAt),
+      ),
+    )
+    .orderBy(asc(schema.tenants.name));
+}
+
+/**
+ * Offene Einladungen eines Users: nicht-gelöschte Mitgliedschaften ohne
+ * `accepted_at` in nicht-gelöschten Tenants. Diese geben (noch) KEINEN Zugriff
+ * — die Person muss sie unter /konto/einladungen aktiv annehmen.
+ */
+export async function getPendingInvitations(
+  userId: string,
+): Promise<MembershipView[]> {
+  return db
+    .select({
+      tenantId: schema.tenantMemberships.tenantId,
+      tenantName: schema.tenants.name,
+      role: schema.tenantMemberships.role,
+    })
+    .from(schema.tenantMemberships)
+    .innerJoin(
+      schema.tenants,
+      eq(schema.tenants.id, schema.tenantMemberships.tenantId),
+    )
+    .where(
+      and(
+        eq(schema.tenantMemberships.userId, userId),
+        isNull(schema.tenantMemberships.deletedAt),
+        isNull(schema.tenantMemberships.acceptedAt),
         isNull(schema.tenants.deletedAt),
       ),
     )
@@ -95,6 +128,14 @@ export async function ensureMembership(
     tenantId: string;
     role: MembershipRole;
     signingEnabled?: boolean;
+    /**
+     * Annahme-Zeitpunkt. Default = jetzt (= sofort angenommen) — das ist der
+     * Normalfall für selbst erstellte Mitgliedschaften (eigener BT,
+     * Self-Registrierung, neu eingeladener Coach mit Passwort-Link). Für eine
+     * Einladung an eine BEREITS bestehende Identität explizit `null` übergeben:
+     * dann ist es eine offene Einladung, die erst angenommen werden muss.
+     */
+    acceptedAt?: Date | null;
   },
 ): Promise<string> {
   const [existing] = await exec
@@ -117,6 +158,8 @@ export async function ensureMembership(
       tenantId: membership.tenantId,
       role: membership.role,
       signingEnabled: membership.signingEnabled ?? false,
+      acceptedAt:
+        membership.acceptedAt === undefined ? new Date() : membership.acceptedAt,
     })
     .returning({ id: schema.tenantMemberships.id });
   return row.id;

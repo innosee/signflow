@@ -241,6 +241,15 @@ export const tenantMemberships = pgTable(
     role: userRole("role").notNull().default("coach"),
     /** Signatur-Flag pro Träger (Pilot-Rollout ist tenant-spezifisch). */
     signingEnabled: boolean("signing_enabled").notNull().default(false),
+    /**
+     * Zeitpunkt der Einladungs-Annahme. NULL = offene Einladung (zählt NICHT
+     * als aktive Mitgliedschaft, gibt keinen Zugriff). Gesetzt = angenommen.
+     * Selbst erstellte Mitgliedschaften (eigener BT, Self-Registrierung,
+     * neu/wiederbelebter Coach via Passwort-Link) werden sofort als angenommen
+     * angelegt; nur das Einladen einer BEREITS bestehenden Identität erzeugt
+     * eine offene Einladung, die die Person aktiv annehmen muss.
+     */
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

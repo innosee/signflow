@@ -144,11 +144,12 @@ export async function sendResetPasswordEmail(params: {
 
 /**
  * Mail an einen BEREITS bestehenden Nutzer, der als Coach zu einem weiteren
- * Bildungsträger hinzugefügt wurde (Membership-Modell). Kein Passwort-Reset —
- * die Person hat schon ein Konto und meldet sich wie gewohnt an; oben im Menü
- * kann sie zwischen ihren Trägern wechseln.
+ * Bildungsträger EINGELADEN wurde (Membership-Modell). Die Einladung ist offen
+ * und muss aktiv angenommen werden — der Link führt zur Einladungs-Übersicht,
+ * nicht direkt in den Träger. Kein Passwort-Reset (die Person hat schon ein
+ * Konto).
  */
-export async function sendCoachAddedToTenant(params: {
+export async function sendCoachInvitationToAccept(params: {
   to: string;
   name: string;
   tenantName: string;
@@ -156,13 +157,13 @@ export async function sendCoachAddedToTenant(params: {
 }): Promise<void> {
   const body = `
     <p>Hallo ${esc(params.name)},</p>
-    <p>du wurdest als Coach zu <strong>${esc(params.tenantName)}</strong> hinzugefügt. Melde dich wie gewohnt mit deinem bestehenden Signflow-Konto an — oben im Menü kannst du zwischen deinen Bildungsträgern wechseln.</p>
-    ${renderButton(params.url, "Zu Signflow anmelden")}
+    <p>du wurdest als <strong>Coach</strong> zu <strong>${esc(params.tenantName)}</strong> eingeladen. Melde dich mit deinem bestehenden Signflow-Konto an und nimm die Einladung an — danach kannst du oben im Menü zwischen deinen Bildungsträgern wechseln.</p>
+    ${renderButton(params.url, "Einladung ansehen")}
   `;
   await sendEmail({
     to: params.to,
-    subject: `Du wurdest als Coach hinzugefügt – ${params.tenantName}`,
-    html: renderLayout("Neuer Bildungsträger", body),
+    subject: `Einladung als Coach – ${params.tenantName}`,
+    html: renderLayout("Einladung als Coach", body),
   });
 }
 

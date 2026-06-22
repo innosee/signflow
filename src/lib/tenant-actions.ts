@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -133,4 +133,73 @@ export async function foundBildungstraeger(
   // Direkt in den neuen BT-Kontext wechseln.
   await setActiveTenantCookie(newTenantId);
   redirect("/bildungstraeger");
+}
+
+/**
+ * Nimmt eine offene Einladung an (Membership-Modell). Setzt `accepted_at` auf
+ * der pending-Mitgliedschaft → ab jetzt zählt sie als aktiv und gibt Zugriff.
+ * Wechselt direkt in den neuen Kontext. Hart gegen Fremd-Einladungen
+ * abgesichert: nur die eigene offene Einladung des eingeloggten Users.
+ */
+export async function acceptInvitation(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  assertNotImpersonating(session);
+
+  const tenantId = String(formData.get("tenantId") ?? "");
+  if (!tenantId) redirect("/konto/einladungen");
+
+  const [pending] = await db
+    .select({
+      id: schema.tenantMemberships.id,
+      role: schema.tenantMemberships.role,
+    })
+    .from(schema.tenantMemberships)
+    .where(
+      and(
+        eq(schema.tenantMemberships.userId, session.user.id),
+        eq(schema.tenantMemberships.tenantId, tenantId),
+        isNull(schema.tenantMemberships.deletedAt),
+        isNull(schema.tenantMemberships.acceptedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!pending) {
+    // Keine offene Einladung (mehr) — nichts anzunehmen.
+    redirect("/konto/einladungen");
+  }
+
+  await db
+    .update(schema.tenantMemberships)
+    .set({ acceptedAt: new Date() })
+    .where(eq(schema.tenantMemberships.id, pending.id));
+
+  await setActiveTenantCookie(tenantId);
+  redirect(pending.role === "bildungstraeger" ? "/bildungstraeger" : "/coach");
+}
+
+/**
+ * Lehnt eine offene Einladung ab — soft-delete der pending-Mitgliedschaft.
+ * Nur die eigene offene Einladung.
+ */
+export async function declineInvitation(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  assertNotImpersonating(session);
+
+  const tenantId = String(formData.get("tenantId") ?? "");
+  if (!tenantId) redirect("/konto/einladungen");
+
+  await db
+    .update(schema.tenantMemberships)
+    .set({ deletedAt: new Date() })
+    .where(
+      and(
+        eq(schema.tenantMemberships.userId, session.user.id),
+        eq(schema.tenantMemberships.tenantId, tenantId),
+        isNull(schema.tenantMemberships.deletedAt),
+        isNull(schema.tenantMemberships.acceptedAt),
+      ),
+    );
+
+  redirect("/konto/einladungen");
 }
