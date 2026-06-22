@@ -40,14 +40,11 @@ export function TenantSwitcher({
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  // Ohne weitere Mitgliedschaften gibt es nichts zu wechseln — dann nur der
-  // Name als statisches Label, kein interaktives Dropdown.
+  // Ohne weitere Mitgliedschaften gibt es nichts zu wechseln — dann gar nicht
+  // rendern. Das frühere statische Name-Label hatte keinen Mehrwert. Das
+  // Wechsel-Dropdown unten erscheint nur bei mehreren Mitgliedschaften.
   if (others.length === 0) {
-    return (
-      <div className="flex max-w-[12rem] items-center rounded-lg border border-transparent px-2.5 py-1.5 text-sm font-medium text-zinc-800">
-        <span className="truncate">{activeTenantName}</span>
-      </div>
-    );
+    return null;
   }
 
   return (

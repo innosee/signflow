@@ -56,7 +56,6 @@ export function AppHeader({
   tenantSwitcher,
   invitationsCount = 0,
   userName,
-  userEmail,
   settingsHref,
   impersonating,
   logoutAction,
@@ -126,10 +125,6 @@ export function AppHeader({
               </Link>
             )}
             {tenantSwitcher && !impersonating && tenantSwitcher}
-            <div className="hidden text-right text-xs text-zinc-600 sm:block">
-              <div className="font-medium text-zinc-900">{userName}</div>
-              <div>{userEmail}</div>
-            </div>
             {settingsHref && !impersonating && (
               <Link
                 href={settingsHref}
