@@ -210,6 +210,57 @@ export const users = pgTable(
   ],
 );
 
+/**
+ * Tenant-Mitgliedschaften — ein User (eine Identität, eine E-Mail, ein Login)
+ * kann bei MEHREREN Bildungsträgern arbeiten (Coaches arbeiten oft für mehrere
+ * Träger). Jede Mitgliedschaft trägt die **tenant-spezifische** Rolle und den
+ * `signing_enabled`-Flag — derselbe Mensch kann bei Träger A Coach mit
+ * Signatur-Recht sein, bei Träger B (noch) nicht.
+ *
+ * Phase 0 (additiv): Die Tabelle existiert, aber das Tenant-Scoping läuft
+ * weiter über `users.tenant_id/role` — Backfill spiegelt jede aktive
+ * User-Zeile in genau eine Mitgliedschaft. Ab Phase 1 liest die App den
+ * aktiven Tenant + die aktive Rolle hieraus (über den `getTenantId`-
+ * Chokepoint), `users.tenant_id/role` werden zur „Heimat"-Default.
+ *
+ * Bewusst KEIN Tausch des globalen `users_email_active_uq` — die E-Mail bleibt
+ * global eindeutig (ein Login pro Person), die Mehrfach-Zugehörigkeit hängt
+ * allein an dieser Tabelle.
+ */
+export const tenantMemberships = pgTable(
+  "tenant_memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Rolle DIESER Person in DIESEM Tenant. Reuse des globalen user_role-Enums. */
+    role: userRole("role").notNull().default("coach"),
+    /** Signatur-Flag pro Träger (Pilot-Rollout ist tenant-spezifisch). */
+    signingEnabled: boolean("signing_enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    // Eine aktive Mitgliedschaft je (User × Tenant). Partial-Unique, damit eine
+    // entfernte (soft-deleted) Mitgliedschaft später neu vergeben werden kann.
+    uniqueIndex("tenant_memberships_user_tenant_active_uq")
+      .on(t.userId, t.tenantId)
+      .where(sql`${t.deletedAt} IS NULL`),
+    index("tenant_memberships_user_idx").on(t.userId),
+    index("tenant_memberships_tenant_idx").on(t.tenantId),
+  ],
+);
+
 export const authSession = pgTable(
   "auth_session",
   {
@@ -888,6 +939,8 @@ export const abschlussberichte = pgTable(
 
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
+export type TenantMembership = typeof tenantMemberships.$inferSelect;
+export type NewTenantMembership = typeof tenantMemberships.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Course = typeof courses.$inferSelect;
