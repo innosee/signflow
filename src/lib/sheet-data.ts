@@ -76,6 +76,8 @@ export async function loadStundennachweisSheet(params: {
   if (!enrollment) return null;
 
   // 1:1: Alle nicht-gelöschten Termine des Kurses gehören dem einen Kunden.
+  // Kompetenzteams: pro Termin den zugewiesenen Coach-Namen mitladen (Fallback
+  // = Lead-Coach für Alt-Termine ohne Zuweisung).
   const sessions = await db
     .select({
       id: schema.sessions.id,
@@ -86,8 +88,10 @@ export async function loadStundennachweisSheet(params: {
       isErstgespraech: schema.sessions.isErstgespraech,
       geeignet: schema.sessions.geeignet,
       eignungsanalyse: schema.sessions.eignungsanalyse,
+      coachName: schema.users.name,
     })
     .from(schema.sessions)
+    .leftJoin(schema.users, eq(schema.users.id, schema.sessions.coachId))
     .where(
       and(
         eq(schema.sessions.courseId, params.courseId),
@@ -106,12 +110,15 @@ export async function loadStundennachweisSheet(params: {
       signatureUrl: schema.signatures.signatureUrl,
       signedAt: schema.signatures.signedAt,
       ipAddress: schema.signatures.ipAddress,
+      // Kompetenzteams: WER hat (als Coach) signiert — für den Audit-Trail.
+      signerCoachName: schema.users.name,
     })
     .from(schema.signatures)
     .innerJoin(
       schema.sessions,
       eq(schema.sessions.id, schema.signatures.sessionId),
     )
+    .leftJoin(schema.users, eq(schema.users.id, schema.signatures.coachId))
     .where(
       and(
         eq(schema.sessions.courseId, params.courseId),
@@ -189,7 +196,7 @@ export async function loadStundennachweisSheet(params: {
       at: sig.signedAt.toISOString(),
       signerName:
         sig.signerType === "coach"
-          ? ctx.coachName
+          ? (sig.signerCoachName ?? ctx.coachName)
           : enrollment.participantName,
       sessionDate: sessionDateById.get(sig.sessionId) ?? null,
       ip: sig.ipAddress,
@@ -239,6 +246,8 @@ export async function loadStundennachweisSheet(params: {
         isErstgespraech: s.isErstgespraech,
         geeignet: s.geeignet,
         eignungsanalyse: s.eignungsanalyse,
+        // Kompetenzteams: zugewiesener Coach des Termins (Fallback = Lead).
+        coachName: s.coachName ?? ctx.coachName,
         coachSignatureUrl: sig?.coachSignatureUrl ?? null,
         coachSignedAt: sig?.coachSignedAt ?? null,
         participantSignatureUrl: sig?.participantSignatureUrl ?? null,
