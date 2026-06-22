@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getCurrentSession } from "@/lib/dal";
+import { getActiveRole, getCurrentSession } from "@/lib/dal";
 
 import { RegisterForm } from "./register-form";
 
@@ -11,7 +11,9 @@ export default async function RegisterPage() {
   const session = await getCurrentSession();
   if (session) {
     redirect(
-      session.user.role === "bildungstraeger" ? "/bildungstraeger" : "/coach",
+      getActiveRole(session) === "bildungstraeger"
+        ? "/bildungstraeger"
+        : "/coach",
     );
   }
 

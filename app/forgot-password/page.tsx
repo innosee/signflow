@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { getCurrentSession } from "@/lib/dal";
+import { getActiveRole, getCurrentSession } from "@/lib/dal";
 
 import { ForgotPasswordForm } from "./forgot-form";
 
@@ -10,7 +10,11 @@ export const dynamic = "force-dynamic";
 export default async function ForgotPasswordPage() {
   const session = await getCurrentSession();
   if (session) {
-    redirect(session.user.role === "bildungstraeger" ? "/bildungstraeger" : "/coach");
+    redirect(
+      getActiveRole(session) === "bildungstraeger"
+        ? "/bildungstraeger"
+        : "/coach",
+    );
   }
 
   return (

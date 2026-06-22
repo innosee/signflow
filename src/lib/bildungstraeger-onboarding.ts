@@ -6,6 +6,12 @@ import { hashPassword } from "better-auth/crypto";
 
 import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
+import { ensureMembership } from "@/lib/memberships";
+
+/** Executor: entweder die DB oder eine laufende Drizzle-Transaction. */
+type DbOrTx =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type ProvisionResult =
   | { ok: true; userId: string; tenantId: string; email: string }
@@ -21,6 +27,33 @@ function slugify(input: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
   return base || "bildungstraeger";
+}
+
+/**
+ * Legt einen Tenant mit eindeutigem Slug an. Bei Slug-Kollision (gleicher
+ * Firmenname) wird ein kurzes Zufalls-Suffix angehängt — der Slug ist intern
+ * (Logs/Subdomain), nicht öffentlich. Geteilt zwischen Self-Service-Onboarding
+ * und „Bildungsträger gründen" (bestehende Identität legt eigenen Träger an).
+ */
+export async function createTenantWithUniqueSlug(
+  exec: DbOrTx,
+  company: string,
+): Promise<{ id: string }> {
+  let slug = slugify(company);
+  const [slugTaken] = await exec
+    .select({ id: schema.tenants.id })
+    .from(schema.tenants)
+    .where(and(eq(schema.tenants.slug, slug), isNull(schema.tenants.deletedAt)))
+    .limit(1);
+  if (slugTaken) {
+    slug = `${slug}-${crypto.randomBytes(3).toString("hex")}`;
+  }
+  const [tenant] = await exec
+    .insert(schema.tenants)
+    .values({ name: company, slug })
+    .returning({ id: schema.tenants.id });
+  if (!tenant) throw new Error("TENANT_INSERT_FAILED");
+  return tenant;
 }
 
 /**
@@ -75,7 +108,7 @@ export async function provisionBildungstraeger(
     return {
       ok: false,
       error:
-        "Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich an oder nutze „Passwort vergessen“.",
+        "Diese E-Mail-Adresse gehört bereits zu einem Account. Bitte melde dich an — eigenen Bildungsträger kannst du anschließend direkt aus deinem Konto gründen.",
     };
   }
 
@@ -90,26 +123,7 @@ export async function provisionBildungstraeger(
   let createdTenantId: string | null = null;
   try {
     const result = await db.transaction(async (tx) => {
-      // Eindeutigen Slug bilden — bei Kollision (gleicher Firmenname) ein
-      // kurzes Zufalls-Suffix anhängen. Slug ist intern (Logs/Subdomain),
-      // nicht öffentlich, ein Suffix stört also nicht.
-      let slug = slugify(company);
-      const [slugTaken] = await tx
-        .select({ id: schema.tenants.id })
-        .from(schema.tenants)
-        .where(
-          and(eq(schema.tenants.slug, slug), isNull(schema.tenants.deletedAt)),
-        )
-        .limit(1);
-      if (slugTaken) {
-        slug = `${slug}-${crypto.randomBytes(3).toString("hex")}`;
-      }
-
-      const [tenant] = await tx
-        .insert(schema.tenants)
-        .values({ name: company, slug })
-        .returning({ id: schema.tenants.id });
-      if (!tenant) throw new Error("TENANT_INSERT_FAILED");
+      const tenant = await createTenantWithUniqueSlug(tx, company);
 
       const [user] = await tx
         .insert(schema.users)
@@ -130,6 +144,15 @@ export async function provisionBildungstraeger(
         providerId: "credential",
         accountId: user.id,
         password: placeholderPassword,
+      });
+
+      // Mitgliedschaft des neuen BT in seinem eigenen Tenant — hält die
+      // tenant_memberships-Tabelle als Source-of-Truth konsistent (sonst
+      // existierte der neue BT nur über users.tenant_id/role als Fallback).
+      await ensureMembership(tx, {
+        userId: user.id,
+        tenantId: tenant.id,
+        role: "bildungstraeger",
       });
 
       return { userId: user.id, tenantId: tenant.id };

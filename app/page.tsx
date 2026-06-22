@@ -10,7 +10,7 @@ import { LandingHowItWorks } from "@/components/landing/how-it-works";
 import { LandingNav } from "@/components/landing/nav";
 import { LandingPricing } from "@/components/landing/pricing";
 import { LandingWaitlist } from "@/components/landing/waitlist";
-import { getCurrentSession } from "@/lib/dal";
+import { getActiveRole, getCurrentSession } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,11 @@ export default async function Home() {
   // Multi-Tenant-Bildungsträger-Signup die Bootstrap-Story sauber ablöst.
   const session = await getCurrentSession();
   if (session) {
-    redirect(session.user.role === "bildungstraeger" ? "/bildungstraeger" : "/coach");
+    redirect(
+      getActiveRole(session) === "bildungstraeger"
+        ? "/bildungstraeger"
+        : "/coach",
+    );
   }
 
   return (

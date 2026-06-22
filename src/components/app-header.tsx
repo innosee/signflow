@@ -27,6 +27,12 @@ type Props = {
    * rein. BT-Layout kann das weglassen.
    */
   accentStrip?: React.ReactNode;
+  /**
+   * Optionaler Tenant-Switcher (Membership-Modell). Wird links neben dem
+   * User-Block gerendert. Bei Impersonation bewusst weggelassen (Kontext-
+   * Wechsel ist dann blockiert).
+   */
+  tenantSwitcher?: React.ReactNode;
   userName: string;
   userEmail: string;
   /** Optionaler Link zur Einstellungs-Seite (Profil/Passwort/Branding/Billing). */
@@ -42,6 +48,7 @@ export function AppHeader({
   customNav,
   brandSubText,
   accentStrip,
+  tenantSwitcher,
   userName,
   userEmail,
   settingsHref,
@@ -104,6 +111,7 @@ export function AppHeader({
           </div>
 
           <div className="flex items-center gap-3">
+            {tenantSwitcher && !impersonating && tenantSwitcher}
             <div className="hidden text-right text-xs text-zinc-600 sm:block">
               <div className="font-medium text-zinc-900">{userName}</div>
               <div>{userEmail}</div>

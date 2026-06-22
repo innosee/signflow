@@ -7,7 +7,7 @@ import { APIError } from "better-auth/api";
 
 import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
-import { assertNotImpersonating, requireSession } from "@/lib/dal";
+import { assertNotImpersonating, getActiveRole, requireSession } from "@/lib/dal";
 
 export type SettingsFormState =
   | undefined
@@ -119,7 +119,7 @@ export async function updateBrandingAction(
 ): Promise<SettingsFormState> {
   const session = await requireSession();
   assertNotImpersonating(session);
-  if (session.user.role !== "bildungstraeger") {
+  if (getActiveRole(session) !== "bildungstraeger") {
     return { error: "Nur der Bildungsträger darf das PDF-Branding ändern." };
   }
 
@@ -145,7 +145,7 @@ export async function updateBrandingAction(
 export async function clearBrandingLogoAction(): Promise<void> {
   const session = await requireSession();
   assertNotImpersonating(session);
-  if (session.user.role !== "bildungstraeger") return;
+  if (getActiveRole(session) !== "bildungstraeger") return;
 
   await db
     .update(schema.users)
