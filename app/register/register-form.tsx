@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import Script from "next/script";
 import { useActionState, useEffect, useState } from "react";
 
-import { registerBildungstraeger, type RegisterState } from "./actions";
+import { TurnstileWidget } from "@/components/turnstile-widget";
 
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+import { registerBildungstraeger, type RegisterState } from "./actions";
 
 export function RegisterForm() {
   const [state, action, pending] = useActionState<RegisterState, FormData>(
@@ -32,6 +31,10 @@ export function RegisterForm() {
   // Feld → Server-Check verwirft sie.
   const [renderedAt, setRenderedAt] = useState("");
   useEffect(() => {
+    // Bewusst client-seitig per Effect gesetzt (nicht im useState-Initializer),
+    // damit SSR (leer) und erste CSR-Render kein Hydration-Mismatch auf
+    // Date.now() bekommen. Der eine Folge-Render ist gewollt und unkritisch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRenderedAt(String(Date.now()));
   }, []);
 
@@ -124,14 +127,7 @@ export function RegisterForm() {
           />
         </label>
 
-        {TURNSTILE_SITE_KEY && (
-          <div
-            className="cf-turnstile"
-            data-sitekey={TURNSTILE_SITE_KEY}
-            data-theme="light"
-            data-size="flexible"
-          />
-        )}
+        <TurnstileWidget />
 
         {state?.error && (
           <p role="alert" className="text-sm text-red-700">
@@ -160,15 +156,6 @@ export function RegisterForm() {
           Anmelden
         </Link>
       </p>
-
-      {TURNSTILE_SITE_KEY && (
-        <Script
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-          strategy="afterInteractive"
-          async
-          defer
-        />
-      )}
     </>
   );
 }
