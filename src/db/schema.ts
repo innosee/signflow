@@ -530,6 +530,22 @@ export const sessions = pgTable(
     courseId: uuid("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
+    /**
+     * Kompetenzteams (mehrere Coaches je Maßnahme, Variante A): der Coach,
+     * der DIESEN Termin hält und signiert. `courses.coach_id` bleibt der
+     * Lead-Coach (legt an, steuert Abschluss/Preview/BT-Einreichung/FES);
+     * pro Termin kann ein anderer Coach desselben Tenants zugewiesen sein.
+     *
+     * Nullable, weil die Spalte additiv eingeführt wird (Bestands-Termine
+     * werden auf `courses.coach_id` zurück-gebackfillt) — app-seitig ist die
+     * Zuweisung Pflicht (Default = Lead). Ein signierter Termin darf seinen
+     * Coach nicht mehr wechseln (Beweiskraft), das wird in den Actions
+     * erzwungen. `restrict` parallel zu `courses.coach_id` — Coaches werden
+     * soft-deleted, nicht hart entfernt.
+     */
+    coachId: uuid("coach_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
     sessionDate: date("session_date").notNull(),
     /** Coaching-Themen / Maßnahme-Inhalte — kann länger sein, deshalb `text`. */
     topic: text("topic").notNull(),
@@ -564,6 +580,9 @@ export const sessions = pgTable(
   },
   (t) => [
     index("sessions_course_id_idx").on(t.courseId),
+    // Dashboard-Sichtbarkeit (Kompetenzteams): „welche Termine sind diesem
+    // Coach zugewiesen" — gefiltert über coach_id.
+    index("sessions_coach_id_idx").on(t.coachId),
     // Erstgespräch: UE=0 und geeignet gesetzt. Reguläre Session: UE>0 und geeignet=null.
     check(
       "sessions_erstgespraech_consistency",
@@ -625,6 +644,19 @@ export const signatures = pgTable(
     participantId: uuid("participant_id").references(() => participants.id, {
       onDelete: "restrict",
     }),
+    /**
+     * Kompetenzteams: WELCHER Coach diese Signatur geleistet hat — durable
+     * fürs Audit, unabhängig von einer späteren Termin-Zuweisung. Nur bei
+     * Coach-Signaturen gesetzt (Teilnehmer-Signaturen lassen das NULL).
+     * Nullable, weil additiv eingeführt; Bestands-Coach-Signaturen werden auf
+     * den damaligen Einzel-Coach (`courses.coach_id`) gebackfillt. Ab Phase 4
+     * setzt der Sign-Flow die Spalte; die App erzwingt, dass ein Coach nur
+     * eigene (ihm zugewiesene) Termine signiert. `restrict` parallel zu
+     * `sessions.coach_id` (Coaches werden soft-deleted).
+     */
+    coachId: uuid("coach_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
     signerType: signerType("signer_type").notNull(),
     signatureUrl: text("signature_url").notNull(),
     signedAt: timestamp("signed_at", { withTimezone: true })
@@ -640,6 +672,14 @@ export const signatures = pgTable(
       "signatures_signer_type_participant_consistency",
       sql`(${t.signerType} = 'participant' AND ${t.participantId} IS NOT NULL)
          OR (${t.signerType} = 'coach' AND ${t.participantId} IS NULL)`,
+    ),
+    // Nur Coach-Signaturen tragen einen coach_id (wer hat signiert). Teilnehmer-
+    // Signaturen lassen die Spalte NULL. Coach-Signaturen DÜRFEN noch NULL sein,
+    // bis der Sign-Flow (Phase 4) die Spalte befüllt — deshalb hier nur die
+    // Teilnehmer-Seite hart.
+    check(
+      "signatures_participant_no_coach",
+      sql`${t.signerType} = 'coach' OR ${t.coachId} IS NULL`,
     ),
   ],
 );
