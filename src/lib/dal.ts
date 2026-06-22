@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
@@ -53,6 +53,9 @@ async function resolveActiveMembership(
       }
     : null;
 
+  // Nur ANGENOMMENE Mitgliedschaften geben Zugriff/Kontext. Offene Einladungen
+  // (accepted_at IS NULL) zählen hier nicht — sonst bekäme jemand den aktiven
+  // Tenant einer Einladung, die er nie angenommen hat.
   const memberships = await db
     .select({
       tenantId: schema.tenantMemberships.tenantId,
@@ -63,6 +66,7 @@ async function resolveActiveMembership(
       and(
         eq(schema.tenantMemberships.userId, user.id),
         isNull(schema.tenantMemberships.deletedAt),
+        isNotNull(schema.tenantMemberships.acceptedAt),
       ),
     );
 

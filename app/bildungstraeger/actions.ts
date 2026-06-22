@@ -18,8 +18,12 @@ import {
   isTenantOwner,
   requireBildungstraeger,
 } from "@/lib/dal";
-import { ensureMembership, getActiveMemberships } from "@/lib/memberships";
-import { sendCoachAddedToTenant } from "@/lib/email";
+import {
+  ensureMembership,
+  getActiveMemberships,
+  getPendingInvitations,
+} from "@/lib/memberships";
+import { sendCoachInvitationToAccept } from "@/lib/email";
 
 export type InviteFormState =
   | { error?: string; success?: string }
@@ -57,24 +61,26 @@ export async function inviteCoach(
     .limit(1);
 
   if (activeUser) {
-    // Schon Mitglied dieses Tenants? (Heimat-Tenant ODER bestehende Membership)
-    const memberships = await getActiveMemberships(activeUser.id);
-    const alreadyHere =
+    const accepted = await getActiveMemberships(activeUser.id);
+    const pending = await getPendingInvitations(activeUser.id);
+
+    // Schon ANGENOMMENES Mitglied dieses Tenants? (Heimat-Tenant ODER
+    // angenommene Membership) → echtes Duplikat.
+    const alreadyMember =
       activeUser.tenantId === tenantId ||
-      memberships.some((m) => m.tenantId === tenantId);
-    if (alreadyHere) {
-      return {
-        error:
-          "Diese Person ist bereits Mitglied dieses Bildungsträgers.",
-      };
+      accepted.some((m) => m.tenantId === tenantId);
+    if (alreadyMember) {
+      return { error: "Diese Person ist bereits Mitglied dieses Bildungsträgers." };
     }
+
+    const reInvite = pending.some((m) => m.tenantId === tenantId);
 
     try {
       await db.transaction(async (tx) => {
-        // Heimat-Mitgliedschaft materialisieren, falls noch keine existiert —
-        // sonst würde die Identität auf die neue (einzige) Coach-Mitgliedschaft
-        // kollabieren und ihren bisherigen Kontext verlieren.
-        if (memberships.length === 0) {
+        // Heimat-Mitgliedschaft materialisieren, falls noch keine ANGENOMMENE
+        // existiert — sonst verlöre die Identität nach dem Annehmen ihren
+        // bisherigen Kontext (Kollaps auf die neue Coach-Mitgliedschaft).
+        if (accepted.length === 0) {
           await ensureMembership(tx, {
             userId: activeUser.id,
             tenantId: activeUser.tenantId,
@@ -82,20 +88,25 @@ export async function inviteCoach(
               activeUser.role === "bildungstraeger"
                 ? "bildungstraeger"
                 : "coach",
+            // Heimat gilt als angenommen (bestehender Kontext).
           });
         }
+        // Coach-Einladung als OFFEN anlegen (accepted_at = null). ensureMembership
+        // ist idempotent — ein bestehender pending-Eintrag wird nicht dupliziert,
+        // wir verschicken nur die Mail erneut.
         await ensureMembership(tx, {
           userId: activeUser.id,
           tenantId,
           role: "coach",
+          acceptedAt: null,
         });
       });
     } catch {
-      return { error: "Coach konnte nicht hinzugefügt werden." };
+      return { error: "Einladung konnte nicht erstellt werden." };
     }
 
-    // Bestehendes Konto → kein Passwort-Reset, nur eine Info-Mail. Mail-Fehler
-    // soll die bereits geschriebene Mitgliedschaft nicht zurückrollen.
+    // Bestehendes Konto → kein Passwort-Reset, sondern eine Einladung zum
+    // Annehmen. Mail-Fehler soll die Einladung nicht zurückrollen.
     try {
       const [tenant] = await db
         .select({ name: schema.tenants.name })
@@ -106,18 +117,20 @@ export async function inviteCoach(
         process.env.BETTER_AUTH_URL ??
         process.env.NEXT_PUBLIC_APP_URL ??
         "http://localhost:3000";
-      await sendCoachAddedToTenant({
+      await sendCoachInvitationToAccept({
         to: email,
         name,
-        tenantName: tenant?.name ?? "deinem neuen Bildungsträger",
-        url: `${base}/login`,
+        tenantName: tenant?.name ?? "einem Bildungsträger",
+        url: `${base}/konto/einladungen`,
       });
     } catch {
-      // non-fatal — Mitgliedschaft besteht; Info-Mail kann manuell folgen.
+      // non-fatal — Einladung besteht; Mail kann manuell folgen.
     }
 
     return {
-      success: `${email} wurde als Coach hinzugefügt. Die Person meldet sich mit ihrem bestehenden Konto an.`,
+      success: reInvite
+        ? `Einladung an ${email} erneut versendet.`
+        : `${email} wurde als Coach eingeladen — die Person muss die Einladung nach dem Anmelden annehmen.`,
     };
   }
 

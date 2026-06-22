@@ -11,7 +11,10 @@ import {
   isImpersonating,
   requireCoach,
 } from "@/lib/dal";
-import { getTenantSwitcherData } from "@/lib/memberships";
+import {
+  getPendingInvitations,
+  getTenantSwitcherData,
+} from "@/lib/memberships";
 
 import { stopImpersonating } from "../bildungstraeger/actions";
 import { logoutAction } from "../login/actions";
@@ -29,6 +32,7 @@ export default async function CoachLayout({
     session.user.id,
     getTenantId(session),
   );
+  const pendingInvitations = await getPendingInvitations(session.user.id);
 
   return (
     <>
@@ -49,6 +53,7 @@ export default async function CoachLayout({
               activeTenantName={switcher.activeTenantName}
             />
           }
+          invitationsCount={pendingInvitations.length}
           userName={session.user.name}
           userEmail={session.user.email}
           settingsHref="/coach/settings"

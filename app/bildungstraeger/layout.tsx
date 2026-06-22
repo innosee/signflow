@@ -5,7 +5,10 @@ import {
   isImpersonating,
   requireBildungstraeger,
 } from "@/lib/dal";
-import { getTenantSwitcherData } from "@/lib/memberships";
+import {
+  getPendingInvitations,
+  getTenantSwitcherData,
+} from "@/lib/memberships";
 
 import { logoutAction } from "../login/actions";
 import { stopImpersonating } from "./actions";
@@ -22,6 +25,7 @@ export default async function BildungstraegerLayout({
     session.user.id,
     getTenantId(session),
   );
+  const pendingInvitations = await getPendingInvitations(session.user.id);
 
   return (
     <>
@@ -46,6 +50,7 @@ export default async function BildungstraegerLayout({
               activeTenantName={switcher.activeTenantName}
             />
           }
+          invitationsCount={pendingInvitations.length}
           userName={session.user.name}
           userEmail={session.user.email}
           settingsHref="/bildungstraeger/settings"

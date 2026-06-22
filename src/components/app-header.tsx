@@ -33,6 +33,11 @@ type Props = {
    * Wechsel ist dann blockiert).
    */
   tenantSwitcher?: React.ReactNode;
+  /**
+   * Anzahl offener Einladungen des Users (Membership-Modell). >0 → ein
+   * Hinweis-Link auf /konto/einladungen wird im Header gezeigt.
+   */
+  invitationsCount?: number;
   userName: string;
   userEmail: string;
   /** Optionaler Link zur Einstellungs-Seite (Profil/Passwort/Branding/Billing). */
@@ -49,6 +54,7 @@ export function AppHeader({
   brandSubText,
   accentStrip,
   tenantSwitcher,
+  invitationsCount = 0,
   userName,
   userEmail,
   settingsHref,
@@ -111,6 +117,14 @@ export function AppHeader({
           </div>
 
           <div className="flex items-center gap-3">
+            {invitationsCount > 0 && !impersonating && (
+              <Link
+                href="/konto/einladungen"
+                className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Einladungen ({invitationsCount})
+              </Link>
+            )}
             {tenantSwitcher && !impersonating && tenantSwitcher}
             <div className="hidden text-right text-xs text-zinc-600 sm:block">
               <div className="font-medium text-zinc-900">{userName}</div>
