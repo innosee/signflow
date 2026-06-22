@@ -25,6 +25,7 @@ Was nach dem Preview/FES/AfA-Build (April 2026) noch ansteht. Reihenfolge ≈ Pr
 - [x] ~~"Agency" umbenennen~~ → **erledigt 2026-04-23**: Rolle heißt jetzt `bildungstraeger`, Routen `/bildungstraeger/*`, Enum migriert.
 - [ ] **Auto-Notify nach Coach-Sign debouncen** — aktuell Mail pro Sign, bei Batch-Signing entstehen mehrere Mails in Folge. Hinweis steht in [app/coach/courses/[id]/actions.ts](app/coach/courses/[id]/actions.ts) (autoNotifyAllParticipants).
 - [ ] **Coach-Print Toolbar-CSS extrahieren** — lebt aktuell als String-Konstante in der Page; ggf. nach `globals.css` verschieben falls weitere Print-Wrapper dazukommen.
+- [ ] **Cleanup-Cron für unbestätigte Registrierungen** — `/register` legt bei jedem bot-geprüften Submit sofort eine (unverifizierte) `tenants`+`users`-Zeile an, auch wenn der Mail-Link nie geklickt wird. Karteileichen periodisch entfernen (z. B. `email_verified = false` + älter als X Tage → soft-delete). Siehe [src/lib/bildungstraeger-onboarding.ts](src/lib/bildungstraeger-onboarding.ts).
 
 ## Phase 2 (bewusst deferred)
 

@@ -69,10 +69,14 @@ Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seit
 
 ### Auth & Berechtigungen
 - **Coach-Signup: nur per Einladung**, kein offener `/signup`-Endpoint. Bildungsträger legt Coach an (Name + E-Mail) → System schickt Setup-Mail mit einmaligem Invite-Token → Coach setzt Passwort + erstellt Unterschrift.
+- **Bildungsträger-Onboarding (live seit 2026-06-22)**: drei Wege, alle über den geteilten Helper `provisionBildungstraeger` ([src/lib/bildungstraeger-onboarding.ts](src/lib/bildungstraeger-onboarding.ts)) — legt Tenant + Admin-User + Credential-Account atomar an und verschickt den Better-Auth-Passwort-Reset-Link (Klick = E-Mail-Verifikation). Der offene Better-Auth-Signup bleibt aus (`disableSignUp: true`).
+  1. **`/register`** — öffentlicher Self-Service, abgesichert über den Warteliste-Bot-Schutz (Honeypot + Min-Time + Turnstile + IP-Rate-Limit).
+  2. **`/operator/onboard`** — betreiber-interne Freischaltung aus der Warteliste, geschützt per `OPERATOR_ONBOARD_SECRET` (404 ohne Secret).
+  3. **`/setup`** — einmaliger Bootstrap des Default-Tenants (unverändert).
 - **Impersonation (Bildungsträger → Coach)**: Bildungsträger kann in die Sicht eines Coaches wechseln. Session führt `impersonated_by`-Feld (DB-Spalte) / `impersonatedBy` (Drizzle/TS). Jede Aktion wird im Audit-Log mit beiden IDs geloggt.
 - **Schreibende Aktionen während Impersonation sind hart blockiert** – insbesondere das Leisten von Unterschriften. Sonst ist die Beweiskraft der digitalen Unterschrift kaputt (Coach könnte behaupten, Bildungsträger habe in seinem Namen signiert).
 - **Data-Isolation**: jede Coach-Query serverseitig mit `coach_id = session.user.id` filtern – nicht auf UI verlassen.
-- **Single-Tenant**: aktuell ein Bildungsträger pro Deployment (`users` hat keine `bildungstraeger_id`-Spalte). Multi-Tenancy wäre Schema-Change.
+- **Multi-Tenant (live seit 2026-05)**: mehrere Bildungsträger pro Deployment, je ein `tenants`-Eintrag. `users`, `participants` und `bedarfstraeger` tragen `tenant_id`; jede Query ist tenant-scoped (nicht nur `coach_id`). Neue Tenants entstehen über das Bildungsträger-Onboarding oben.
 
 ---
 
