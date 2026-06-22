@@ -142,6 +142,30 @@ export async function sendResetPasswordEmail(params: {
   await sendInviteEmail(params);
 }
 
+/**
+ * Mail an einen BEREITS bestehenden Nutzer, der als Coach zu einem weiteren
+ * Bildungsträger hinzugefügt wurde (Membership-Modell). Kein Passwort-Reset —
+ * die Person hat schon ein Konto und meldet sich wie gewohnt an; oben im Menü
+ * kann sie zwischen ihren Trägern wechseln.
+ */
+export async function sendCoachAddedToTenant(params: {
+  to: string;
+  name: string;
+  tenantName: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo ${esc(params.name)},</p>
+    <p>du wurdest als Coach zu <strong>${esc(params.tenantName)}</strong> hinzugefügt. Melde dich wie gewohnt mit deinem bestehenden Signflow-Konto an — oben im Menü kannst du zwischen deinen Bildungsträgern wechseln.</p>
+    ${renderButton(params.url, "Zu Signflow anmelden")}
+  `;
+  await sendEmail({
+    to: params.to,
+    subject: `Du wurdest als Coach hinzugefügt – ${params.tenantName}`,
+    html: renderLayout("Neuer Bildungsträger", body),
+  });
+}
+
 export async function sendParticipantMagicLink(params: {
   to: string;
   participantName: string;
