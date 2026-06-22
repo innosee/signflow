@@ -6,18 +6,18 @@ const STEPS = [
   },
   {
     num: "02",
-    title: "Coach signiert pro Termin",
-    desc: "Canvas-Unterschrift einmalig anlegen, pro Termin eine aktive Bestätigung mit Klick + Zeitstempel.",
+    title: "Erstgespräch + Termine signieren",
+    desc: "Das Erstgespräch bewertet die Eignung über vier Kriterien (++/O/––). Danach signiert der Coach jeden Termin mit einem Klick + Zeitstempel — Canvas-Unterschrift wird nur einmal angelegt.",
   },
   {
     num: "03",
     title: "Teilnehmer:in bestätigt per Magic-Link",
-    desc: "Automatische Mail nach Coach-Sign. Kein Account nötig — TN unterschreibt einmalig im Browser, bestätigt dann offene Termine.",
+    desc: "Coach löst den Link aus — per E-Mail oder QR-Code vor Ort. Kein Account nötig: TN unterschreibt einmalig im Browser und bestätigt dann alle offenen Termine.",
   },
   {
     num: "04",
-    title: "PDF mit FES an die AfA",
-    desc: "Finales A4-PDF wird mit fortgeschrittener elektronischer Signatur (FES nach eIDAS) versiegelt und übermittelt.",
+    title: "Freigabe, FES & Übermittlung",
+    desc: "Der Bildungsträger prüft die fertige Liste und gibt sie frei. Erst dann versiegelt der Coach das A4-PDF mit fortgeschrittener elektronischer Signatur (FES nach eIDAS) — fertig für die AfA.",
   },
 ];
 

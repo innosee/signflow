@@ -19,7 +19,7 @@ const FEATURES = [
   {
     icon: ShieldIcon,
     title: "Fortgeschrittene Signatur (FES)",
-    desc: "Finales PDF bekommt 1× FES nach eIDAS über Firma.dev — ausreichend für die AfA, ohne Kosten einer QES.",
+    desc: "Das finale PDF bekommt genau 1× eine fortgeschrittene elektronische Signatur (FES) nach eIDAS — ausreichend für die AfA, ohne den Aufwand einer QES.",
   },
   {
     icon: ClockIcon,
@@ -29,7 +29,22 @@ const FEATURES = [
   {
     icon: GlobeIcon,
     title: "EU-Hosting + DSGVO",
-    desc: "Neon Postgres + Vercel Blob + Resend — alles in Frankfurt-Region. Auftragsverarbeitungsverträge vorhanden.",
+    desc: "Datenbank, Datei-Storage und E-Mail-Versand laufen in der EU (Frankfurt-Region). Auftragsverarbeitungsverträge vorhanden.",
+  },
+  {
+    icon: GateIcon,
+    title: "Bildungsträger gibt frei",
+    desc: "Vor dem Siegel prüft der Bildungsträger jede Anwesenheitsliste und gibt sie frei — oder fordert Nachbesserung an. Erst dann öffnet sich die FES-Versiegelung.",
+  },
+  {
+    icon: SparkIcon,
+    title: "KI-Anwesenheits-Check",
+    desc: "Ein KI-Check prüft den roten Faden der Termine gegen die gebuchte Maßnahme und meldet Auffälligkeiten — als beratender Hinweis, nicht als harter Block.",
+  },
+  {
+    icon: ScaleIcon,
+    title: "Eignungsanalyse im Erstgespräch",
+    desc: "Das Erstgespräch bewertet vier Kriterien — Motivation, Bedarfe, Sprachniveau, Kompetenzen — mit ++/O/–– statt nur „geeignet ja/nein\".",
   },
 ];
 
@@ -150,6 +165,45 @@ function GlobeIcon(props: SVGProps<SVGSVGElement>) {
         d="M3.5 12h17M12 3.5c2.5 3 2.5 14 0 17M12 3.5c-2.5 3-2.5 14 0 17"
         stroke="currentColor"
         strokeWidth="1.75"
+      />
+    </svg>
+  );
+}
+function GateIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path
+        d="M12 3l8 3v5c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6l8-3zM8.5 12l2.5 2.5L16 9"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function SparkIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path
+        d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function ScaleIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path
+        d="M12 4v16M7 20h10M5 7h14M5 7l-2.5 5a3 3 0 005 0L5 7zM19 7l-2.5 5a3 3 0 005 0L19 7z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
