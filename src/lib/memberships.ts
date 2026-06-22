@@ -80,26 +80,24 @@ export async function getPendingInvitations(
     .orderBy(asc(schema.tenants.name));
 }
 
-export type AssignableCoach = { id: string; name: string };
+export type TenantCoach = { id: string; name: string; email: string };
 
 /**
- * Coaches eines Tenants, die einem Termin zugewiesen werden können
- * (Kompetenzteams). Bedingungen: aktive (angenommene, nicht gelöschte)
- * Coach-Mitgliedschaft im Tenant, User nicht soft-deleted. Das Signatur-Modul
- * ist seit 2026-06 für jeden Coach frei (kein `signing_enabled`-Gate mehr),
- * daher wird darauf nicht mehr gefiltert. Reihenfolge nach Name.
- *
- * Bewusst membership-basiert (nicht über `users.tenant_id`): die Zuweisung
- * folgt dem Membership-Modell ([[project_multitenant_membership]]). Der
- * Lead-Coach des Kurses ist üblicherweise selbst in dieser Liste; falls eine
- * Alt-Identität ohne Mitgliedschaft existiert, lässt die Action den Lead
- * trotzdem zu (er ist per Definition für seinen eigenen Kurs zuweisbar).
+ * Alle Coaches eines Tenants — Auswahlquelle für das Kompetenzteam, das der
+ * Bildungsträger bei der Kunden-Anlage zusammenstellt (searchable Multiselect).
+ * Bedingungen: aktive (angenommene, nicht gelöschte) Coach-Mitgliedschaft im
+ * Tenant, User nicht soft-deleted. Membership-basiert, damit auch tenant-
+ * übergreifend hinzugekommene Coaches erscheinen. Reihenfolge nach Name.
  */
-export async function getAssignableCoaches(
+export async function getTenantCoaches(
   tenantId: string,
-): Promise<AssignableCoach[]> {
+): Promise<TenantCoach[]> {
   return db
-    .select({ id: schema.users.id, name: schema.users.name })
+    .select({
+      id: schema.users.id,
+      name: schema.users.name,
+      email: schema.users.email,
+    })
     .from(schema.tenantMemberships)
     .innerJoin(
       schema.users,
@@ -118,11 +116,10 @@ export async function getAssignableCoaches(
 }
 
 /**
- * Prüft, ob `coachId` einem Termin im Tenant `tenantId` zugewiesen werden darf
- * — d.h. eine aktive, angenommene Coach-Mitgliedschaft hat. Server-seitiges
- * Gate für die Termin-Zuweisung (UI nie vertrauen).
+ * Prüft, ob `coachId` ein aktiver Coach des Tenants `tenantId` ist — Server-
+ * Gate, wenn der BT ein Kompetenzteam zusammenstellt (UI nie vertrauen).
  */
-export async function isAssignableCoach(
+export async function isTenantCoach(
   tenantId: string,
   coachId: string,
 ): Promise<boolean> {

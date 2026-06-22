@@ -477,6 +477,41 @@ export const courses = pgTable("courses", {
   unique("courses_id_participant_uq").on(t.id, t.participantId),
 ]);
 
+/**
+ * Kompetenzteam einer Maßnahme: welche Coaches sind für diesen Kunden
+ * **freigegeben** (1–n). Wird ausschließlich vom Bildungsträger gesetzt
+ * (Kunden-Anlage/-Bearbeitung). Steuert:
+ *  - Sichtbarkeit: ein Coach sieht die Maßnahme, wenn er im Team ist.
+ *  - Termin-Anlage: nur Team-Coaches; ein Coach weist Termine NUR sich selbst
+ *    zu (Datenschutz — kein Zugriff auf den gesamten Tenant-Roster).
+ *  - Abschluss-Schritte: jeder Team-Coach darf sie auslösen (kein Lead-Sonder-
+ *    recht). `courses.coach_id` bleibt nur als „primärer"/anlegender Coach für
+ *    Back-Compat + FK-Ziele bestehen und ist ebenfalls Team-Mitglied.
+ *
+ * Hartes Add/Remove (kein Soft-Delete) — eine Team-Änderung ist eine bewusste
+ * BT-Entscheidung; ein entfernter Coach verliert den Zugriff sofort.
+ */
+export const courseCoaches = pgTable(
+  "course_coaches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    coachId: uuid("coach_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("course_coaches_course_coach_uq").on(t.courseId, t.coachId),
+    index("course_coaches_course_idx").on(t.courseId),
+    index("course_coaches_coach_idx").on(t.coachId),
+  ],
+);
+
 export const participants = pgTable("participants", {
   id: uuid("id").primaryKey().defaultRandom(),
   /**
@@ -994,6 +1029,8 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Course = typeof courses.$inferSelect;
 export type NewCourse = typeof courses.$inferInsert;
+export type CourseCoach = typeof courseCoaches.$inferSelect;
+export type NewCourseCoach = typeof courseCoaches.$inferInsert;
 export type Bedarfstraeger = typeof bedarfstraeger.$inferSelect;
 export type NewBedarfstraeger = typeof bedarfstraeger.$inferInsert;
 export type Participant = typeof participants.$inferSelect;

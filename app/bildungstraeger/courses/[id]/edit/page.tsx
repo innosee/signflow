@@ -3,6 +3,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { getTenantCoaches } from "@/lib/memberships";
 
 import { CourseForm } from "../../new/course-form";
 import { updateCourse } from "../../actions";
@@ -66,20 +67,15 @@ export default async function EditCustomerPage({ params }: Props) {
     )
     .orderBy(asc(schema.bedarfstraeger.name));
 
-  const coaches = await db
-    .select({
-      id: schema.users.id,
-      name: schema.users.name,
-    })
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.role, "coach"),
-        eq(schema.users.tenantId, tenantId),
-        isNull(schema.users.deletedAt),
-      ),
-    )
-    .orderBy(asc(schema.users.name));
+  // Auswahlquelle fürs Multiselect (alle Tenant-Coaches) + aktuelles Team.
+  const coaches = await getTenantCoaches(tenantId);
+  const team = await db
+    .select({ coachId: schema.courseCoaches.coachId })
+    .from(schema.courseCoaches)
+    .where(eq(schema.courseCoaches.courseId, course.id));
+  // Fallback auf den primären Coach, falls (Altdaten) noch kein Team-Eintrag.
+  const teamCoachIds =
+    team.length > 0 ? team.map((t) => t.coachId) : [course.coachId];
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -100,7 +96,7 @@ export default async function EditCustomerPage({ params }: Props) {
         courseId={course.id}
         submitLabel="Änderungen speichern"
         initial={{
-          coachId: course.coachId,
+          coachIds: teamCoachIds,
           avgsNummer: course.avgsNummer,
           durchfuehrungsort: course.durchfuehrungsort,
           anzahlBewilligteUe: String(course.anzahlBewilligteUe),

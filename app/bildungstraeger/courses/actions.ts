@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import {
@@ -10,6 +10,7 @@ import {
   getTenantId,
   requireBildungstraeger,
 } from "@/lib/dal";
+import { getTenantCoaches } from "@/lib/memberships";
 import { isBundesland } from "@/lib/feiertage";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
@@ -43,7 +44,15 @@ export async function createCourse(
     formData.get("anzahlBewilligteUe") ?? "",
   ).trim();
   const bedarfstraegerId = String(formData.get("bedarfstraegerId") ?? "").trim();
-  const coachId = String(formData.get("coachId") ?? "").trim();
+  // Kompetenzteam (1–n Coaches). Reihenfolge erhalten, dedupliziert.
+  const coachIds = Array.from(
+    new Set(
+      formData
+        .getAll("coachIds")
+        .map((v) => String(v).trim())
+        .filter(Boolean),
+    ),
+  );
   const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
   const bundeslandRaw = String(formData.get("bundesland") ?? "").trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
@@ -76,11 +85,13 @@ export async function createCourse(
     !durchfuehrungsort ||
     !anzahlBewilligteUeRaw ||
     !bedarfstraegerId ||
-    !coachId ||
+    coachIds.length === 0 ||
     !startDate ||
     !endDate
   ) {
-    return { error: "Bitte alle Kurs-Felder ausfüllen (inkl. Coach)." };
+    return {
+      error: "Bitte alle Kurs-Felder ausfüllen (inkl. mindestens einem Coach).",
+    };
   }
   if (!customerName || !customerEmail || !customerKundenNr) {
     return { error: "Kunde braucht Name, E-Mail und Kunden-Nr. (AfA)." };
@@ -97,23 +108,19 @@ export async function createCourse(
     return { error: "Enddatum darf nicht vor dem Startdatum liegen." };
   }
 
-  // Coach serverseitig tenant-scoped validieren — der Client-Dropdown ist
-  // manipulierbar; ein BT darf nur eigene Coaches zuweisen.
-  const [coach] = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.id, coachId),
-        eq(schema.users.tenantId, tenantId),
-        eq(schema.users.role, "coach"),
-        isNull(schema.users.deletedAt),
-      ),
-    )
-    .limit(1);
-  if (!coach) {
-    return { error: "Der gewählte Coach existiert nicht (mehr)." };
+  // Team serverseitig tenant-scoped validieren — der Client ist manipulierbar;
+  // ein BT darf nur eigene Coaches ins Team nehmen. `coachIds[0]` wird der
+  // primäre/anlegende Coach (courses.coach_id), alle landen in course_coaches.
+  const tenantCoachIds = new Set(
+    (await getTenantCoaches(tenantId)).map((c) => c.id),
+  );
+  if (coachIds.some((id) => !tenantCoachIds.has(id))) {
+    return {
+      error:
+        "Mindestens ein gewählter Coach gehört nicht (mehr) zu diesem Bildungsträger.",
+    };
   }
+  const primaryCoachId = coachIds[0]!;
 
   // Bedarfsträger tenant-scoped validieren.
   const [bt] = await db
@@ -167,7 +174,7 @@ export async function createCourse(
       const [course] = await tx
         .insert(schema.courses)
         .values({
-          coachId,
+          coachId: primaryCoachId,
           participantId,
           title,
           avgsNummer,
@@ -181,6 +188,10 @@ export async function createCourse(
         })
         .returning({ id: schema.courses.id });
       if (!course) throw new Error("COURSE_INSERT_FAILED");
+      // Kompetenzteam materialisieren (inkl. primärem Coach).
+      await tx
+        .insert(schema.courseCoaches)
+        .values(coachIds.map((cid) => ({ courseId: course.id, coachId: cid })));
       return course.id;
     });
   } catch (err) {
@@ -239,7 +250,14 @@ export async function updateCourse(
     formData.get("anzahlBewilligteUe") ?? "",
   ).trim();
   const bedarfstraegerId = String(formData.get("bedarfstraegerId") ?? "").trim();
-  const coachId = String(formData.get("coachId") ?? "").trim();
+  const coachIds = Array.from(
+    new Set(
+      formData
+        .getAll("coachIds")
+        .map((v) => String(v).trim())
+        .filter(Boolean),
+    ),
+  );
   const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
   const bundeslandRaw = String(formData.get("bundesland") ?? "").trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
@@ -268,11 +286,13 @@ export async function updateCourse(
     !durchfuehrungsort ||
     !anzahlBewilligteUeRaw ||
     !bedarfstraegerId ||
-    !coachId ||
+    coachIds.length === 0 ||
     !startDate ||
     !endDate
   ) {
-    return { error: "Bitte alle Kurs-Felder ausfüllen (inkl. Coach)." };
+    return {
+      error: "Bitte alle Kurs-Felder ausfüllen (inkl. mindestens einem Coach).",
+    };
   }
   if (!customerName || !customerEmail || !customerKundenNr) {
     return { error: "Kunde braucht Name, E-Mail und Kunden-Nr. (AfA)." };
@@ -289,19 +309,16 @@ export async function updateCourse(
     return { error: "Enddatum darf nicht vor dem Startdatum liegen." };
   }
 
-  const [coach] = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.id, coachId),
-        eq(schema.users.tenantId, tenantId),
-        eq(schema.users.role, "coach"),
-        isNull(schema.users.deletedAt),
-      ),
-    )
-    .limit(1);
-  if (!coach) return { error: "Der gewählte Coach existiert nicht (mehr)." };
+  const tenantCoachIds = new Set(
+    (await getTenantCoaches(tenantId)).map((c) => c.id),
+  );
+  if (coachIds.some((id) => !tenantCoachIds.has(id))) {
+    return {
+      error:
+        "Mindestens ein gewählter Coach gehört nicht (mehr) zu diesem Bildungsträger.",
+    };
+  }
+  const primaryCoachId = coachIds[0]!;
 
   const [bt] = await db
     .select({ id: schema.bedarfstraeger.id })
@@ -337,7 +354,7 @@ export async function updateCourse(
       await tx
         .update(schema.courses)
         .set({
-          coachId,
+          coachId: primaryCoachId,
           title,
           avgsNummer,
           durchfuehrungsort,
@@ -349,9 +366,55 @@ export async function updateCourse(
           endDate,
         })
         .where(eq(schema.courses.id, courseId));
+
+      // Kompetenzteam synchronisieren (diff). Einen Coach, dem in diesem Kurs
+      // bereits Termine zugewiesen sind, darf der BT NICHT aus dem Team nehmen —
+      // sonst hingen dessen (ggf. signierte) Termine an einem Nicht-Mitglied.
+      const existing = await tx
+        .select({ coachId: schema.courseCoaches.coachId })
+        .from(schema.courseCoaches)
+        .where(eq(schema.courseCoaches.courseId, courseId));
+      const existingIds = new Set(existing.map((r) => r.coachId));
+      const nextIds = new Set(coachIds);
+      const toRemove = [...existingIds].filter((id) => !nextIds.has(id));
+      const toAdd = coachIds.filter((id) => !existingIds.has(id));
+
+      if (toRemove.length > 0) {
+        const [blocked] = await tx
+          .select({ id: schema.sessions.id })
+          .from(schema.sessions)
+          .where(
+            and(
+              eq(schema.sessions.courseId, courseId),
+              inArray(schema.sessions.coachId, toRemove),
+              isNull(schema.sessions.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (blocked) throw new Error("COACH_HAS_SESSIONS");
+        await tx
+          .delete(schema.courseCoaches)
+          .where(
+            and(
+              eq(schema.courseCoaches.courseId, courseId),
+              inArray(schema.courseCoaches.coachId, toRemove),
+            ),
+          );
+      }
+      if (toAdd.length > 0) {
+        await tx
+          .insert(schema.courseCoaches)
+          .values(toAdd.map((cid) => ({ courseId, coachId: cid })));
+      }
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (message === "COACH_HAS_SESSIONS") {
+      return {
+        error:
+          "Ein Coach mit bereits angelegten Terminen kann nicht aus dem Team entfernt werden. Entferne/öffne erst dessen Termine.",
+      };
+    }
     // Häufigster Fehler: E-Mail kollidiert mit einem anderen Kunden im Tenant.
     if (/unique|duplicate/i.test(message)) {
       return {
