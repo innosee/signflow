@@ -48,6 +48,8 @@ export type StundennachweisSheet = {
     isErstgespraech: boolean;
     geeignet: boolean | null;
     eignungsanalyse: Eignungsanalyse | null;
+    /** Kompetenzteams: dem Termin zugewiesener Coach (Anzeige pro Zeile). */
+    coachName: string;
     coachSignatureUrl: string | null;
     coachSignedAt: string | null;
     participantSignatureUrl: string | null;
@@ -102,6 +104,20 @@ function formatDateTime(iso: string | null): string {
 export function Stundennachweis(props: StundennachweisSheet) {
   const { course, bedarfstraeger, coach, participant, sessions, audit } = props;
 
+  // Kompetenzteams: sind mehrere Coaches im Spiel, wird der Coach PRO Termin
+  // ausgewiesen (statt eines globalen Coaches). Bei genau einem Coach bleibt
+  // das Sheet byte-identisch zur bisherigen Single-Coach-Darstellung.
+  const coachNames = Array.from(
+    new Set(sessions.map((s) => s.coachName).filter(Boolean)),
+  );
+  const multiCoach = coachNames.length > 1;
+  const headerCoach =
+    coachNames.length === 1
+      ? coachNames[0]
+      : coachNames.length === 0
+        ? coach.name
+        : "Mehrere Coaches (siehe Termine)";
+
   const geleisteteUe = sessions
     .filter((s) => !s.isErstgespraech)
     .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
@@ -150,7 +166,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
             </dl>
             <h2 className="sheet-coach-heading">Coach</h2>
             <dl>
-              <MetaRow label="Name" value={coach.name} />
+              <MetaRow label="Name" value={headerCoach} />
             </dl>
           </div>
         </section>
@@ -191,6 +207,9 @@ export function Stundennachweis(props: StundennachweisSheet) {
                       {s.topic}
                     </td>
                     <td>
+                      {multiCoach && (
+                        <div className="sig-coach-name">{s.coachName}</div>
+                      )}
                       <SignatureCell
                         url={s.coachSignatureUrl}
                         signedAt={s.coachSignedAt}
@@ -476,6 +495,13 @@ const printCss = `
     color: #555;
   }
   .sig-pending { color: #999; font-style: italic; font-size: 9pt; }
+  /* Kompetenzteams: Coach-Name pro Zeile (nur bei >1 Coach gerendert). */
+  .sig-coach-name {
+    font-size: 7.5pt;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5mm;
+  }
   .sheet-audit {
     margin-top: 6mm;
     page-break-inside: avoid;
