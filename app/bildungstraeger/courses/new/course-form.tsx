@@ -19,40 +19,74 @@ type CoachOption = {
   signingEnabled: boolean;
 };
 
+type CourseFormValues = {
+  coachId: string;
+  avgsNummer: string;
+  durchfuehrungsort: string;
+  anzahlBewilligteUe: string;
+  bedarfstraegerId: string;
+  massnahmeTyp: string;
+  bundesland: string;
+  startDate: string;
+  endDate: string;
+  p_name: string;
+  p_email: string;
+  p_kundennr: string;
+};
+
+const EMPTY: CourseFormValues = {
+  coachId: "",
+  avgsNummer: "",
+  durchfuehrungsort: "",
+  anzahlBewilligteUe: "",
+  bedarfstraegerId: "",
+  massnahmeTyp: "EKC",
+  bundesland: "",
+  startDate: "",
+  endDate: "",
+  p_name: "",
+  p_email: "",
+  p_kundennr: "",
+};
+
+/**
+ * Geteiltes Formular für Anlegen UND Bearbeiten eines Kunden. Im Edit-Modus
+ * wird eine andere Server-Action + `courseId` (Hidden) übergeben und mit
+ * `initial` vorbefüllt.
+ */
 export function CourseForm({
   bedarfstraeger,
   coaches,
+  action = createCourse,
+  initial,
+  courseId,
+  submitLabel = "Kunde anlegen",
 }: {
   bedarfstraeger: BedarfstraegerOption[];
   coaches: CoachOption[];
+  action?: (
+    prev: CourseFormState,
+    formData: FormData,
+  ) => Promise<CourseFormState>;
+  initial?: CourseFormValues;
+  courseId?: string;
+  submitLabel?: string;
 }) {
-  const [state, action, pending] = useActionState<CourseFormState, FormData>(
-    createCourse,
+  const [state, formAction, pending] = useActionState<CourseFormState, FormData>(
+    action,
     undefined,
   );
   // Controlled halten: React 19 setzt das <form> nach jedem Action-Durchlauf
   // automatisch zurück — über useState überleben die Eingaben bei Fehler.
-  const [head, setHead] = useState({
-    coachId: "",
-    avgsNummer: "",
-    durchfuehrungsort: "",
-    anzahlBewilligteUe: "",
-    bedarfstraegerId: "",
-    massnahmeTyp: "EKC",
-    bundesland: "",
-    startDate: "",
-    endDate: "",
-    p_name: "",
-    p_email: "",
-    p_kundennr: "",
-  });
+  const [head, setHead] = useState<CourseFormValues>(initial ?? EMPTY);
   const setField =
     (key: keyof typeof head) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setHead((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
-    <form action={action} className="space-y-8">
+    <form action={formAction} className="space-y-8">
+      {courseId && <input type="hidden" name="courseId" value={courseId} />}
       <section className="rounded-xl border border-zinc-300 bg-white p-6 space-y-4">
         <h2 className="text-lg font-semibold">Maßnahme-Daten</h2>
 
@@ -240,7 +274,7 @@ export function CourseForm({
           disabled={pending}
           className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
         >
-          {pending ? "Wird angelegt…" : "Kunde anlegen"}
+          {pending ? "Wird gespeichert…" : submitLabel}
         </button>
         <a
           href="/bildungstraeger/courses"
