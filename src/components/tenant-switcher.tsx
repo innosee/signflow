@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 
 import { switchTenant } from "@/lib/tenant-actions";
 import type { MembershipView } from "@/lib/memberships";
@@ -18,8 +17,7 @@ const roleLabel = (role: MembershipView["role"]) =>
 /**
  * Tenant-Switcher im Header (Membership-Modell Phase 2). Zeigt den aktiven
  * Träger und — sofern vorhanden — die weiteren Mitgliedschaften zum Wechseln.
- * Bietet immer „Bildungsträger gründen" an, damit auch ein Coach mit nur einer
- * Mitgliedschaft seinen eigenen Träger anlegen kann.
+ * Wer nur EINE Mitgliedschaft hat, sieht nur den Namen (kein leeres Dropdown).
  */
 export function TenantSwitcher({
   memberships,
@@ -28,6 +26,8 @@ export function TenantSwitcher({
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const others = memberships.filter((m) => m.tenantId !== activeTenantId);
 
   useEffect(() => {
     if (!open) return;
@@ -40,7 +40,15 @@ export function TenantSwitcher({
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  const others = memberships.filter((m) => m.tenantId !== activeTenantId);
+  // Ohne weitere Mitgliedschaften gibt es nichts zu wechseln — dann nur der
+  // Name als statisches Label, kein interaktives Dropdown.
+  if (others.length === 0) {
+    return (
+      <div className="flex max-w-[12rem] items-center rounded-lg border border-transparent px-2.5 py-1.5 text-sm font-medium text-zinc-800">
+        <span className="truncate">{activeTenantName}</span>
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -71,39 +79,26 @@ export function TenantSwitcher({
           role="menu"
           className="absolute left-0 z-20 mt-1 w-64 rounded-lg border border-zinc-300 bg-white py-1 shadow-lg"
         >
-          {others.length > 0 && (
-            <>
-              <div className="px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Wechseln zu
-              </div>
-              {others.map((m) => (
-                <form key={m.tenantId} action={switchTenant}>
-                  <input type="hidden" name="tenantId" value={m.tenantId} />
-                  <button
-                    type="submit"
-                    role="menuitem"
-                    className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-zinc-50"
-                  >
-                    <span className="truncate font-medium text-zinc-900">
-                      {m.tenantName}
-                    </span>
-                    <span className="text-xs text-zinc-500">
-                      {roleLabel(m.role)}
-                    </span>
-                  </button>
-                </form>
-              ))}
-              <div className="my-1 border-t border-zinc-200" />
-            </>
-          )}
-          <Link
-            href="/konto/bildungstraeger-gruenden"
-            role="menuitem"
-            className="block px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-50"
-            onClick={() => setOpen(false)}
-          >
-            + Bildungsträger gründen
-          </Link>
+          <div className="px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Wechseln zu
+          </div>
+          {others.map((m) => (
+            <form key={m.tenantId} action={switchTenant}>
+              <input type="hidden" name="tenantId" value={m.tenantId} />
+              <button
+                type="submit"
+                role="menuitem"
+                className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-zinc-50"
+              >
+                <span className="truncate font-medium text-zinc-900">
+                  {m.tenantName}
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {roleLabel(m.role)}
+                </span>
+              </button>
+            </form>
+          ))}
         </div>
       )}
     </div>

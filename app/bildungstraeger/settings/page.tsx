@@ -7,6 +7,7 @@ import {
 } from "@/components/settings/section";
 import { getBranding } from "@/lib/branding";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { getTenantSwitcherData } from "@/lib/memberships";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ export default async function BildungstraegerSettingsPage() {
   const tenantId = getTenantId(session);
   const branding = await getBranding(tenantId);
   const initialAddress = branding.address;
+  const { activeTenantName } = await getTenantSwitcherData(
+    session.user.id,
+    tenantId,
+  );
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -30,9 +35,10 @@ export default async function BildungstraegerSettingsPage() {
 
       <SettingsSection
         title="Profil"
-        description="Wie dein Name im System und in System-E-Mails erscheint."
+        description="Bildungsträger, Ansprechpartner und E-Mail wie sie im System und in System-E-Mails erscheinen."
       >
         <ProfileForm
+          tenantName={activeTenantName}
           initialName={session.user.name}
           email={session.user.email}
         />
