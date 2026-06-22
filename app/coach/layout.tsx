@@ -4,7 +4,14 @@ import {
   CoachToolNav,
   CoachToolSubBrand,
 } from "@/components/coach-tool-nav";
-import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
+import { TenantSwitcher } from "@/components/tenant-switcher";
+import {
+  getSigningEnabled,
+  getTenantId,
+  isImpersonating,
+  requireCoach,
+} from "@/lib/dal";
+import { getTenantSwitcherData } from "@/lib/memberships";
 
 import { stopImpersonating } from "../bildungstraeger/actions";
 import { logoutAction } from "../login/actions";
@@ -18,6 +25,10 @@ export default async function CoachLayout({
 }) {
   const session = await requireCoach();
   const signingEnabled = await getSigningEnabled(session.user.id);
+  const switcher = await getTenantSwitcherData(
+    session.user.id,
+    getTenantId(session),
+  );
 
   return (
     <>
@@ -30,6 +41,13 @@ export default async function CoachLayout({
           customNav={<CoachToolNav signingEnabled={signingEnabled} />}
           accentStrip={
             <CoachToolAccentStrip signingEnabled={signingEnabled} />
+          }
+          tenantSwitcher={
+            <TenantSwitcher
+              memberships={switcher.memberships}
+              activeTenantId={switcher.activeTenantId}
+              activeTenantName={switcher.activeTenantName}
+            />
           }
           userName={session.user.name}
           userEmail={session.user.email}

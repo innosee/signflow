@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
 import { db, schema } from "@/db";
-import { getCurrentSession, isImpersonating } from "@/lib/dal";
+import { getActiveRole, getCurrentSession, isImpersonating } from "@/lib/dal";
 import { deleteBlob, uploadBrandingLogo } from "@/lib/storage";
 
 const MAX_BYTES = 1_000_000; // 1 MB — reicht für PDF-Header-Logos
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "bildungstraeger") {
+  if (getActiveRole(session) !== "bildungstraeger") {
     return NextResponse.json(
       { error: "Nur der Bildungsträger darf das Logo ändern." },
       { status: 403 },

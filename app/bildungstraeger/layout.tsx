@@ -1,5 +1,11 @@
 import { AppHeader } from "@/components/app-header";
-import { isImpersonating, requireBildungstraeger } from "@/lib/dal";
+import { TenantSwitcher } from "@/components/tenant-switcher";
+import {
+  getTenantId,
+  isImpersonating,
+  requireBildungstraeger,
+} from "@/lib/dal";
+import { getTenantSwitcherData } from "@/lib/memberships";
 
 import { logoutAction } from "../login/actions";
 import { stopImpersonating } from "./actions";
@@ -12,6 +18,10 @@ export default async function BildungstraegerLayout({
   children: React.ReactNode;
 }) {
   const session = await requireBildungstraeger();
+  const switcher = await getTenantSwitcherData(
+    session.user.id,
+    getTenantId(session),
+  );
 
   return (
     <>
@@ -26,6 +36,13 @@ export default async function BildungstraegerLayout({
             { href: "/bildungstraeger/bedarfstraeger", label: "Bedarfsträger" },
             { href: "/bildungstraeger/team", label: "Team" },
           ]}
+          tenantSwitcher={
+            <TenantSwitcher
+              memberships={switcher.memberships}
+              activeTenantId={switcher.activeTenantId}
+              activeTenantName={switcher.activeTenantName}
+            />
+          }
           userName={session.user.name}
           userEmail={session.user.email}
           settingsHref="/bildungstraeger/settings"

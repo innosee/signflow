@@ -17,7 +17,7 @@ export type SessionData = Awaited<ReturnType<typeof auth.api.getSession>>;
  * eine Mitgliedschaft hat. Single-Membership-User (alle aktuell) merken
  * dadurch nichts.
  */
-const ACTIVE_TENANT_COOKIE = "active_tenant_id";
+export const ACTIVE_TENANT_COOKIE = "active_tenant_id";
 
 type ActiveMembership = {
   tenantId: string;

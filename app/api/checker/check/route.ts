@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { runAzureCheck } from "@/lib/checker/azure-client";
 import { isCheckerInput } from "@/lib/checker/types";
-import { getCurrentSession, isImpersonating } from "@/lib/dal";
+import { getActiveRole, getCurrentSession, isImpersonating } from "@/lib/dal";
 
 export const runtime = "nodejs";
 
@@ -16,10 +16,8 @@ export async function POST(req: Request) {
   // Coach + Bildungsträger nutzen beide den Azure-Check (Coach im Editor,
   // BT im Review-Checker). Beide Rollen sind authentifiziert und sehen nur
   // das anonymisierte Input — Azure bekommt nie Klartext.
-  if (
-    session.user.role !== "coach" &&
-    session.user.role !== "bildungstraeger"
-  ) {
+  const activeRole = getActiveRole(session);
+  if (activeRole !== "coach" && activeRole !== "bildungstraeger") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (isImpersonating(session)) {

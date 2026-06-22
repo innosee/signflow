@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { getCurrentSession, isImpersonating } from "@/lib/dal";
+import { getActiveRole, getCurrentSession, isImpersonating } from "@/lib/dal";
 
 export const runtime = "nodejs";
 
@@ -29,10 +29,8 @@ export async function GET() {
   // BT-Review-Checker (PR #54). Beide Rollen sind authentifiziert und
   // berechtigt, den Anonymizer zu nutzen — der Anonymizer selbst hält
   // keine sensiblen Daten, er gibt nur Klartext anonymisiert zurück.
-  if (
-    session.user.role !== "coach" &&
-    session.user.role !== "bildungstraeger"
-  ) {
+  const activeRole = getActiveRole(session);
+  if (activeRole !== "coach" && activeRole !== "bildungstraeger") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (isImpersonating(session)) {

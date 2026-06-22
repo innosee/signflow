@@ -18,6 +18,7 @@ import {
   isTenantOwner,
   requireBildungstraeger,
 } from "@/lib/dal";
+import { ensureMembership } from "@/lib/memberships";
 
 export type InviteFormState =
   | { error?: string; success?: string }
@@ -145,6 +146,22 @@ export async function inviteCoach(
       };
     }
     throw err;
+  }
+
+  // Coach-Mitgliedschaft im einladenden Tenant materialisieren (Membership-
+  // Modell). Best-effort: schlägt das fehl, bleibt der Coach über
+  // users.tenant_id/role als Fallback voll funktionsfähig — kein Grund, die
+  // bereits versendete Einladung scheitern zu lassen.
+  if (createdUserId) {
+    try {
+      await ensureMembership(db, {
+        userId: createdUserId,
+        tenantId,
+        role: "coach",
+      });
+    } catch {
+      // non-fatal — Fallback auf users.tenant_id/role greift.
+    }
   }
 
   return { success: `Einladung an ${email} versendet.` };

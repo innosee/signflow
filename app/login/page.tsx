@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { getCurrentSession } from "@/lib/dal";
+import { getActiveRole, getCurrentSession } from "@/lib/dal";
 
 import { LoginForm } from "./login-form";
 
@@ -14,7 +14,11 @@ type Props = {
 export default async function LoginPage({ searchParams }: Props) {
   const session = await getCurrentSession();
   if (session) {
-    redirect(session.user.role === "bildungstraeger" ? "/bildungstraeger" : "/coach");
+    redirect(
+      getActiveRole(session) === "bildungstraeger"
+        ? "/bildungstraeger"
+        : "/coach",
+    );
   }
 
   const { reset } = await searchParams;
