@@ -1,12 +1,10 @@
 "use client";
 
-import Script from "next/script";
 import { useEffect, useRef } from "react";
 import { useActionState } from "react";
 
+import { TurnstileWidget } from "@/components/turnstile-widget";
 import { submitWaitlist, type WaitlistState } from "@/lib/waitlist-action";
-
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export function LandingWaitlist() {
   const [state, action, pending] = useActionState<WaitlistState, FormData>(
@@ -124,16 +122,7 @@ export function LandingWaitlist() {
               />
             </label>
 
-            {TURNSTILE_SITE_KEY && (
-              <div className="mt-4">
-                <div
-                  className="cf-turnstile"
-                  data-sitekey={TURNSTILE_SITE_KEY}
-                  data-theme="light"
-                  data-size="flexible"
-                />
-              </div>
-            )}
+            <TurnstileWidget className="mt-4" />
 
             {state?.error && (
               <p role="alert" className="mt-3 text-sm text-red-700">
@@ -157,15 +146,6 @@ export function LandingWaitlist() {
           </form>
         )}
       </div>
-
-      {TURNSTILE_SITE_KEY && (
-        <Script
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-          strategy="afterInteractive"
-          async
-          defer
-        />
-      )}
     </section>
   );
 }
