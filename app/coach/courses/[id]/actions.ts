@@ -28,6 +28,7 @@ import {
   sendParticipantInvite,
   sendParticipantPreviewInvite,
 } from "@/lib/participant-tokens";
+import { resetFesGates } from "@/lib/fes-gates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 import { isValidE164, normalizePhoneInput } from "@/lib/sms";
 
@@ -384,19 +385,7 @@ export async function createSession(
       // FES-Gates resetten: neuer Termin ändert den Stand → alte
       // Maßnahme-Abschluss-Bestätigung + ANW-Check-Status sind nicht
       // mehr aussagekräftig.
-      await tx
-        .update(schema.courses)
-        .set({
-          abgeschlossenAt: null,
-          anwCheckPassedAt: null,
-          // BT-Prüfung mit zurücksetzen: das Dokument hat sich geändert, eine
-          // alte Freigabe/Prüfung bezeugt einen Stand, den es nicht mehr gibt.
-          reviewStatus: "none",
-          reviewRequestedAt: null,
-          reviewDecidedAt: null,
-          reviewDecidedBy: null,
-        })
-        .where(eq(schema.courses.id, ownedCourseId));
+      await resetFesGates(tx, ownedCourseId);
       // #1: TN-Freigabe verwerfen. Ein neuer Termin ändert das Dokument →
       // eine bereits erteilte Freigabe bezeugt einen Stand, den es nicht
       // mehr gibt. Ohne das landet der TN beim Öffnen des Magic-Links auf
@@ -494,19 +483,7 @@ export async function updateSession(
         })
         .where(eq(schema.sessions.id, sessionId));
       // FES-Gates resetten — Inhalts-Edit ändert den Stand.
-      await tx
-        .update(schema.courses)
-        .set({
-          abgeschlossenAt: null,
-          anwCheckPassedAt: null,
-          // BT-Prüfung mit zurücksetzen: das Dokument hat sich geändert, eine
-          // alte Freigabe/Prüfung bezeugt einen Stand, den es nicht mehr gibt.
-          reviewStatus: "none",
-          reviewRequestedAt: null,
-          reviewDecidedAt: null,
-          reviewDecidedBy: null,
-        })
-        .where(eq(schema.courses.id, ownedCourseId));
+      await resetFesGates(tx, ownedCourseId);
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -605,19 +582,7 @@ export async function reopenSession(
         .where(eq(schema.participantApprovals.courseId, ownedCourseId));
       // 4. FES-Gates resetten — Maßnahme-Abschluss und ANW-Check müssen
       //    nach dem Edit neu bestätigt werden.
-      await tx
-        .update(schema.courses)
-        .set({
-          abgeschlossenAt: null,
-          anwCheckPassedAt: null,
-          // BT-Prüfung mit zurücksetzen: das Dokument hat sich geändert, eine
-          // alte Freigabe/Prüfung bezeugt einen Stand, den es nicht mehr gibt.
-          reviewStatus: "none",
-          reviewRequestedAt: null,
-          reviewDecidedAt: null,
-          reviewDecidedBy: null,
-        })
-        .where(eq(schema.courses.id, ownedCourseId));
+      await resetFesGates(tx, ownedCourseId);
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -699,17 +664,9 @@ export async function correctSessionTopic(
         .update(schema.sessions)
         .set({ topic })
         .where(eq(schema.sessions.id, sessionId));
-      // Inhaltsabhängige Gates zurücksetzen (Signaturen/Freigaben bleiben!).
-      await tx
-        .update(schema.courses)
-        .set({
-          anwCheckPassedAt: null,
-          reviewStatus: "none",
-          reviewRequestedAt: null,
-          reviewDecidedAt: null,
-          reviewDecidedBy: null,
-        })
-        .where(eq(schema.courses.id, ownedCourseId));
+      // Inhaltsabhängige Gates zurücksetzen (Maßnahme-Abschluss, Signaturen
+      // und Freigaben bleiben — nur der Themen-Text ändert sich).
+      await resetFesGates(tx, ownedCourseId, { keepAbgeschlossen: true });
       await logAudit(
         {
           actorType: "coach",

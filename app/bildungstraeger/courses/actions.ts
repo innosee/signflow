@@ -12,7 +12,7 @@ import {
   requireBildungstraeger,
 } from "@/lib/dal";
 import { getTenantCoaches } from "@/lib/memberships";
-import { isBundesland } from "@/lib/feiertage";
+import { isBundesland, type Bundesland } from "@/lib/feiertage";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
 export type CourseFormState =
@@ -32,21 +32,38 @@ function looksLikeEmail(v: string): boolean {
 }
 
 /**
- * Bildungsträger legt einen Kunden (= Kurs, 1:1) an UND weist ihn direkt einem
- * Coach zu. Erst nach Zuweisung erscheint der Kunde im Coach-Dashboard. Coaches
- * können nicht mehr selbst anlegen — die Anlage liegt allein beim BT.
- *
- * Reihenfolge wegen NOT-NULL-FK: erst den Kunden (participants) tenant-scoped
- * reuse-or-create, dann den Kurs mit `coach_id` + `participant_id`.
+ * Validierte, geparste Kurs-Formularfelder. `createCourse` und `updateCourse`
+ * teilen exakt dieselbe Extraktion + Validierung — das Resultat hier ist die
+ * gemeinsame Quelle, danach unterscheiden sich nur die Transaktions-Bodies.
  */
-export async function createCourse(
-  _prev: CourseFormState,
-  formData: FormData,
-): Promise<CourseFormState> {
-  const session = await requireBildungstraeger();
-  assertNotImpersonating(session);
-  const tenantId = getTenantId(session);
+type ParsedCourseForm = {
+  avgsNummer: string;
+  durchfuehrungsort: string;
+  anzahlBewilligteUe: number;
+  bedarfstraegerId: string;
+  /** Kompetenzteam, dedupliziert, Reihenfolge erhalten. */
+  coachIds: string[];
+  /** `coachIds[0]` — primärer/anlegender Coach (courses.coach_id). */
+  primaryCoachId: string;
+  massnahmeTyp: (typeof MASSNAHME_TYPEN)[number];
+  /** Kein Freitext mehr: Titel = Label des Maßnahmentyps. */
+  title: string;
+  bundesland: Bundesland;
+  startDate: string;
+  endDate: string;
+  customerName: string;
+  customerEmail: string;
+  customerKundenNr: string;
+};
 
+/**
+ * Extrahiert + validiert alle Kurs-Formularfelder. Reine Funktion ohne
+ * DB-Zugriff — die tenant-scoped Referenz-Prüfung (Coach-Team, Bedarfsträger)
+ * läuft separat in `validateCourseRefs`.
+ */
+function parseCourseForm(
+  formData: FormData,
+): { ok: true; values: ParsedCourseForm } | { ok: false; error: string } {
   const avgsNummer = String(formData.get("avgsNummer") ?? "").trim();
   const durchfuehrungsort = String(
     formData.get("durchfuehrungsort") ?? "",
@@ -79,15 +96,17 @@ export async function createCourse(
   if (
     !MASSNAHME_TYPEN.includes(massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number])
   ) {
-    return { error: "Ungültiger Maßnahme-Typ. Bitte aus der Liste wählen." };
+    return {
+      ok: false,
+      error: "Ungültiger Maßnahme-Typ. Bitte aus der Liste wählen.",
+    };
   }
   const massnahmeTyp = massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number];
-  // Kein Freitext-Titel mehr: der Titel ist das Label des Maßnahmentyps.
   const title = MASSNAHME_TYP_LABEL[massnahmeTyp];
 
-  // Bundesland ist Pflicht für neue Kunden — Grundlage der Feiertags-Warnung.
+  // Bundesland ist Pflicht — Grundlage der Feiertags-Warnung.
   if (!isBundesland(bundeslandRaw)) {
-    return { error: "Bitte ein Bundesland aus der Liste wählen." };
+    return { ok: false, error: "Bitte ein Bundesland aus der Liste wählen." };
   }
   const bundesland = bundeslandRaw;
 
@@ -101,53 +120,126 @@ export async function createCourse(
     !endDate
   ) {
     return {
+      ok: false,
       error: "Bitte alle Kurs-Felder ausfüllen (inkl. mindestens einem Coach).",
     };
   }
   if (!customerName || !customerEmail || !customerKundenNr) {
-    return { error: "Kunde braucht Name, E-Mail und Kunden-Nr. (AfA)." };
+    return { ok: false, error: "Kunde braucht Name, E-Mail und Kunden-Nr. (AfA)." };
   }
   if (!looksLikeEmail(customerEmail)) {
-    return { error: "Ungültige E-Mail-Adresse des Kunden." };
+    return { ok: false, error: "Ungültige E-Mail-Adresse des Kunden." };
   }
 
   const anzahlBewilligteUe = Number.parseInt(anzahlBewilligteUeRaw, 10);
   if (!Number.isInteger(anzahlBewilligteUe) || anzahlBewilligteUe <= 0) {
-    return { error: "Bewilligte UE muss eine positive ganze Zahl sein." };
+    return {
+      ok: false,
+      error: "Bewilligte UE muss eine positive ganze Zahl sein.",
+    };
   }
   if (endDate < startDate) {
-    return { error: "Enddatum darf nicht vor dem Startdatum liegen." };
+    return {
+      ok: false,
+      error: "Enddatum darf nicht vor dem Startdatum liegen.",
+    };
   }
 
-  // Team serverseitig tenant-scoped validieren — der Client ist manipulierbar;
-  // ein BT darf nur eigene Coaches ins Team nehmen. `coachIds[0]` wird der
-  // primäre/anlegende Coach (courses.coach_id), alle landen in course_coaches.
+  return {
+    ok: true,
+    values: {
+      avgsNummer,
+      durchfuehrungsort,
+      anzahlBewilligteUe,
+      bedarfstraegerId,
+      coachIds,
+      primaryCoachId: coachIds[0]!,
+      massnahmeTyp,
+      title,
+      bundesland,
+      startDate,
+      endDate,
+      customerName,
+      customerEmail,
+      customerKundenNr,
+    },
+  };
+}
+
+/**
+ * Tenant-scoped Referenz-Prüfung: Coach-Team und Bedarfsträger müssen zum
+ * Tenant des BT gehören (der Client ist manipulierbar — ein BT darf nur eigene
+ * Coaches ins Team nehmen). Separat von `parseCourseForm`, weil DB-Zugriff nötig.
+ */
+async function validateCourseRefs(
+  values: ParsedCourseForm,
+  tenantId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const tenantCoachIds = new Set(
     (await getTenantCoaches(tenantId)).map((c) => c.id),
   );
-  if (coachIds.some((id) => !tenantCoachIds.has(id))) {
+  if (values.coachIds.some((id) => !tenantCoachIds.has(id))) {
     return {
+      ok: false,
       error:
         "Mindestens ein gewählter Coach gehört nicht (mehr) zu diesem Bildungsträger.",
     };
   }
-  const primaryCoachId = coachIds[0]!;
 
-  // Bedarfsträger tenant-scoped validieren.
   const [bt] = await db
     .select({ id: schema.bedarfstraeger.id })
     .from(schema.bedarfstraeger)
     .where(
       and(
-        eq(schema.bedarfstraeger.id, bedarfstraegerId),
+        eq(schema.bedarfstraeger.id, values.bedarfstraegerId),
         eq(schema.bedarfstraeger.tenantId, tenantId),
         isNull(schema.bedarfstraeger.deletedAt),
       ),
     )
     .limit(1);
   if (!bt) {
-    return { error: "Der gewählte Bedarfsträger existiert nicht (mehr)." };
+    return { ok: false, error: "Der gewählte Bedarfsträger existiert nicht (mehr)." };
   }
+  return { ok: true };
+}
+
+/**
+ * Bildungsträger legt einen Kunden (= Kurs, 1:1) an UND weist ihn direkt einem
+ * Coach zu. Erst nach Zuweisung erscheint der Kunde im Coach-Dashboard. Coaches
+ * können nicht mehr selbst anlegen — die Anlage liegt allein beim BT.
+ *
+ * Reihenfolge wegen NOT-NULL-FK: erst den Kunden (participants) tenant-scoped
+ * reuse-or-create, dann den Kurs mit `coach_id` + `participant_id`.
+ */
+export async function createCourse(
+  _prev: CourseFormState,
+  formData: FormData,
+): Promise<CourseFormState> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+
+  const parsed = parseCourseForm(formData);
+  if (!parsed.ok) return { error: parsed.error };
+  const {
+    avgsNummer,
+    durchfuehrungsort,
+    anzahlBewilligteUe,
+    bedarfstraegerId,
+    coachIds,
+    primaryCoachId,
+    massnahmeTyp,
+    title,
+    bundesland,
+    startDate,
+    endDate,
+    customerName,
+    customerEmail,
+    customerKundenNr,
+  } = parsed.values;
+
+  const refs = await validateCourseRefs(parsed.values, tenantId);
+  if (!refs.ok) return { error: refs.error };
 
   // Nicht-blockierender Hinweis: existiert die Kunden-E-Mail im Tenant schon,
   // wird der bestehende Stammdatensatz wiederverwendet (eine Person, mehrere
@@ -274,96 +366,27 @@ export async function updateCourse(
     .limit(1);
   if (!course) return { error: "Kunde nicht gefunden." };
 
-  const avgsNummer = String(formData.get("avgsNummer") ?? "").trim();
-  const durchfuehrungsort = String(
-    formData.get("durchfuehrungsort") ?? "",
-  ).trim();
-  const anzahlBewilligteUeRaw = String(
-    formData.get("anzahlBewilligteUe") ?? "",
-  ).trim();
-  const bedarfstraegerId = String(formData.get("bedarfstraegerId") ?? "").trim();
-  const coachIds = Array.from(
-    new Set(
-      formData
-        .getAll("coachIds")
-        .map((v) => String(v).trim())
-        .filter(Boolean),
-    ),
-  );
-  const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
-  const bundeslandRaw = String(formData.get("bundesland") ?? "").trim();
-  const startDate = String(formData.get("startDate") ?? "").trim();
-  const endDate = String(formData.get("endDate") ?? "").trim();
-  const customerName = String(formData.get("p_name") ?? "").trim();
-  const customerEmail = String(formData.get("p_email") ?? "")
-    .trim()
-    .toLowerCase();
-  const customerKundenNr = String(formData.get("p_kundennr") ?? "").trim();
+  const parsed = parseCourseForm(formData);
+  if (!parsed.ok) return { error: parsed.error };
+  const {
+    avgsNummer,
+    durchfuehrungsort,
+    anzahlBewilligteUe,
+    bedarfstraegerId,
+    coachIds,
+    primaryCoachId,
+    massnahmeTyp,
+    title,
+    bundesland,
+    startDate,
+    endDate,
+    customerName,
+    customerEmail,
+    customerKundenNr,
+  } = parsed.values;
 
-  if (
-    !MASSNAHME_TYPEN.includes(massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number])
-  ) {
-    return { error: "Ungültiger Maßnahme-Typ. Bitte aus der Liste wählen." };
-  }
-  const massnahmeTyp = massnahmeTypRaw as (typeof MASSNAHME_TYPEN)[number];
-  const title = MASSNAHME_TYP_LABEL[massnahmeTyp];
-
-  if (!isBundesland(bundeslandRaw)) {
-    return { error: "Bitte ein Bundesland aus der Liste wählen." };
-  }
-  const bundesland = bundeslandRaw;
-
-  if (
-    !avgsNummer ||
-    !durchfuehrungsort ||
-    !anzahlBewilligteUeRaw ||
-    !bedarfstraegerId ||
-    coachIds.length === 0 ||
-    !startDate ||
-    !endDate
-  ) {
-    return {
-      error: "Bitte alle Kurs-Felder ausfüllen (inkl. mindestens einem Coach).",
-    };
-  }
-  if (!customerName || !customerEmail || !customerKundenNr) {
-    return { error: "Kunde braucht Name, E-Mail und Kunden-Nr. (AfA)." };
-  }
-  if (!looksLikeEmail(customerEmail)) {
-    return { error: "Ungültige E-Mail-Adresse des Kunden." };
-  }
-
-  const anzahlBewilligteUe = Number.parseInt(anzahlBewilligteUeRaw, 10);
-  if (!Number.isInteger(anzahlBewilligteUe) || anzahlBewilligteUe <= 0) {
-    return { error: "Bewilligte UE muss eine positive ganze Zahl sein." };
-  }
-  if (endDate < startDate) {
-    return { error: "Enddatum darf nicht vor dem Startdatum liegen." };
-  }
-
-  const tenantCoachIds = new Set(
-    (await getTenantCoaches(tenantId)).map((c) => c.id),
-  );
-  if (coachIds.some((id) => !tenantCoachIds.has(id))) {
-    return {
-      error:
-        "Mindestens ein gewählter Coach gehört nicht (mehr) zu diesem Bildungsträger.",
-    };
-  }
-  const primaryCoachId = coachIds[0]!;
-
-  const [bt] = await db
-    .select({ id: schema.bedarfstraeger.id })
-    .from(schema.bedarfstraeger)
-    .where(
-      and(
-        eq(schema.bedarfstraeger.id, bedarfstraegerId),
-        eq(schema.bedarfstraeger.tenantId, tenantId),
-        isNull(schema.bedarfstraeger.deletedAt),
-      ),
-    )
-    .limit(1);
-  if (!bt) return { error: "Der gewählte Bedarfsträger existiert nicht (mehr)." };
+  const refs = await validateCourseRefs(parsed.values, tenantId);
+  if (!refs.ok) return { error: refs.error };
 
   try {
     await db.transaction(async (tx) => {
