@@ -1,0 +1,27 @@
+name: CI
+
+# Statische Gates bei jedem Push/PR auf main. Bewusst nur typecheck + lint:
+# beide laufen env-frei und deterministisch grün. `next build` ist NICHT
+# enthalten, weil src/db/index.ts beim Import ein gesetztes DATABASE_URL
+# erzwingt — der Build bräuchte (Dummy-)Secrets und würde die CI fragil
+# machen. Build wird weiterhin von Vercel beim Deploy ausgeführt.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint

@@ -50,12 +50,21 @@ export async function POST(req: Request) {
   try {
     url = await uploadSignature(`user-${userId}`, file);
   } catch (err) {
+    // Fehler-Internals (Storage-Provider-Namen, Stack-Traces) bleiben im
+    // Server-Log — der Client sieht nur eine generische Meldung (analog zur
+    // TN-Route). Fehlt der Token, ist es ein Config-Problem der Umgebung →
+    // 503 mit klarem Hinweis statt 500er Black Box.
     const message = err instanceof Error ? err.message : String(err);
     console.error("Signature upload failed:", err);
-    // Fehlt der Token, ist es ein Config-Problem der Umgebung — keine 500er
-    // Black Box, sondern 503 mit klarem Hinweis.
-    const status = message.includes("BLOB_READ_WRITE_TOKEN") ? 503 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const isConfig = message.includes("BLOB_READ_WRITE_TOKEN");
+    return NextResponse.json(
+      {
+        error: isConfig
+          ? "Storage ist aktuell nicht konfiguriert. Bitte wende dich an den Support."
+          : "Upload fehlgeschlagen. Bitte erneut versuchen.",
+      },
+      { status: isConfig ? 503 : 500 },
+    );
   }
 
   const [previous] = await db

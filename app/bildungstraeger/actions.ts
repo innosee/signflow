@@ -11,6 +11,7 @@ import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
 import {
+  assertNotImpersonating,
   getCurrentSession,
   getTenantId,
   getTenantOwnerId,
@@ -34,6 +35,7 @@ export async function inviteCoach(
   formData: FormData,
 ): Promise<InviteFormState> {
   const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
   const tenantId = getTenantId(session);
 
   const email = String(formData.get("email") ?? "")
