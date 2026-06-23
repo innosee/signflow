@@ -14,7 +14,17 @@ import { getTenantCoaches } from "@/lib/memberships";
 import { isBundesland } from "@/lib/feiertage";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
-export type CourseFormState = { error?: string } | undefined;
+export type CourseFormState =
+  | {
+      error?: string;
+      /**
+       * Nicht-blockierender Hinweis: die eingegebene Kunden-E-Mail existiert im
+       * Tenant bereits. Der BT bestätigt mit `confirmShared`, dass die
+       * Stammdaten geteilt werden (eine Person, mehrere Maßnahmen).
+       */
+      duplicateHint?: string;
+    }
+  | undefined;
 
 function looksLikeEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -136,6 +146,27 @@ export async function createCourse(
     .limit(1);
   if (!bt) {
     return { error: "Der gewählte Bedarfsträger existiert nicht (mehr)." };
+  }
+
+  // Nicht-blockierender Hinweis: existiert die Kunden-E-Mail im Tenant schon,
+  // wird der bestehende Stammdatensatz wiederverwendet (eine Person, mehrere
+  // Maßnahmen — Stammdaten-Änderungen wirken dann auf alle). Beim ersten Submit
+  // bekommt der BT den Hinweis; mit `confirmShared` legt er bewusst trotzdem an.
+  const confirmShared = formData.get("confirmShared") === "true";
+  const [existingCustomer] = await db
+    .select({ name: schema.participants.name })
+    .from(schema.participants)
+    .where(
+      and(
+        eq(schema.participants.email, customerEmail),
+        eq(schema.participants.tenantId, tenantId),
+      ),
+    )
+    .limit(1);
+  if (existingCustomer && !confirmShared) {
+    return {
+      duplicateHint: `Diese E-Mail ist bereits als Kunde „${existingCustomer.name}" angelegt. Beim Anlegen wird derselbe Stammdatensatz verwendet — spätere Änderungen an Name/E-Mail/Kunden-Nr. wirken dann auf ALLE Maßnahmen dieser Person. Zum bewussten Fortfahren bestätigen.`,
+    };
   }
 
   let newCourseId: string | null = null;

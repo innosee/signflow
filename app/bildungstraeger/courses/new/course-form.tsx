@@ -74,6 +74,8 @@ export function CourseForm({
   // Controlled halten: React 19 setzt das <form> nach jedem Action-Durchlauf
   // automatisch zurück — über useState überleben die Eingaben bei Fehler.
   const [head, setHead] = useState<CourseFormValues>(initial ?? EMPTY);
+  // Bestätigung für den „E-Mail ist bereits Kunde"-Hinweis (Stammdaten teilen).
+  const [confirmShared, setConfirmShared] = useState(false);
   const setField =
     (key: keyof typeof head) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -249,6 +251,26 @@ export function CourseForm({
         <p role="alert" className="text-sm text-red-700">
           {state.error}
         </p>
+      )}
+
+      {state?.duplicateHint && (
+        <div
+          role="status"
+          className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <p>{state.duplicateHint}</p>
+          <label className="flex items-start gap-2 font-medium">
+            <input
+              type="checkbox"
+              name="confirmShared"
+              value="true"
+              checked={confirmShared}
+              onChange={(e) => setConfirmShared(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>Verstanden — Stammdaten teilen und trotzdem anlegen.</span>
+          </label>
+        </div>
       )}
 
       <div className="flex items-center gap-3">
