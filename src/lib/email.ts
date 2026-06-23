@@ -167,6 +167,32 @@ export async function sendCoachInvitationToAccept(params: {
   });
 }
 
+/**
+ * Mail an den Coach: der Bildungsträger hat ihm einen (neuen) Kunden zugewiesen.
+ * Wird beim Anlegen eines Kunden an alle zugewiesenen Coaches geschickt und beim
+ * Bearbeiten an neu ins Kompetenzteam aufgenommene Coaches. Führt direkt auf die
+ * Kunden-Ansicht, wo der Coach die Termine erfasst.
+ */
+export async function sendCourseAssignedToCoach(params: {
+  to: string;
+  coachName: string;
+  customerName: string;
+  courseTitle: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo ${esc(params.coachName)},</p>
+    <p>dir wurde ein neuer Kunde zugewiesen: <strong>${esc(params.customerName)}</strong> (${esc(params.courseTitle)}). Du kannst jetzt die Termine erfassen und unterschreiben.</p>
+    ${renderButton(params.url, "Kunde öffnen")}
+  `;
+  await sendEmail({
+    to: params.to,
+    // Plaintext-Betreff → kein HTML-Escaping (sonst Entities sichtbar).
+    subject: `Neuer Kunde zugewiesen – ${params.customerName}`,
+    html: renderLayout("Neuer Kunde zugewiesen", body),
+  });
+}
+
 export async function sendParticipantMagicLink(params: {
   to: string;
   participantName: string;

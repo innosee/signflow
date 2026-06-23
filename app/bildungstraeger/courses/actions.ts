@@ -6,6 +6,7 @@ import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { sendCourseAssignedToCoach } from "@/lib/email";
 import {
   assertNotImpersonating,
   getTenantId,
@@ -187,7 +188,57 @@ export async function createCourse(
     return { error: "Kunde konnte nicht angelegt werden." };
   }
 
+  // Zugewiesene Coaches benachrichtigen (best-effort — der Kunde ist bereits
+  // angelegt; ein Mail-Fehler darf die Anlage nicht zurückrollen).
+  await notifyAssignedCoaches(newCourseId, coachIds, customerName, title);
+
   redirect("/bildungstraeger/courses");
+}
+
+/**
+ * Schickt den zugewiesenen Coaches die „Neuer Kunde zugewiesen"-Mail. Best-
+ * effort: Fehler werden geloggt, nicht geworfen — der Kunde existiert dann
+ * trotzdem. Wird beim Anlegen (alle Coaches) und beim Bearbeiten (nur neu
+ * hinzugefügte) genutzt.
+ */
+async function notifyAssignedCoaches(
+  courseId: string,
+  coachIds: string[],
+  customerName: string,
+  courseTitle: string,
+): Promise<void> {
+  if (coachIds.length === 0) return;
+  try {
+    const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const coaches = await db
+      .select({ name: schema.users.name, email: schema.users.email })
+      .from(schema.users)
+      .where(inArray(schema.users.id, coachIds));
+    const results = await Promise.allSettled(
+      coaches.map((c) =>
+        sendCourseAssignedToCoach({
+          to: c.email,
+          coachName: c.name,
+          customerName,
+          courseTitle,
+          url: `${base}/coach/courses/${courseId}`,
+        }),
+      ),
+    );
+    results.forEach((r) => {
+      if (r.status === "rejected") {
+        console.error(
+          `course-assigned notification failed for course ${courseId}:`,
+          r.reason,
+        );
+      }
+    });
+  } catch (err) {
+    console.error(
+      `course-assigned notification lookup failed for course ${courseId}:`,
+      err,
+    );
+  }
 }
 
 /**
@@ -248,8 +299,9 @@ export async function updateCourse(
   const refs = await validateCourseRefs(parsed.values, tenantId);
   if (!refs.ok) return { error: refs.error };
 
+  let addedCoachIds: string[] = [];
   try {
-    await db.transaction(async (tx) => {
+    addedCoachIds = await db.transaction(async (tx) => {
       // Kunden-Person aktualisieren (tenant-scoped). Achtung: bei geteilter
       // E-Mail/Person über mehrere Maßnahmen wirkt das auf alle.
       await tx
@@ -321,6 +373,7 @@ export async function updateCourse(
           .insert(schema.courseCoaches)
           .values(toAdd.map((cid) => ({ courseId, coachId: cid })));
       }
+      return toAdd;
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -339,6 +392,10 @@ export async function updateCourse(
     }
     return { error: `Änderung fehlgeschlagen (${message}).` };
   }
+
+  // Nur NEU ins Team aufgenommene Coaches benachrichtigen — wer schon zugewiesen
+  // war, bekommt beim reinen Stammdaten-Edit keine erneute Mail.
+  await notifyAssignedCoaches(courseId, addedCoachIds, customerName, title);
 
   redirect("/bildungstraeger/courses");
 }
