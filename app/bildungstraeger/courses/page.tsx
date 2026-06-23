@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
@@ -39,7 +39,12 @@ export default async function BildungstraegerCoursesPage() {
       eq(schema.bedarfstraeger.id, schema.courses.bedarfstraegerId),
     )
     .where(
-      and(eq(schema.users.tenantId, tenantId), isNull(schema.courses.deletedAt)),
+      and(
+        eq(schema.users.tenantId, tenantId),
+        isNull(schema.courses.deletedAt),
+        // Archivierte Kunden leben jetzt auf /bildungstraeger/archive.
+        ne(schema.courses.status, "archived"),
+      ),
     )
     .orderBy(desc(schema.courses.createdAt));
 
