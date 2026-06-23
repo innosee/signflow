@@ -36,6 +36,7 @@ export default async function BildungstraegerLayout({
           navLinks={[
             { href: "/bildungstraeger", label: "Dashboard" },
             { href: "/bildungstraeger/courses", label: "Kunden" },
+            { href: "/bildungstraeger/archive", label: "Archiv" },
             { href: "/bildungstraeger/checker", label: "Bericht prüfen" },
             { href: "/bildungstraeger/bedarfstraeger", label: "Bedarfsträger" },
             // „Team" bewusst ausgeblendet: der erste Kunde nutzt EINE
