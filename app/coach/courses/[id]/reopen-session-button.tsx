@@ -5,9 +5,11 @@ import { useActionState } from "react";
 import { reopenSession, type ReopenSessionState } from "./actions";
 
 /**
- * Setzt eine bereits signierte Session in den Bearbeiten-Modus zurück.
- * Hart: alle Signaturen dieser Session UND alle TN-Approvals des Kurses
- * werden gelöscht. Coach + TN müssen danach neu signieren.
+ * Öffnet eine bereits signierte Session zum Bearbeiten der Termin-Daten
+ * (Datum/UE/Modus/Erstgespräch). Scope bewusst eng: NUR die Signaturen
+ * GENAU DIESES Termins werden zurückgesetzt — alle anderen Termine bleiben
+ * signiert. Maßnahmenweit fällt nur die finale TN-Freigabe weg, weil sich
+ * das Gesamtdokument ändert (siehe reopenSession-Action).
  *
  * Confirm bewusst per native window.confirm — rudimentär aber explizit.
  * Kein Modal-Theater, der Coach weiß was er tut.
@@ -30,7 +32,7 @@ export function ReopenSessionButton({
       onSubmit={(e) => {
         if (
           !window.confirm(
-            "Diesen Termin wieder öffnen?\n\nAlle Signaturen dieses Termins UND alle TN-Freigaben dieser Maßnahme werden gelöscht. Coach und Teilnehmer müssen danach neu unterschreiben.",
+            "Termin-Daten bearbeiten (Datum / UE / Erstgespräch)?\n\nNur die Signaturen DIESES Termins werden zurückgesetzt — Coach und Teilnehmer unterschreiben danach nur diesen einen Termin neu. Alle anderen Termine bleiben signiert.\n\nFalls der Teilnehmer den Nachweis schon final freigegeben hat, wird diese Freigabe verworfen (das Gesamtdokument ändert sich).",
           )
         ) {
           e.preventDefault();
@@ -44,12 +46,10 @@ export function ReopenSessionButton({
         type="submit"
         disabled={pending}
         className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900 transition hover:bg-amber-100 disabled:opacity-40"
-        title="Termin bearbeiten — bestehende Signaturen + TN-Freigaben werden dabei zurückgesetzt"
+        title="Datum / UE / Modus / Erstgespräch dieses Termins ändern — nur die Signaturen DIESES Termins werden dabei zurückgesetzt, alle anderen Termine bleiben signiert"
       >
-        <span aria-hidden="true">↻</span>
-        {pending
-          ? "Wird zurückgesetzt…"
-          : "Bearbeiten (Signaturen zurücksetzen)"}
+        <span aria-hidden="true">✎</span>
+        {pending ? "Wird geöffnet…" : "Termin-Daten bearbeiten"}
       </button>
       {state?.error && (
         <span role="alert" className="text-[10px] text-red-700">
