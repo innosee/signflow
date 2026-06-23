@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "vitest/config";
 
 // Unit-Tests für reine Domänen-Logik. Bewusst eng auf `*.test.ts` in src/
@@ -7,5 +9,12 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
+  },
+  // `@/*` → `src/*` analog zur tsconfig, damit getestete Module ihre
+  // `@/lib/...`-Imports auflösen können.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
   },
 });
