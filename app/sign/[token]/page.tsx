@@ -62,14 +62,20 @@ export default async function ParticipantSignPage({ params }: Props) {
   const open = resolved.sessions.filter((s) => !s.hasParticipantSignature);
   const done = resolved.sessions.filter((s) => s.hasParticipantSignature);
 
-  // Preview-Modus: Teilnehmer hat alle Sessions signiert und noch nicht
-  // final freigegeben → er sieht das vollständige Dokument pixel-identisch
-  // zum späteren PDF + einen Freigabe-Button (CLAUDE.md Schritt 8).
-  const inPreviewMode =
-    hasSignature &&
+  // Sind ALLE Termine vollständig (Coach UND TN signiert)? Erst dann ist das
+  // Dokument final und darf zur Freigabe. Der TN kann seinen Teil vor dem
+  // Coach signieren (gewollt) — dann ist `open` leer, aber noch nicht alles
+  // `completed`, und er wartet auf den Coach statt fälschlich „offene Termine"
+  // signieren zu sollen.
+  const allCompleted =
     resolved.sessions.length > 0 &&
-    open.length === 0 &&
-    !resolved.hasApproved;
+    resolved.sessions.every((s) => s.status === "completed");
+
+  // Preview-Modus: alle Termine sind vollständig signiert (Coach + TN) und der
+  // Teilnehmer hat noch nicht final freigegeben → er sieht das vollständige
+  // Dokument pixel-identisch zum späteren PDF + einen Freigabe-Button
+  // (CLAUDE.md Schritt 8).
+  const inPreviewMode = hasSignature && allCompleted && !resolved.hasApproved;
 
   if (inPreviewMode) {
     const sheet = await loadStundennachweisSheet({

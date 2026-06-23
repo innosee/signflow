@@ -241,8 +241,35 @@ export async function approveFinalDocument(
           ),
         );
       if (allSessions.length === 0) throw new Error("NO_SESSIONS");
-      if (allSessions.some((s) => s.status !== "completed")) {
-        throw new Error("SESSIONS_OPEN");
+      const notCompleted = allSessions.filter((s) => s.status !== "completed");
+      if (notCompleted.length > 0) {
+        // Wessen Unterschrift fehlt noch? Hängt es an einem Termin, den der
+        // TN selbst noch nicht signiert hat → er soll erst signieren. Hat er
+        // seinen Teil schon erledigt und es fehlt nur der Coach → korrekt
+        // sagen, dass er auf den Coach wartet (nicht fälschlich „signiere
+        // deine offenen Termine"). Behebt den Fall: TN fertig, Coach offen.
+        const tnSignedIds = new Set(
+          (
+            await tx
+              .select({ sessionId: schema.signatures.sessionId })
+              .from(schema.signatures)
+              .innerJoin(
+                schema.sessions,
+                eq(schema.sessions.id, schema.signatures.sessionId),
+              )
+              .where(
+                and(
+                  eq(schema.sessions.courseId, tok.courseId),
+                  eq(schema.signatures.participantId, tok.participantId),
+                  eq(schema.signatures.signerType, "participant"),
+                ),
+              )
+          ).map((r) => r.sessionId),
+        );
+        const participantHasOpen = notCompleted.some(
+          (s) => !tnSignedIds.has(s.id),
+        );
+        throw new Error(participantHasOpen ? "PARTICIPANT_OPEN" : "COACH_OPEN");
       }
 
       // Doppel-Freigabe verhindern. Unique-Index auf (course, participant)
@@ -293,10 +320,16 @@ export async function approveFinalDocument(
     if (message === "NO_SESSIONS") {
       return { error: "Der Kurs hat noch keine Termine." };
     }
-    if (message === "SESSIONS_OPEN") {
+    if (message === "PARTICIPANT_OPEN") {
       return {
         error:
           "Du hast noch nicht alle Termine bestätigt. Bitte zuerst alle offenen signieren.",
+      };
+    }
+    if (message === "COACH_OPEN") {
+      return {
+        error:
+          "Du hast deinen Teil erledigt – danke! Dein Coach muss noch nicht signierte Termine bestätigen. Danach kannst du den Nachweis freigeben.",
       };
     }
     if (message === "ALREADY_APPROVED") {

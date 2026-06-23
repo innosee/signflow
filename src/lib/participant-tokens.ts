@@ -256,6 +256,14 @@ export type ResolvedToken = {
     modus: "praesenz" | "online";
     isErstgespraech: boolean;
     hasParticipantSignature: boolean;
+    /**
+     * Vollständigkeit des Termins (`pending` = Coach offen, `coach_signed` =
+     * Coach signiert/TN offen, `completed` = beide). Wird für die finale
+     * Freigabe gebraucht: der TN darf erst freigeben, wenn ALLE Termine
+     * `completed` sind — sonst gäbe er ein Dokument frei, dem noch
+     * Coach-Signaturen fehlen, die danach noch dazukämen.
+     */
+    status: "pending" | "coach_signed" | "completed";
   }>;
 };
 
@@ -318,6 +326,7 @@ export async function resolveParticipantToken(
       anzahlUe: schema.sessions.anzahlUe,
       modus: schema.sessions.modus,
       isErstgespraech: schema.sessions.isErstgespraech,
+      status: schema.sessions.status,
     })
     .from(schema.sessions)
     .where(
@@ -375,6 +384,7 @@ export async function resolveParticipantToken(
       modus: s.modus,
       isErstgespraech: s.isErstgespraech,
       hasParticipantSignature: signedSessionIds.has(s.id),
+      status: s.status,
     })),
   };
 }
