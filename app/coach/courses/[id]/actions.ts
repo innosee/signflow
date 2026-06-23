@@ -20,8 +20,10 @@ import {
   requireSigningEnabled,
 } from "@/lib/dal";
 import { sealWithFes } from "@/lib/firma";
-import { coachCanAccessCourse } from "@/lib/course-access";
-import { isAssignableCoach } from "@/lib/memberships";
+import {
+  coachCanAccessCourse,
+  courseVisibleToCoach,
+} from "@/lib/course-access";
 import {
   sendParticipantInvite,
   sendParticipantPreviewInvite,
@@ -215,6 +217,12 @@ async function notifyBildungstraegerReviewRequested(params: {
   }
 }
 
+/**
+ * Kompetenzteam-Gate für schreibende Coach-Aktionen: gibt die Kurs-ID zurück,
+ * wenn der Coach Mitglied des Kompetenzteams ist (Lead ODER zugewiesen), sonst
+ * null. Jeder Team-Coach darf alle Schritte auslösen (kein Lead-Sonderrecht);
+ * nur das Signieren ist termin-gebunden (siehe `signSessionAsCoach`).
+ */
 async function requireOwnedCourseId(
   courseId: string,
   coachId: string,
@@ -225,40 +233,12 @@ async function requireOwnedCourseId(
     .where(
       and(
         eq(schema.courses.id, courseId),
-        eq(schema.courses.coachId, coachId),
         isNull(schema.courses.deletedAt),
+        courseVisibleToCoach(coachId),
       ),
     )
     .limit(1);
   return row?.id ?? null;
-}
-
-/**
- * Kompetenzteams: bestimmt den Coach, der DIESEN Termin hält & signiert.
- * Default = Lead-Coach (`leadCoachId`, = der Kurs-Owner). Ein abweichend
- * gewählter Coach muss eine aktive Coach-Mitgliedschaft mit Signatur-Recht im
- * Tenant haben (server-validiert, nie der UI vertrauen). Der Lead selbst wird
- * IMMER zugelassen — auch wenn er eine Alt-Identität ohne Mitgliedschaft sein
- * sollte (Rückwärtskompatibilität für Bestandskurse mit genau einem Coach).
- */
-async function resolveSessionCoachId(params: {
-  formData: FormData;
-  tenantId: string;
-  leadCoachId: string;
-}): Promise<{ ok: true; coachId: string } | { ok: false; error: string }> {
-  const chosen = String(params.formData.get("coachId") ?? "").trim();
-  const coachId = chosen || params.leadCoachId;
-  if (coachId !== params.leadCoachId) {
-    const allowed = await isAssignableCoach(params.tenantId, coachId);
-    if (!allowed) {
-      return {
-        ok: false,
-        error:
-          "Der gewählte Coach ist kein aktiver Coach dieses Bildungsträgers (oder ohne Signatur-Recht).",
-      };
-    }
-  }
-  return { ok: true, coachId };
 }
 
 /**
@@ -363,24 +343,16 @@ export async function createSession(
   const session = await requireSigningEnabled();
   assertNotImpersonating(session);
   const coachId = session.user.id;
-  const tenantId = getTenantId(session);
 
   const courseId = String(formData.get("courseId") ?? "").trim();
   if (!courseId) return { error: "Kurs fehlt." };
+  // requireOwnedCourseId stellt sicher, dass der Coach im Kompetenzteam ist.
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
   const validation = validateSessionFormFields(formData);
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
-
-  // Kompetenzteams: Coach pro Termin (Default = Lead = der anlegende Coach).
-  const assigned = await resolveSessionCoachId({
-    formData,
-    tenantId,
-    leadCoachId: coachId,
-  });
-  if (!assigned.ok) return { error: assigned.error };
 
   const rules = await validateCrossSessionRules({
     courseId: ownedCourseId,
@@ -397,7 +369,8 @@ export async function createSession(
         .insert(schema.sessions)
         .values({
           courseId: ownedCourseId,
-          coachId: assigned.coachId,
+          // Self-Assign: ein Coach legt Termine nur für sich selbst an.
+          coachId,
           sessionDate: v.sessionDate,
           topic: v.topic,
           modus: v.modus,
@@ -462,7 +435,6 @@ export async function updateSession(
 
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
-  const tenantId = getTenantId(session);
 
   // Pre-Check: gehört die Session zu diesem Kurs UND ist sie noch
   // unsigniert? Wenn schon mindestens 1 Signatur existiert: hart blocken,
@@ -497,16 +469,6 @@ export async function updateSession(
   if (!validation.ok) return { error: validation.error };
   const v = validation.values;
 
-  // Kompetenzteams: Coach-Zuweisung darf hier (noch unsigniert) wechseln.
-  // Ein signierter Termin ist oben bereits hart geblockt → kein Coach-Wechsel
-  // nach der Signatur möglich (Beweiskraft).
-  const assigned = await resolveSessionCoachId({
-    formData,
-    tenantId,
-    leadCoachId: coachId,
-  });
-  if (!assigned.ok) return { error: assigned.error };
-
   const rules = await validateCrossSessionRules({
     courseId: ownedCourseId,
     sessionDate: v.sessionDate,
@@ -517,10 +479,11 @@ export async function updateSession(
 
   try {
     await db.transaction(async (tx) => {
+      // Der zugewiesene Coach (coach_id) bleibt unverändert — ein Coach legt
+      // Termine nur für sich an, eine Fremd-Zuweisung gibt es nicht.
       await tx
         .update(schema.sessions)
         .set({
-          coachId: assigned.coachId,
           sessionDate: v.sessionDate,
           topic: v.topic,
           modus: v.modus,

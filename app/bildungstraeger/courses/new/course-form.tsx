@@ -6,6 +6,7 @@ import { BUNDESLAENDER } from "@/lib/feiertage";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
 import { createCourse, type CourseFormState } from "../actions";
+import { CoachMultiSelect, type CoachOption } from "../coach-multiselect";
 
 type BedarfstraegerOption = {
   id: string;
@@ -13,13 +14,8 @@ type BedarfstraegerOption = {
   type: "JC" | "AA";
 };
 
-type CoachOption = {
-  id: string;
-  name: string;
-};
-
 type CourseFormValues = {
-  coachId: string;
+  coachIds: string[];
   avgsNummer: string;
   durchfuehrungsort: string;
   anzahlBewilligteUe: string;
@@ -34,7 +30,7 @@ type CourseFormValues = {
 };
 
 const EMPTY: CourseFormValues = {
-  coachId: "",
+  coachIds: [],
   avgsNummer: "",
   durchfuehrungsort: "",
   anzahlBewilligteUe: "",
@@ -89,27 +85,16 @@ export function CourseForm({
       <section className="rounded-xl border border-zinc-300 bg-white p-6 space-y-4">
         <h2 className="text-lg font-semibold">Maßnahme-Daten</h2>
 
-        <label className="block space-y-1.5">
+        <div className="block space-y-1.5">
           <span className="text-sm font-medium text-zinc-800">
-            Coach zuweisen <span className="text-red-600">*</span>
+            Kompetenzteam (Coaches) <span className="text-red-600">*</span>
           </span>
-          <select
-            name="coachId"
-            required
-            value={head.coachId}
-            onChange={setField("coachId")}
-            className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
-          >
-            <option value="" disabled>
-              Coach wählen…
-            </option>
-            {coaches.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+          <CoachMultiSelect
+            coaches={coaches}
+            value={head.coachIds}
+            onChange={(ids) => setHead((prev) => ({ ...prev, coachIds: ids }))}
+          />
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field

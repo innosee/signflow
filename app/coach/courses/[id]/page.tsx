@@ -87,12 +87,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
 
   if (!course) notFound();
 
-  // Lead-Coach steuert Gates/Abschluss/FES und die Termin-Verwaltung;
-  // zugewiesene Team-Coaches sehen die Maßnahme (read) und signieren ab
-  // Phase 4 ihre eigenen Termine. `canManage` = Lead UND nicht unter
-  // Impersonation (schreibende Lead-Aktionen).
-  const isLead = course.coachId === session.user.id;
-  const canManage = isLead && !impersonating;
+  // Kompetenzteam: JEDER Team-Coach darf alle Schritte auslösen (kein Lead-
+  // Sonderrecht). Die Seite lädt ohnehin nur, wenn der Coach im Team ist
+  // (courseVisibleToCoach). `canManage` = nicht unter Impersonation (schreibende
+  // Aktionen bleiben während Impersonation hart blockiert). Signieren ist
+  // termin-gebunden (nur der eigene Termin) — siehe `canSignThis` unten.
+  const canManage = !impersonating;
 
   const [me] = await db
     .select({ signatureUrl: schema.users.signatureUrl })
@@ -299,23 +299,22 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           <h2 className="text-lg font-semibold">
             Termine ({sessions.length})
           </h2>
-          {/* Termin-Verwaltung steuert der Lead-Coach. */}
-          {isLead &&
-            (impersonating ? (
-              <span
-                title="Während Impersonation nicht möglich"
-                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white opacity-40"
-              >
-                + Termin anlegen
-              </span>
-            ) : (
-              <Link
-                href={`/coach/courses/${course.id}/sessions/new`}
-                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-              >
-                + Termin anlegen
-              </Link>
-            ))}
+          {/* Jeder Team-Coach darf Termine anlegen (für sich selbst). */}
+          {impersonating ? (
+            <span
+              title="Während Impersonation nicht möglich"
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white opacity-40"
+            >
+              + Termin anlegen
+            </span>
+          ) : (
+            <Link
+              href={`/coach/courses/${course.id}/sessions/new`}
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+            >
+              + Termin anlegen
+            </Link>
+          )}
         </div>
         {sessions.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-zinc-500">
@@ -328,12 +327,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               // 1:1: Jeder Termin gehört genau dem einen Kunden des Kurses.
               const tnTotal = 1;
               const tnSigned = s.participantsSigned;
-              // Kompetenzteams: NUR der zugewiesene Coach darf diesen Termin
-              // signieren (Alt-Termine ohne Zuweisung: der Lead). Spiegelt das
-              // harte Server-Gate in signSessionAsCoach.
+              // Kompetenzteam: NUR der zugewiesene Coach darf diesen Termin
+              // signieren (Alt-Termine ohne Zuweisung: der primäre Coach des
+              // Kurses). Spiegelt das harte Server-Gate in signSessionAsCoach.
               const assignedToMe =
                 s.coachId === session.user.id ||
-                (s.coachId === null && isLead);
+                (s.coachId === null && course.coachId === session.user.id);
               const canSignThis = assignedToMe && !impersonating;
               // Zukunfts-Termine sind noch nicht signierbar.
               const isFuture = isFutureSessionDate(s.sessionDate);
@@ -436,8 +435,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
         )}
       </section>
 
-      {/* Abschluss-Workflow (Gates → FES) steuert ausschließlich der Lead-Coach. */}
-      {isLead && (
+      {/* Abschluss-Workflow (Gates → FES): jeder Team-Coach darf ihn auslösen. */}
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="border-b border-zinc-300 px-6 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -645,7 +643,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </Step>
         </div>
       </section>
-      )}
 
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="flex items-start justify-between gap-4 border-b border-zinc-300 px-6 py-4">

@@ -2,12 +2,8 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import {
-  assertNotImpersonating,
-  getTenantId,
-  requireSigningEnabled,
-} from "@/lib/dal";
-import { getAssignableCoaches } from "@/lib/memberships";
+import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
+import { courseVisibleToCoach } from "@/lib/course-access";
 
 import { SessionForm } from "./session-form";
 
@@ -35,8 +31,9 @@ export default async function NewSessionPage({ params }: Props) {
     .where(
       and(
         eq(schema.courses.id, id),
-        eq(schema.courses.coachId, session.user.id),
         isNull(schema.courses.deletedAt),
+        // Kompetenzteam: jeder Team-Coach darf Termine anlegen.
+        courseVisibleToCoach(session.user.id),
       ),
     )
     .limit(1);
@@ -57,11 +54,6 @@ export default async function NewSessionPage({ params }: Props) {
     )
     .limit(1);
 
-  // Kompetenzteams: zuweisbare Coaches des Tenants (Default = der anlegende
-  // Lead-Coach). getTenantId liefert den aktiven Tenant des Coaches = Tenant
-  // des Kurses (er besitzt ihn).
-  const coaches = await getAssignableCoaches(getTenantId(session));
-
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
@@ -77,8 +69,6 @@ export default async function NewSessionPage({ params }: Props) {
         courseTitle={course.title}
         bundesland={course.bundesland}
         erstgespraechExists={!!erstgespraech}
-        coaches={coaches}
-        defaultCoachId={session.user.id}
       />
     </div>
   );

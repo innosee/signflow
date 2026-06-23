@@ -2,6 +2,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { getTenantCoaches } from "@/lib/memberships";
 
 import { CourseForm } from "./course-form";
 
@@ -26,20 +27,9 @@ export default async function NewCustomerPage() {
     )
     .orderBy(asc(schema.bedarfstraeger.name));
 
-  const coaches = await db
-    .select({
-      id: schema.users.id,
-      name: schema.users.name,
-    })
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.role, "coach"),
-        eq(schema.users.tenantId, tenantId),
-        isNull(schema.users.deletedAt),
-      ),
-    )
-    .orderBy(asc(schema.users.name));
+  // Auswahlquelle fürs Kompetenzteam-Multiselect: alle Coaches des Tenants
+  // (membership-basiert).
+  const coaches = await getTenantCoaches(tenantId);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -53,14 +43,14 @@ export default async function NewCustomerPage() {
 
       {bedarfstraeger.length === 0 ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
-          Es ist noch kein Bedarfsträger hinterlegt. Bitte zuerst unter
-          „Bedarfsträger" einen anlegen — erst dann lässt sich ein Kunde
+          Es ist noch kein Bedarfsträger hinterlegt. Bitte zuerst im
+          Bedarfsträger-Bereich einen anlegen — erst dann lässt sich ein Kunde
           erfassen.
         </div>
       ) : coaches.length === 0 ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
-          Es ist noch kein Coach im Team. Bitte zuerst unter „Team" einen Coach
-          einladen — ein Kunde muss einem Coach zugewiesen werden.
+          Es ist noch kein Coach vorhanden. Bitte zuerst im Team-Bereich einen
+          Coach einladen — ein Kunde braucht mindestens einen zugewiesenen Coach.
         </div>
       ) : (
         <CourseForm bedarfstraeger={bedarfstraeger} coaches={coaches} />

@@ -2,12 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
-import {
-  assertNotImpersonating,
-  getTenantId,
-  requireSigningEnabled,
-} from "@/lib/dal";
-import { getAssignableCoaches } from "@/lib/memberships";
+import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
+import { courseVisibleToCoach } from "@/lib/course-access";
 
 import { SessionEditForm } from "./session-edit-form";
 
@@ -37,8 +33,9 @@ export default async function EditSessionPage({ params }: Props) {
     .where(
       and(
         eq(schema.courses.id, id),
-        eq(schema.courses.coachId, session.user.id),
         isNull(schema.courses.deletedAt),
+        // Kompetenzteam: jeder Team-Coach darf (unsignierte) Termine bearbeiten.
+        courseVisibleToCoach(session.user.id),
       ),
     )
     .limit(1);
@@ -54,7 +51,6 @@ export default async function EditSessionPage({ params }: Props) {
       isErstgespraech: schema.sessions.isErstgespraech,
       geeignet: schema.sessions.geeignet,
       eignungsanalyse: schema.sessions.eignungsanalyse,
-      coachId: schema.sessions.coachId,
     })
     .from(schema.sessions)
     .where(
@@ -77,10 +73,6 @@ export default async function EditSessionPage({ params }: Props) {
     // mit Hint im URL, das page.tsx später als Banner rendern könnte.
     redirect(`/coach/courses/${course.id}?signed=${sessionId}`);
   }
-
-  // Kompetenzteams: zuweisbare Coaches + aktuell zugewiesener Coach (Fallback
-  // Lead = Kurs-Owner, falls Alt-Termin ohne coach_id).
-  const coaches = await getAssignableCoaches(getTenantId(session));
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -106,8 +98,6 @@ export default async function EditSessionPage({ params }: Props) {
           geeignet: sess.geeignet,
           eignungsanalyse: sess.eignungsanalyse,
         }}
-        coaches={coaches}
-        defaultCoachId={sess.coachId ?? session.user.id}
       />
     </div>
   );
