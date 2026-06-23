@@ -700,7 +700,7 @@ function FindingCard({ v }: { v: Violation }) {
         </div>
         <CopyButton compact text={composeSingleFinding(v)} />
       </div>
-      <p className="mt-2 text-xs italic text-zinc-700">„{v.quote.trim()}"</p>
+      <p className="mt-2 text-xs italic text-zinc-700">„{v.quote.trim()}&ldquo;</p>
       <p className="mt-1 text-xs text-zinc-600">{v.rule}</p>
       {v.suggestion && (
         <p className="mt-1 text-xs text-zinc-600">
