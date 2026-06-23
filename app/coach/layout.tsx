@@ -4,6 +4,7 @@ import {
   CoachToolNav,
   CoachToolSubBrand,
 } from "@/components/coach-tool-nav";
+import { SupportChat } from "@/components/support/support-chat";
 import { TenantSwitcher } from "@/components/tenant-switcher";
 import {
   getSigningEnabled,
@@ -63,6 +64,7 @@ export default async function CoachLayout({
         />
       </div>
       <main className="flex-1">{children}</main>
+      <SupportChat />
     </>
   );
 }
