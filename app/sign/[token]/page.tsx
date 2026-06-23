@@ -5,6 +5,7 @@ import { Stundennachweis } from "@/components/stundennachweis";
 import { isFutureSessionDate } from "@/lib/dates";
 import { loadStundennachweisSheet } from "@/lib/sheet-data";
 import { resolveParticipantToken } from "@/lib/participant-tokens";
+import { classifyApprovalGate } from "@/lib/sign-state";
 
 import { ApproveForm } from "./approve-form";
 import { ParticipantSignatureOnboarding } from "./signature-onboarding";
@@ -62,20 +63,26 @@ export default async function ParticipantSignPage({ params }: Props) {
   const open = resolved.sessions.filter((s) => !s.hasParticipantSignature);
   const done = resolved.sessions.filter((s) => s.hasParticipantSignature);
 
-  // Sind ALLE Termine vollständig (Coach UND TN signiert)? Erst dann ist das
-  // Dokument final und darf zur Freigabe. Der TN kann seinen Teil vor dem
-  // Coach signieren (gewollt) — dann ist `open` leer, aber noch nicht alles
-  // `completed`, und er wartet auf den Coach statt fälschlich „offene Termine"
+  // Freigabe-Gate (geteilt mit der Server-Action): "ready" heißt, ALLE Termine
+  // sind vollständig signiert (Coach UND TN). Der TN darf seinen Teil vor dem
+  // Coach signieren (gewollt) — dann ist `open` leer, aber das Gate noch nicht
+  // "ready", und er wartet auf den Coach statt fälschlich „offene Termine"
   // signieren zu sollen.
-  const allCompleted =
-    resolved.sessions.length > 0 &&
-    resolved.sessions.every((s) => s.status === "completed");
+  const approvalGate = classifyApprovalGate(
+    resolved.sessions.map((s) => ({
+      status: s.status,
+      participantSigned: s.hasParticipantSignature,
+    })),
+  );
 
-  // Preview-Modus: alle Termine sind vollständig signiert (Coach + TN) und der
-  // Teilnehmer hat noch nicht final freigegeben → er sieht das vollständige
-  // Dokument pixel-identisch zum späteren PDF + einen Freigabe-Button
-  // (CLAUDE.md Schritt 8).
-  const inPreviewMode = hasSignature && allCompleted && !resolved.hasApproved;
+  // Preview-Modus: Dokument final (Gate "ready") und der Teilnehmer hat noch
+  // nicht freigegeben → er sieht das vollständige Dokument pixel-identisch zum
+  // späteren PDF + einen Freigabe-Button (CLAUDE.md Schritt 8).
+  const inPreviewMode =
+    hasSignature &&
+    resolved.sessions.length > 0 &&
+    approvalGate === "ready" &&
+    !resolved.hasApproved;
 
   if (inPreviewMode) {
     const sheet = await loadStundennachweisSheet({

@@ -30,6 +30,7 @@ import {
 } from "@/lib/participant-tokens";
 import { resetFesGates } from "@/lib/fes-gates";
 import { recomputeSessionStatus } from "@/lib/session-status";
+import { evaluateSealReadiness, type SealBlock } from "@/lib/sign-state";
 import { isValidE164, normalizePhoneInput } from "@/lib/sms";
 
 export type SessionFormState = { error?: string } | undefined;
@@ -1544,6 +1545,19 @@ export type SealState = { error?: string; sealed?: boolean } | undefined;
  * überhaupt was liefert. Real-Flow: Firma.dev liefert das gesiegelte PDF,
  * wir laden es in unser Storage und zeigen dessen URL.
  */
+/** Kurs-interne FES-Gate-Verletzungen → Coach-Fehlermeldung. */
+const SEAL_BLOCK_MESSAGES: Record<SealBlock, string> = {
+  anw_check_missing:
+    "ANW-Compliance-Check muss vor der Versiegelung mit Status „Freigabe“ durchlaufen sein.",
+  not_abgeschlossen:
+    "Maßnahme muss vor der Versiegelung aktiv als abgeschlossen markiert werden.",
+  review_not_approved:
+    "Der Bildungsträger muss die Anwesenheitsliste vor der Versiegelung prüfen und freigeben.",
+  no_sessions: "Kurs hat keine Sessions — nichts zu siegeln.",
+  sessions_incomplete:
+    "Mindestens eine Session ist noch nicht vollständig signiert.",
+};
+
 export async function sealCourse(
   _prev: SealState,
   formData: FormData,
@@ -1589,28 +1603,8 @@ export async function sealCourse(
     .from(schema.courses)
     .where(eq(schema.courses.id, ownedCourseId))
     .limit(1);
-  if (!courseGates?.anwCheckPassedAt) {
-    return {
-      error:
-        "ANW-Compliance-Check muss vor der Versiegelung mit Status „Freigabe“ durchlaufen sein.",
-    };
-  }
-  if (!courseGates.abgeschlossenAt) {
-    return {
-      error:
-        "Maßnahme muss vor der Versiegelung aktiv als abgeschlossen markiert werden.",
-    };
-  }
-  // FES-Gate (3/3): Der Bildungsträger muss die Anwesenheitsliste geprüft und
-  // freigegeben haben. Ohne diese Freigabe darf das Siegel nicht laufen.
-  if (courseGates.reviewStatus !== "approved") {
-    return {
-      error:
-        "Der Bildungsträger muss die Anwesenheitsliste vor der Versiegelung prüfen und freigeben.",
-    };
-  }
-
-  // Sessions-Gate: jede nicht-gelöschte Session muss vollständig signiert sein.
+  // Sessions für das Gate (jede nicht-gelöschte Session muss vollständig
+  // signiert sein).
   const allSessions = await db
     .select({ id: schema.sessions.id, status: schema.sessions.status })
     .from(schema.sessions)
@@ -1620,13 +1614,19 @@ export async function sealCourse(
         isNull(schema.sessions.deletedAt),
       ),
     );
-  if (allSessions.length === 0) {
-    return { error: "Kurs hat keine Sessions — nichts zu siegeln." };
-  }
-  if (allSessions.some((s) => s.status !== "completed")) {
-    return {
-      error: "Mindestens eine Session ist noch nicht vollständig signiert.",
-    };
+
+  // Kurs-interne FES-Gates zentral prüfen: ANW-Check (2/3), Maßnahme-Abschluss
+  // (1/3), BT-Freigabe (3/3) und „alle Termine vollständig signiert". Die
+  // DB-abhängigen Zusatz-Checks (richtiger Coach pro Termin, Kunden-Freigabe)
+  // folgen unten.
+  const sealBlock = evaluateSealReadiness({
+    anwCheckPassedAt: courseGates?.anwCheckPassedAt ?? null,
+    abgeschlossenAt: courseGates?.abgeschlossenAt ?? null,
+    reviewStatus: courseGates?.reviewStatus ?? "none",
+    sessionStatuses: allSessions.map((s) => s.status),
+  });
+  if (sealBlock) {
+    return { error: SEAL_BLOCK_MESSAGES[sealBlock] };
   }
 
   // Kompetenzteams-Invariante (Defense-in-Depth vor dem irreversiblen Siegel):

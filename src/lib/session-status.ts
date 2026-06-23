@@ -3,6 +3,7 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { deriveSessionStatus } from "@/lib/sign-state";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbOrTx = typeof db | Tx;
@@ -60,14 +61,7 @@ export async function recomputeSessionStatus(
       ),
     );
 
-  let next: "pending" | "coach_signed" | "completed";
-  if (!coachSigned) {
-    next = "pending";
-  } else if (tnSigned >= 1) {
-    next = "completed";
-  } else {
-    next = "coach_signed";
-  }
+  const next = deriveSessionStatus(coachSigned, tnSigned >= 1);
 
   await executor
     .update(schema.sessions)

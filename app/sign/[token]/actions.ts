@@ -9,6 +9,7 @@ import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { isFutureSessionDate } from "@/lib/dates";
 import { recomputeSessionStatus } from "@/lib/session-status";
+import { classifyApprovalGate } from "@/lib/sign-state";
 
 export type SignState = { error?: string } | undefined;
 
@@ -241,36 +242,37 @@ export async function approveFinalDocument(
           ),
         );
       if (allSessions.length === 0) throw new Error("NO_SESSIONS");
-      const notCompleted = allSessions.filter((s) => s.status !== "completed");
-      if (notCompleted.length > 0) {
-        // Wessen Unterschrift fehlt noch? Hängt es an einem Termin, den der
-        // TN selbst noch nicht signiert hat → er soll erst signieren. Hat er
-        // seinen Teil schon erledigt und es fehlt nur der Coach → korrekt
-        // sagen, dass er auf den Coach wartet (nicht fälschlich „signiere
-        // deine offenen Termine"). Behebt den Fall: TN fertig, Coach offen.
-        const tnSignedIds = new Set(
-          (
-            await tx
-              .select({ sessionId: schema.signatures.sessionId })
-              .from(schema.signatures)
-              .innerJoin(
-                schema.sessions,
-                eq(schema.sessions.id, schema.signatures.sessionId),
-              )
-              .where(
-                and(
-                  eq(schema.sessions.courseId, tok.courseId),
-                  eq(schema.signatures.participantId, tok.participantId),
-                  eq(schema.signatures.signerType, "participant"),
-                ),
-              )
-          ).map((r) => r.sessionId),
-        );
-        const participantHasOpen = notCompleted.some(
-          (s) => !tnSignedIds.has(s.id),
-        );
-        throw new Error(participantHasOpen ? "PARTICIPANT_OPEN" : "COACH_OPEN");
-      }
+      // Welche Termine hat DIESER Kunde bereits signiert? Braucht das Gate, um
+      // zu entscheiden, an wessen Unterschrift es noch hängt.
+      const tnSignedIds = new Set(
+        (
+          await tx
+            .select({ sessionId: schema.signatures.sessionId })
+            .from(schema.signatures)
+            .innerJoin(
+              schema.sessions,
+              eq(schema.sessions.id, schema.signatures.sessionId),
+            )
+            .where(
+              and(
+                eq(schema.sessions.courseId, tok.courseId),
+                eq(schema.signatures.participantId, tok.participantId),
+                eq(schema.signatures.signerType, "participant"),
+              ),
+            )
+        ).map((r) => r.sessionId),
+      );
+      // "participant_open" → TN hat selbst noch offene Termine (erst signieren).
+      // "coach_open" → TN fertig, nur der Coach fehlt noch (warten, nicht
+      // fälschlich „signiere deine offenen Termine"). "ready" → freigabebereit.
+      const gate = classifyApprovalGate(
+        allSessions.map((s) => ({
+          status: s.status,
+          participantSigned: tnSignedIds.has(s.id),
+        })),
+      );
+      if (gate === "participant_open") throw new Error("PARTICIPANT_OPEN");
+      if (gate === "coach_open") throw new Error("COACH_OPEN");
 
       // Doppel-Freigabe verhindern. Unique-Index auf (course, participant)
       // würde das auch kicken, aber wir wollen eine saubere Fehlermeldung.
