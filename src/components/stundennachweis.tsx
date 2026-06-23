@@ -134,7 +134,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
             </p>
           </div>
           <dl className="sheet-meta">
-            <MetaRow label="AVGS-Nr." value={course.avgsNummer} />
+            <MetaRow label="Maßnahmen-Nr." value={course.avgsNummer} />
             <MetaRow
               label="Bedarfsträger"
               value={`${bedarfstraeger.name} (${BEDARFSTRAEGER_LABEL[bedarfstraeger.type]})`}

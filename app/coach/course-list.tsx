@@ -61,7 +61,7 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Suche nach Name, Maßnahme, AVGS-Nr. oder Status…"
+          placeholder="Suche nach Name, Maßnahme, Maßnahmen-Nr. oder Status…"
           className="block w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
       </div>

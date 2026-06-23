@@ -101,7 +101,7 @@ export function CourseForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             name="avgsNummer"
-            label="AVGS-Nr."
+            label="Maßnahmen-Nr."
             required
             value={head.avgsNummer}
             onChange={setField("avgsNummer")}

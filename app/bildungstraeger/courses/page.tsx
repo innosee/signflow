@@ -9,6 +9,7 @@ import {
   archiveCourse,
   unarchiveCourse,
 } from "./actions";
+import { DeleteCourseButton } from "./delete-course-button";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +144,10 @@ export default async function BildungstraegerCoursesPage() {
                       </button>
                     </form>
                   )}
+                  <DeleteCourseButton
+                    courseId={c.id}
+                    participantName={c.participantName}
+                  />
                 </div>
               </li>
             ))}

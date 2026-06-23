@@ -102,7 +102,7 @@ function MockupPreview() {
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
         <div>
-          <dt className="text-zinc-500">AVGS-Nr.</dt>
+          <dt className="text-zinc-500">Maßnahmen-Nr.</dt>
           <dd className="text-zinc-900">123-456-789-012</dd>
         </div>
         <div>

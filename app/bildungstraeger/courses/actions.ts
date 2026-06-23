@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { logAudit } from "@/lib/audit";
 import {
   assertNotImpersonating,
   getTenantId,
@@ -503,6 +504,83 @@ export async function unarchiveCourse(formData: FormData): Promise<void> {
       .set({ status: "active" })
       .where(eq(schema.courses.id, courseId));
   }
+  revalidatePath("/bildungstraeger/courses");
+  redirect("/bildungstraeger/courses");
+}
+
+/**
+ * Kunden HART löschen — unwiderruflich (v.a. zum Aufräumen in der Testphase).
+ * Anders als „Archivieren" (status) oder Soft-Delete (deletedAt) verschwindet
+ * der Kurs physisch aus der DB; der FK-Cascade räumt Termine, Signaturen,
+ * Magic-Link-Tokens, TN-Freigaben, Review-Notizen, Berichte und das finale
+ * Dokument mit weg — auch wenn der Coach bereits unterschrieben hat. Es gibt
+ * KEINE Wiederherstellung.
+ *
+ * Die Kunden-Person (participants) wird nur mitgelöscht, wenn sie an keiner
+ * weiteren Maßnahme mehr hängt — geteilte Stammdaten (eine Person, mehrere
+ * Maßnahmen) bleiben erhalten. Während Impersonation hart blockiert.
+ */
+export async function deleteCourse(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+  const courseId = String(formData.get("courseId") ?? "").trim();
+
+  if (courseId) {
+    // Besitz tenant-scoped prüfen und participantId für die Aufräum-Logik holen.
+    const [course] = await db
+      .select({
+        id: schema.courses.id,
+        participantId: schema.courses.participantId,
+      })
+      .from(schema.courses)
+      .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+      .where(
+        and(
+          eq(schema.courses.id, courseId),
+          eq(schema.users.tenantId, tenantId),
+          isNull(schema.courses.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (course) {
+      // Audit-Eintrag + Hard-Delete atomar. resource_id ist kein FK, der
+      // Log-Eintrag überlebt das Löschen des Kurses.
+      await db.transaction(async (tx) => {
+        await logAudit(
+          {
+            actorType: "bildungstraeger",
+            actorId: session.user.id,
+            action: "course.delete",
+            resourceType: "course",
+            resourceId: courseId,
+          },
+          tx,
+        );
+        await tx.delete(schema.courses).where(eq(schema.courses.id, courseId));
+      });
+
+      // Verwaiste Kunden-Person aufräumen: nur löschen, wenn keine weitere
+      // Maßnahme mehr auf sie zeigt. Best-effort und außerhalb der Lösch-
+      // Transaction — eine verbleibende Referenz (z.B. ein Ad-hoc-Bericht)
+      // darf das Kurs-Löschen nicht zurückrollen, dann bleibt die Person.
+      try {
+        const [remaining] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(schema.courses)
+          .where(eq(schema.courses.participantId, course.participantId));
+        if ((remaining?.count ?? 0) === 0) {
+          await db
+            .delete(schema.participants)
+            .where(eq(schema.participants.id, course.participantId));
+        }
+      } catch {
+        // Verbleibende FK-Referenzen → Person bewusst behalten.
+      }
+    }
+  }
+
   revalidatePath("/bildungstraeger/courses");
   redirect("/bildungstraeger/courses");
 }
