@@ -125,7 +125,10 @@ export function Stundennachweis(props: StundennachweisSheet) {
   return (
     <>
       <style>{printCss}</style>
-      <article className="sheet">
+      {/* lang="de" aktiviert die deutsche Silbentrennung (hyphens: auto) für
+          die Fließtext-Spalten — bricht lange Wörter an Silbengrenzen statt
+          hart mitten im Wort. */}
+      <article className="sheet" lang="de">
         <header className="sheet-header">
           <div className="sheet-title">
             <h1>Stundennachweis</h1>
@@ -179,9 +182,9 @@ export function Stundennachweis(props: StundennachweisSheet) {
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: "18%" }}>Datum</th>
-                  <th style={{ width: "7%" }}>UE</th>
-                  <th style={{ width: "10%" }}>Modus</th>
+                  <th style={{ width: "15%" }}>Datum</th>
+                  <th style={{ width: "6%" }}>UE</th>
+                  <th style={{ width: "12%" }}>Modus</th>
                   <th>Themen / Inhalte</th>
                   <th style={{ width: "18%" }}>Unterschrift Coach</th>
                   <th style={{ width: "18%" }}>Unterschrift Teilnehmer:in</th>
@@ -190,11 +193,13 @@ export function Stundennachweis(props: StundennachweisSheet) {
               <tbody>
                 {sessions.map((s) => (
                   <tr key={s.id}>
-                    <td>{formatDate(s.sessionDate)}</td>
+                    <td className="nowrap">{formatDate(s.sessionDate)}</td>
                     <td className="num">
                       {s.isErstgespraech ? "—" : formatUe(s.anzahlUe)}
                     </td>
-                    <td>{s.modus === "online" ? "Online" : "Präsenz"}</td>
+                    <td className="nowrap">
+                      {s.modus === "online" ? "Online" : "Präsenz"}
+                    </td>
                     <td>
                       {s.isErstgespraech && (
                         <>
@@ -468,11 +473,23 @@ const printCss = `
     vertical-align: top;
     text-align: left;
     font-size: 9pt;
+    /* Deutsche Silbentrennung für Fließtext (Themen, Namen) — bricht lange
+       Komposita an Silbengrenzen. Greift nur mit lang="de" am Sheet.
+       overflow-wrap bleibt als Fallback für untrennbare Tokens (z.B. URLs). */
+    hyphens: auto;
+    -webkit-hyphens: auto;
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
   .sheet th { background: #f3f3f3; font-weight: 600; }
   .sheet td.num { text-align: right; }
+  /* Kurze Festwert-Spalten (Datum, Modus) nie umbrechen — verhindert
+     hässliche Mid-Word-Breaks wie „Präsen z". */
+  .sheet td.nowrap {
+    white-space: nowrap;
+    hyphens: manual;
+    -webkit-hyphens: manual;
+  }
   .sheet tfoot td { font-weight: 600; background: #fafafa; }
   .sig-box { display: block; }
   .sig-box img {
