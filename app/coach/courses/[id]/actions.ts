@@ -7,6 +7,7 @@ import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { abschlussStatus } from "@/lib/abschluss-status";
+import { wochenUnter2 } from "@/lib/termine-pro-woche";
 import { logAudit } from "@/lib/audit";
 import { getFeiertag } from "@/lib/feiertage";
 import { sendReviewRequestedToBildungstraeger } from "@/lib/email";
@@ -319,6 +320,36 @@ async function validateCrossSessionRules(params: {
           "Das Erstgespräch muss innerhalb der AVGS-Gutschein-Gültigkeit liegen (Datum liegt danach).",
       };
     }
+    // Erstgespräch muss VOR dem Coaching-Start liegen (≥ 1 Tag davor): vor dem
+    // vereinbarten Startdatum UND vor dem chronologisch ersten regulären UE-Termin.
+    if (course?.startDate && sd >= course.startDate) {
+      return {
+        ok: false,
+        error:
+          "Das Erstgespräch muss vor dem Startdatum des Coachings liegen — es findet vor dem ersten Coaching-Termin statt.",
+      };
+    }
+    const regulaere = await db
+      .select({ sessionDate: schema.sessions.sessionDate })
+      .from(schema.sessions)
+      .where(
+        and(
+          eq(schema.sessions.courseId, params.courseId),
+          eq(schema.sessions.isErstgespraech, false),
+          isNull(schema.sessions.deletedAt),
+        ),
+      );
+    const ersteUe = regulaere.reduce<string | null>(
+      (min, r) => (min === null || r.sessionDate < min ? r.sessionDate : min),
+      null,
+    );
+    if (ersteUe && sd >= ersteUe) {
+      return {
+        ok: false,
+        error:
+          "Das Erstgespräch muss vor dem ersten Coaching-Termin liegen.",
+      };
+    }
     // Erstgespräch zählt 0 UE → die Erste-UE-Regel (#5) gilt dafür nicht.
     return { ok: true };
   }
@@ -335,6 +366,30 @@ async function validateCrossSessionRules(params: {
     return {
       ok: false,
       error: "Termin liegt nach dem Bewilligungsende der Maßnahme.",
+    };
+  }
+
+  // Reguläre UE muss NACH dem Erstgespräch liegen (symmetrisch zur Erstgespräch-
+  // Regel — fängt eine UE am/vor dem Erstgespräch ab, egal welche Zeile zuerst
+  // entstand).
+  const [erstgespraech] = await db
+    .select({ sessionDate: schema.sessions.sessionDate })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, params.courseId),
+        eq(schema.sessions.isErstgespraech, true),
+        isNull(schema.sessions.deletedAt),
+        ...(params.excludeSessionId
+          ? [ne(schema.sessions.id, params.excludeSessionId)]
+          : []),
+      ),
+    )
+    .limit(1);
+  if (erstgespraech && sd <= erstgespraech.sessionDate) {
+    return {
+      ok: false,
+      error: "Der Termin muss nach dem Erstgespräch liegen.",
     };
   }
 
@@ -1422,6 +1477,11 @@ export async function markCourseAbgeschlossen(
     (max, s) => (max === null || s.sessionDate > max ? s.sessionDate : max),
     null,
   );
+  // „2 Termine/Woche": jede Woche mit regulären UE muss ≥2 enthalten.
+  const regulaereUeDaten = completedSessions
+    .filter((s) => !s.isErstgespraech)
+    .map((s) => s.sessionDate);
+  const unter2Termine = wochenUnter2(regulaereUeDaten).length > 0;
 
   // Zwei unabhängige Achsen — Begründung Pflicht NUR bei UE-Unterschreitung.
   const st = abschlussStatus({
@@ -1446,7 +1506,12 @@ export async function markCourseAbgeschlossen(
         // Begründung hängt an der UE-Unterschreitung.
         flagVorzeitigesEnde: st.zeitlichVorzeitig,
         flagUeUnterschritten: st.ueUnterschritten,
-        begruendungText: st.ueUnterschritten ? begruendung : null,
+        // AfA-Intensität: automatisch gesetzt, wenn eine Woche <2 UE hatte.
+        flagUnter2Termine: unter2Termine,
+        // Begründung speichern, wann immer etwas eingegeben wurde — bei
+        // UE-Unterschreitung Pflicht, bei den weichen Umständen (zeitlich
+        // vorzeitig, <2 Termine/Woche) optionale Anmerkung.
+        begruendungText: begruendung || null,
       })
       .where(eq(schema.courses.id, ownedCourseId));
   } catch (err) {
@@ -1492,6 +1557,7 @@ export async function requestBildungstraegerReview(
       abgeschlossenAt: schema.courses.abgeschlossenAt,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
       flagUeUnterschritten: schema.courses.flagUeUnterschritten,
+      flagUnter2Termine: schema.courses.flagUnter2Termine,
       begruendungText: schema.courses.begruendungText,
       participantId: schema.courses.participantId,
     })
@@ -1545,16 +1611,20 @@ export async function requestBildungstraegerReview(
     return { error: "Der Kunde hat den Nachweis noch nicht freigegeben." };
   }
 
-  // Submit-Notiz zusammenbauen: Begründung der UE-Unterschreitung voranstellen,
-  // zeitlich vorzeitiges Ende als Hinweis, optionale Coach-Notiz anhängen.
+  // Submit-Notiz zusammenbauen: Begründung/Anmerkung voranstellen, die weichen
+  // Umstände als Hinweise, optionale Coach-Notiz anhängen.
   const noteParts: string[] = [];
-  if (course.flagUeUnterschritten && course.begruendungText?.trim()) {
-    noteParts.push(
-      `UE-Unterschreitung — Begründung: ${course.begruendungText.trim()}`,
-    );
+  if (course.begruendungText?.trim()) {
+    const label = course.flagUeUnterschritten
+      ? "UE-Unterschreitung — Begründung"
+      : "Anmerkung des Coaches";
+    noteParts.push(`${label}: ${course.begruendungText.trim()}`);
   }
   if (course.flagVorzeitigesEnde) {
     noteParts.push("Hinweis: Maßnahme zeitlich vor dem Bewilligungsende beendet.");
+  }
+  if (course.flagUnter2Termine) {
+    noteParts.push("Hinweis: In Teilen der Maßnahme weniger als 2 Termine pro Woche.");
   }
   if (coachNote) noteParts.push(coachNote);
   const noteBody = noteParts.join("\n\n") || null;
