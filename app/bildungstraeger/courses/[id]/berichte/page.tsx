@@ -87,7 +87,10 @@ export default async function BildungstraegerCourseBerListPage({ params }: Props
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
           Coach: {course.coachName} · AVGS {course.avgsNummer} ·{" "}
-          {course.startDate} bis {course.endDate} · Kurs-Status:{" "}
+          {course.startDate && course.endDate
+            ? `${course.startDate} bis ${course.endDate}`
+            : "Bewilligungszeitraum offen"}{" "}
+          · Kurs-Status:{" "}
           {COURSE_STATUS_LABEL[course.status] ?? course.status}
         </p>
       </div>

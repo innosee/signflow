@@ -2,6 +2,11 @@ import Link from "next/link";
 import { and, desc, eq, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import {
+  AVGS_STAGE_BADGE,
+  AVGS_STAGE_LABEL,
+  avgsStage,
+} from "@/lib/avgs-stage";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
 import {
@@ -23,6 +28,8 @@ export default async function BildungstraegerCoursesPage() {
       title: schema.courses.title,
       status: schema.courses.status,
       abgeschlossenAt: schema.courses.abgeschlossenAt,
+      startDate: schema.courses.startDate,
+      endDate: schema.courses.endDate,
       participantName: schema.participants.name,
       kundenNr: schema.participants.kundenNr,
       coachName: schema.users.name,
@@ -119,6 +126,17 @@ export default async function BildungstraegerCoursesPage() {
                 </Link>
 
                 <div className="flex shrink-0 items-center gap-2">
+                  {c.status !== "archived" &&
+                    (() => {
+                      const stage = avgsStage(c);
+                      return (
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs ${AVGS_STAGE_BADGE[stage]}`}
+                        >
+                          {AVGS_STAGE_LABEL[stage]}
+                        </span>
+                      );
+                    })()}
                   <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">
                     {statusLabel(c)}
                   </span>
