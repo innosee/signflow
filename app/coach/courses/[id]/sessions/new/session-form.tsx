@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { type Bundesland, getFeiertag } from "@/lib/feiertage";
+import { isoWeek, isoWeekKey } from "@/lib/termine-pro-woche";
 
 import { createSession, type SessionFormState } from "../../actions";
 import { EignungAnalyseFieldset } from "../eignung-fieldset";
@@ -13,12 +14,15 @@ export function SessionForm({
   courseTitle,
   bundesland,
   erstgespraechExists = false,
+  existingUeDates = [],
 }: {
   courseId: string;
   courseTitle: string;
   bundesland: Bundesland | null;
   /** #4: Existiert schon ein Erstgespräch, wird die Option ausgeblendet. */
   erstgespraechExists?: boolean;
+  /** Reguläre UE-Termine des Kurses — für die „2 Termine/Woche"-Warnung. */
+  existingUeDates?: string[];
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
@@ -32,6 +36,22 @@ export function SessionForm({
   // Gate in der Server-Action). `null`-Bundesland (Bestandskunde) → keine
   // Warnung.
   const feiertag = getFeiertag(sessionDate, bundesland);
+
+  // Weiche „2 Termine/Woche"-Warnung: liegt in der ISO-Woche des gewählten
+  // Datums noch kein weiterer regulärer UE-Termin, hätte die Woche mit diesem
+  // nur 1 UE. Nur ein Hinweis (künftige Termine können die Woche noch füllen),
+  // greift nicht beim Erstgespräch (0 UE).
+  const wenigeTermineWarnung = (() => {
+    if (!sessionDate || isErstgespraech) return null;
+    const m = /^\d{4}-\d{2}-\d{2}$/.test(sessionDate);
+    if (!m) return null;
+    const key = isoWeekKey(sessionDate);
+    const andereInWoche = existingUeDates.filter(
+      (d) => isoWeekKey(d) === key,
+    ).length;
+    if (andereInWoche >= 1) return null;
+    return isoWeek(sessionDate).week;
+  })();
 
   return (
     <form action={action} className="space-y-8">
@@ -106,6 +126,17 @@ export function SessionForm({
             ⚠️ Der {formatGermanDate(sessionDate)} ist ein Feiertag
             <span className="font-medium"> ({feiertag})</span> — findet hier
             wirklich ein Coaching statt? Anlegen bleibt möglich.
+          </p>
+        )}
+
+        {wenigeTermineWarnung !== null && (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            ℹ️ In KW {wenigeTermineWarnung} gibt es mit diesem Termin erst{" "}
+            <span className="font-medium">einen</span> UE-Termin — die AfA
+            empfiehlt mind. 2 pro Woche. Anlegen bleibt möglich.
           </p>
         )}
 

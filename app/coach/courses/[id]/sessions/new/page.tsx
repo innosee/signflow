@@ -54,6 +54,19 @@ export default async function NewSessionPage({ params }: Props) {
     )
     .limit(1);
 
+  // Bestehende reguläre UE-Termine → weiche „2 Termine/Woche"-Warnung im Formular.
+  const ueRows = await db
+    .select({ sessionDate: schema.sessions.sessionDate })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, course.id),
+        eq(schema.sessions.isErstgespraech, false),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+  const existingUeDates = ueRows.map((r) => r.sessionDate);
+
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
@@ -69,6 +82,7 @@ export default async function NewSessionPage({ params }: Props) {
         courseTitle={course.title}
         bundesland={course.bundesland}
         erstgespraechExists={!!erstgespraech}
+        existingUeDates={existingUeDates}
       />
     </div>
   );

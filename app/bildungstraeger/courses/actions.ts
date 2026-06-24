@@ -305,6 +305,29 @@ export async function updateCourse(
   const refs = await validateCourseRefs(parsed.values, tenantId);
   if (!refs.ok) return { error: refs.error };
 
+  // Startdatum darf nicht ≤ einem bereits erfassten Erstgespräch liegen — das
+  // Erstgespräch findet vor dem Coaching-Start statt (schließt das Schlupfloch,
+  // dass der BT das Startdatum nachträglich vor das Erstgespräch setzt).
+  if (startDate) {
+    const [erstgespraech] = await db
+      .select({ sessionDate: schema.sessions.sessionDate })
+      .from(schema.sessions)
+      .where(
+        and(
+          eq(schema.sessions.courseId, courseId),
+          eq(schema.sessions.isErstgespraech, true),
+          isNull(schema.sessions.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (erstgespraech && erstgespraech.sessionDate >= startDate) {
+      const [y, m, d] = erstgespraech.sessionDate.split("-");
+      return {
+        error: `Das Startdatum muss nach dem erfassten Erstgespräch (${d}.${m}.${y}) liegen.`,
+      };
+    }
+  }
+
   let addedCoachIds: string[] = [];
   try {
     addedCoachIds = await db.transaction(async (tx) => {

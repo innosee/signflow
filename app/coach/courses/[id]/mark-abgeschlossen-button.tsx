@@ -26,12 +26,15 @@ export function MarkAbgeschlossenButton({
   bewilligteUe,
   letzterTermin,
   bewilligungsende,
+  unter2Wochen = 0,
 }: {
   courseId: string;
   geleisteteUe: number;
   bewilligteUe: number;
   letzterTermin: string | null;
   bewilligungsende: string | null;
+  /** Anzahl Wochen mit <2 geleisteten UE — dezenter Hinweis. */
+  unter2Wochen?: number;
 }) {
   const [state, action, pending] = useActionState<
     MarkAbgeschlossenState,
@@ -105,6 +108,12 @@ export function MarkAbgeschlossenButton({
             {st.tageFrueher !== null ? `${st.tageFrueher} Tage ` : ""}vor dem
             Bewilligungsende — Maßnahme endet zeitlich vorzeitig (nur Hinweis,
             wird auf dem Nachweis vermerkt).
+          </p>
+        )}
+        {unter2Wochen > 0 && (
+          <p className="text-zinc-500">
+            {unter2Wochen} Woche{unter2Wochen === 1 ? "" : "n"} mit weniger als 2
+            Terminen — wird auf dem Nachweis vermerkt.
           </p>
         )}
       </div>
