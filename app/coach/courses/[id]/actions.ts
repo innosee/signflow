@@ -1508,7 +1508,10 @@ export async function markCourseAbgeschlossen(
         flagUeUnterschritten: st.ueUnterschritten,
         // AfA-Intensität: automatisch gesetzt, wenn eine Woche <2 UE hatte.
         flagUnter2Termine: unter2Termine,
-        begruendungText: st.ueUnterschritten ? begruendung : null,
+        // Begründung speichern, wann immer etwas eingegeben wurde — bei
+        // UE-Unterschreitung Pflicht, bei den weichen Umständen (zeitlich
+        // vorzeitig, <2 Termine/Woche) optionale Anmerkung.
+        begruendungText: begruendung || null,
       })
       .where(eq(schema.courses.id, ownedCourseId));
   } catch (err) {
@@ -1554,6 +1557,7 @@ export async function requestBildungstraegerReview(
       abgeschlossenAt: schema.courses.abgeschlossenAt,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
       flagUeUnterschritten: schema.courses.flagUeUnterschritten,
+      flagUnter2Termine: schema.courses.flagUnter2Termine,
       begruendungText: schema.courses.begruendungText,
       participantId: schema.courses.participantId,
     })
@@ -1607,16 +1611,20 @@ export async function requestBildungstraegerReview(
     return { error: "Der Kunde hat den Nachweis noch nicht freigegeben." };
   }
 
-  // Submit-Notiz zusammenbauen: Begründung der UE-Unterschreitung voranstellen,
-  // zeitlich vorzeitiges Ende als Hinweis, optionale Coach-Notiz anhängen.
+  // Submit-Notiz zusammenbauen: Begründung/Anmerkung voranstellen, die weichen
+  // Umstände als Hinweise, optionale Coach-Notiz anhängen.
   const noteParts: string[] = [];
-  if (course.flagUeUnterschritten && course.begruendungText?.trim()) {
-    noteParts.push(
-      `UE-Unterschreitung — Begründung: ${course.begruendungText.trim()}`,
-    );
+  if (course.begruendungText?.trim()) {
+    const label = course.flagUeUnterschritten
+      ? "UE-Unterschreitung — Begründung"
+      : "Anmerkung des Coaches";
+    noteParts.push(`${label}: ${course.begruendungText.trim()}`);
   }
   if (course.flagVorzeitigesEnde) {
     noteParts.push("Hinweis: Maßnahme zeitlich vor dem Bewilligungsende beendet.");
+  }
+  if (course.flagUnter2Termine) {
+    noteParts.push("Hinweis: In Teilen der Maßnahme weniger als 2 Termine pro Woche.");
   }
   if (coachNote) noteParts.push(coachNote);
   const noteBody = noteParts.join("\n\n") || null;

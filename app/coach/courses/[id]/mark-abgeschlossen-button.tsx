@@ -52,6 +52,13 @@ export function MarkAbgeschlossenButton({
   const geleistetLabel = geleisteteUe.toString().replace(".", ",");
   const fehlendLabel = st.fehlendeUe.toString().replace(".", ",");
 
+  // Begründung ist Pflicht bei UE-Unterschreitung. Bei den weichen Umständen
+  // (zeitlich vorzeitig, <2 Termine/Woche) kann der Coach optional etwas dazu
+  // schreiben — z.B. die Ausnahme zur 2-Termine-Regel begründen.
+  const begruendungOptional =
+    !st.begruendungPflicht && (unter2Wochen > 0 || st.zeitlichVorzeitig);
+  const zeigeBegruendung = st.begruendungPflicht || begruendungOptional;
+
   // Bewilligungsende fehlt → Abschluss gesperrt (zeitliche Achse nicht rechenbar).
   if (!bewilligungsende) {
     return (
@@ -118,19 +125,30 @@ export function MarkAbgeschlossenButton({
         )}
       </div>
 
-      {st.begruendungPflicht && (
+      {zeigeBegruendung && (
         <div className="space-y-1.5">
-          <p className="text-xs text-amber-700">
-            Für die UE-Unterschreitung ist eine Begründung nötig — der
-            Bildungsträger sieht sie bei der Prüfung.
+          <p
+            className={`text-xs ${st.begruendungPflicht ? "text-amber-700" : "text-zinc-500"}`}
+          >
+            {st.begruendungPflicht
+              ? "Für die UE-Unterschreitung ist eine Begründung nötig — der Bildungsträger sieht sie bei der Prüfung."
+              : "Optional: Anmerkung zu den Hinweisen (z. B. warum in einer Woche nur 1 Termin lag) — der Bildungsträger sieht sie bei der Prüfung."}
           </p>
           <textarea
             name="begruendung"
             value={begruendung}
             onChange={(e) => setBegruendung(e.target.value)}
             rows={3}
-            placeholder="Begründung für die UE-Unterschreitung (z. B. Teilnehmer hat die Maßnahme abgebrochen)…"
-            className="w-full rounded-lg border border-amber-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+            placeholder={
+              st.begruendungPflicht
+                ? "Begründung für die UE-Unterschreitung (z. B. Teilnehmer hat die Maßnahme abgebrochen)…"
+                : "Optionale Anmerkung (z. B. Krankheit, Feiertagswoche, vereinbarte Ausnahme)…"
+            }
+            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none ${
+              st.begruendungPflicht
+                ? "border-amber-300 focus:border-amber-500"
+                : "border-zinc-300 focus:border-zinc-500"
+            }`}
           />
         </div>
       )}

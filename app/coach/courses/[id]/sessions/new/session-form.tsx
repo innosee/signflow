@@ -80,6 +80,7 @@ export function SessionForm({
             />
             <span className="text-xs text-zinc-500">
               Mo–Sa möglich. Sonntage sind gesperrt, Feiertage werden markiert.
+              AfA-Richtwert: i.d.R. mind. 2 Termine pro Woche.
             </span>
           </label>
 

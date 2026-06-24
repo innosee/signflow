@@ -40,6 +40,7 @@ export default async function BildungstraegerReviewDetailPage({
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
       flagUeUnterschritten: schema.courses.flagUeUnterschritten,
+      flagUnter2Termine: schema.courses.flagUnter2Termine,
       begruendungText: schema.courses.begruendungText,
       reviewStatus: schema.courses.reviewStatus,
       reviewRequestedAt: schema.courses.reviewRequestedAt,
@@ -150,10 +151,12 @@ export default async function BildungstraegerReviewDetailPage({
           </div>
         </div>
 
-        {course.flagUeUnterschritten && course.begruendungText && (
+        {course.begruendungText && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             <div className="text-xs font-medium uppercase tracking-wide text-amber-700">
-              UE-Unterschreitung — Begründung des Coaches
+              {course.flagUeUnterschritten
+                ? "UE-Unterschreitung — Begründung des Coaches"
+                : "Anmerkung des Coaches"}
             </div>
             <p className="mt-1 whitespace-pre-wrap">{course.begruendungText}</p>
           </div>
@@ -162,6 +165,12 @@ export default async function BildungstraegerReviewDetailPage({
         {course.flagVorzeitigesEnde && (
           <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             Hinweis: Maßnahme wurde zeitlich vor dem Bewilligungsende beendet.
+          </div>
+        )}
+
+        {course.flagUnter2Termine && (
+          <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            Hinweis: In Teilen der Maßnahme lagen weniger als 2 Termine pro Woche.
           </div>
         )}
 
