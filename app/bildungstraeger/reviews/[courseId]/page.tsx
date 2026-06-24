@@ -39,6 +39,7 @@ export default async function BildungstraegerReviewDetailPage({
       avgsNummer: schema.courses.avgsNummer,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      flagUeUnterschritten: schema.courses.flagUeUnterschritten,
       begruendungText: schema.courses.begruendungText,
       reviewStatus: schema.courses.reviewStatus,
       reviewRequestedAt: schema.courses.reviewRequestedAt,
@@ -149,12 +150,18 @@ export default async function BildungstraegerReviewDetailPage({
           </div>
         </div>
 
-        {course.flagVorzeitigesEnde && course.begruendungText && (
+        {course.flagUeUnterschritten && course.begruendungText && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             <div className="text-xs font-medium uppercase tracking-wide text-amber-700">
-              Vorzeitiges Ende — Begründung des Coaches
+              UE-Unterschreitung — Begründung des Coaches
             </div>
             <p className="mt-1 whitespace-pre-wrap">{course.begruendungText}</p>
+          </div>
+        )}
+
+        {course.flagVorzeitigesEnde && (
+          <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            Hinweis: Maßnahme wurde zeitlich vor dem Bewilligungsende beendet.
           </div>
         )}
 

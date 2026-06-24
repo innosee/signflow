@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { abschlussStatus } from "@/lib/abschluss-status";
 import { logAudit } from "@/lib/audit";
 import { getFeiertag } from "@/lib/feiertage";
 import { sendReviewRequestedToBildungstraeger } from "@/lib/email";
@@ -1381,17 +1382,28 @@ export async function markCourseAbgeschlossen(
   const [course] = await db
     .select({
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      endDate: schema.courses.endDate,
     })
     .from(schema.courses)
     .where(eq(schema.courses.id, ownedCourseId))
     .limit(1);
   if (!course) return { error: "Kurs nicht auflösbar." };
 
+  // Ohne Bewilligungsende lässt sich „zeitlich vorzeitig" nicht berechnen →
+  // Abschluss blocken (man sollte ohnehin nicht ohne Bewilligung finalisieren).
+  if (!course.endDate) {
+    return {
+      error:
+        "Bewilligungsende fehlt — bitte erst vom Bildungsträger erfassen lassen, dann abschließen.",
+    };
+  }
+
   // Summe der geleisteten UE (nur completed Sessions zählen, Erstgespräche
-  // wie im Sheet UE-frei).
+  // wie im Sheet UE-frei) + letzter Termin (max. Datum der completed Sessions).
   const completedSessions = await db
     .select({
       anzahlUe: schema.sessions.anzahlUe,
+      sessionDate: schema.sessions.sessionDate,
       isErstgespraech: schema.sessions.isErstgespraech,
     })
     .from(schema.sessions)
@@ -1405,12 +1417,22 @@ export async function markCourseAbgeschlossen(
   const geleisteteUe = completedSessions
     .filter((s) => !s.isErstgespraech)
     .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
+  // ISO-Datum (YYYY-MM-DD) lexikografisch = chronologisch.
+  const letzterTermin = completedSessions.reduce<string | null>(
+    (max, s) => (max === null || s.sessionDate > max ? s.sessionDate : max),
+    null,
+  );
 
-  // Unvollständig = weniger geleistet als bewilligt → Begründung Pflicht.
-  const istVollstaendig = geleisteteUe >= course.anzahlBewilligteUe;
-  if (!istVollstaendig && begruendung.length === 0) {
+  // Zwei unabhängige Achsen — Begründung Pflicht NUR bei UE-Unterschreitung.
+  const st = abschlussStatus({
+    geleisteteUe,
+    bewilligteUe: course.anzahlBewilligteUe,
+    letzterTermin,
+    bewilligungsende: course.endDate,
+  });
+  if (st.begruendungPflicht && begruendung.length === 0) {
     return {
-      error: `Es sind erst ${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Zum vorzeitigen Abschluss bitte eine Begründung angeben — sie wird dem Bildungsträger bei der Prüfung angezeigt.`,
+      error: `Es sind erst ${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Für die UE-Unterschreitung bitte eine Begründung angeben — sie wird dem Bildungsträger bei der Prüfung angezeigt.`,
     };
   }
 
@@ -1419,10 +1441,12 @@ export async function markCourseAbgeschlossen(
       .update(schema.courses)
       .set({
         abgeschlossenAt: new Date(),
-        // Bei vorzeitigem Ende Flag + Begründung mitsetzen (landen im
-        // AfA-Footer + in der BT-Prüfung). Bei voller Erfüllung Flag aus.
-        flagVorzeitigesEnde: !istVollstaendig,
-        begruendungText: istVollstaendig ? null : begruendung,
+        // Zwei getrennte Flags (AfA-Footer + BT-Prüfung): zeitlich vorzeitig
+        // (Hinweis) vs. UE-Unterschreitung (begründungspflichtig). Die eine
+        // Begründung hängt an der UE-Unterschreitung.
+        flagVorzeitigesEnde: st.zeitlichVorzeitig,
+        flagUeUnterschritten: st.ueUnterschritten,
+        begruendungText: st.ueUnterschritten ? begruendung : null,
       })
       .where(eq(schema.courses.id, ownedCourseId));
   } catch (err) {
@@ -1467,6 +1491,7 @@ export async function requestBildungstraegerReview(
       anwCheckPassedAt: schema.courses.anwCheckPassedAt,
       abgeschlossenAt: schema.courses.abgeschlossenAt,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      flagUeUnterschritten: schema.courses.flagUeUnterschritten,
       begruendungText: schema.courses.begruendungText,
       participantId: schema.courses.participantId,
     })
@@ -1520,11 +1545,16 @@ export async function requestBildungstraegerReview(
     return { error: "Der Kunde hat den Nachweis noch nicht freigegeben." };
   }
 
-  // Submit-Notiz zusammenbauen: Begründung bei vorzeitigem Ende voranstellen,
-  // optionale Coach-Notiz anhängen.
+  // Submit-Notiz zusammenbauen: Begründung der UE-Unterschreitung voranstellen,
+  // zeitlich vorzeitiges Ende als Hinweis, optionale Coach-Notiz anhängen.
   const noteParts: string[] = [];
-  if (course.flagVorzeitigesEnde && course.begruendungText?.trim()) {
-    noteParts.push(`Vorzeitiges Ende — Begründung: ${course.begruendungText.trim()}`);
+  if (course.flagUeUnterschritten && course.begruendungText?.trim()) {
+    noteParts.push(
+      `UE-Unterschreitung — Begründung: ${course.begruendungText.trim()}`,
+    );
+  }
+  if (course.flagVorzeitigesEnde) {
+    noteParts.push("Hinweis: Maßnahme zeitlich vor dem Bewilligungsende beendet.");
   }
   if (coachNote) noteParts.push(coachNote);
   const noteBody = noteParts.join("\n\n") || null;
