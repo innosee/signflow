@@ -28,6 +28,7 @@ export type StundennachweisSheet = {
     anzahlBewilligteUe: number;
     flagUnter2Termine: boolean;
     flagVorzeitigesEnde: boolean;
+    flagUeUnterschritten: boolean;
     begruendungText: string | null;
   };
   bedarfstraeger: {
@@ -295,6 +296,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
 
         {(course.flagUnter2Termine ||
           course.flagVorzeitigesEnde ||
+          course.flagUeUnterschritten ||
           course.begruendungText) && (
           <section className="sheet-notes">
             <h2>Ergänzende Angaben</h2>
@@ -305,7 +307,11 @@ export function Stundennachweis(props: StundennachweisSheet) {
               </li>
               <li>
                 <Checkbox checked={course.flagVorzeitigesEnde} />
-                Maßnahme vorzeitig beendet
+                Maßnahme vor dem Bewilligungsende beendet
+              </li>
+              <li>
+                <Checkbox checked={course.flagUeUnterschritten} />
+                Nicht alle bewilligten UE durchgeführt
               </li>
             </ul>
             {course.begruendungText && (

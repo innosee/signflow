@@ -167,6 +167,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
   const geleisteteUe = sessions
     .filter((s) => s.status === "completed")
     .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
+  // Letzter tatsächlich geleisteter Termin (max. Datum der completed Sessions) —
+  // Referenz für „zeitlich vorzeitig" gegen das Bewilligungsende.
+  const letzterTermin = sessions
+    .filter((s) => s.status === "completed")
+    .reduce<string | null>(
+      (max, s) => (max === null || s.sessionDate > max ? s.sessionDate : max),
+      null,
+    );
 
   // Freigabe-Status pro Teilnehmer: Map<participantId, approvedAt>.
   // Wird unten für das "Abschluss"-Panel gebraucht, damit der Coach auf
@@ -514,6 +522,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 courseId={course.id}
                 geleisteteUe={geleisteteUe}
                 bewilligteUe={course.anzahlBewilligteUe}
+                letzterTermin={letzterTermin}
+                bewilligungsende={course.endDate}
               />
             )}
           </Step>

@@ -443,7 +443,19 @@ export const courses = pgTable("courses", {
    * Blatt des finalen PDFs ausgegeben. Checkboxen + Freitext.
    */
   flagUnter2Termine: boolean("flag_unter_2_termine").notNull().default(false),
+  /**
+   * ZEITLICH vorzeitiges Ende: letzter Termin liegt vor dem Bewilligungsende
+   * (`endDate`). Kann auch bei voller UE-Zahl auftreten (komprimierter Ablauf)
+   * — dann nur Hinweis, KEINE Begründungspflicht. Wird beim Abschluss gesetzt.
+   */
   flagVorzeitigesEnde: boolean("flag_vorzeitiges_ende")
+    .notNull()
+    .default(false),
+  /**
+   * UE-Unterschreitung: weniger UE durchgeführt als bewilligt. Eigene Achse,
+   * unabhängig vom zeitlichen Ende — löst die Begründungspflicht aus.
+   */
+  flagUeUnterschritten: boolean("flag_ue_unterschritten")
     .notNull()
     .default(false),
   begruendungText: text("begruendung_text"),

@@ -37,6 +37,7 @@ export async function loadStundennachweisSheet(params: {
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       flagUnter2Termine: schema.courses.flagUnter2Termine,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
+      flagUeUnterschritten: schema.courses.flagUeUnterschritten,
       begruendungText: schema.courses.begruendungText,
       bedarfstraegerName: schema.bedarfstraeger.name,
       bedarfstraegerType: schema.bedarfstraeger.type,
@@ -228,6 +229,7 @@ export async function loadStundennachweisSheet(params: {
       anzahlBewilligteUe: ctx.anzahlBewilligteUe,
       flagUnter2Termine: ctx.flagUnter2Termine,
       flagVorzeitigesEnde: ctx.flagVorzeitigesEnde,
+      flagUeUnterschritten: ctx.flagUeUnterschritten,
       begruendungText: ctx.begruendungText,
     },
     bedarfstraeger: {
