@@ -26,6 +26,8 @@ const validFields = (): Record<string, string | string[]> => ({
   coachIds: ["coach-1"],
   massnahmeTyp: "EKC",
   bundesland: "BW",
+  avgsGueltigVon: "2026-06-01",
+  avgsGueltigBis: "2026-06-30",
   startDate: "2026-06-01",
   endDate: "2026-06-30",
   p_name: "Florian Wirtz",
@@ -58,6 +60,8 @@ describe("parseCourseForm — Erfolgsfall", () => {
       bedarfstraegerId: "bt-1",
       massnahmeTyp: "EKC",
       bundesland: "BW",
+      avgsGueltigVon: "2026-06-01",
+      avgsGueltigBis: "2026-06-30",
       startDate: "2026-06-01",
       endDate: "2026-06-30",
       customerName: "Florian Wirtz",
@@ -144,13 +148,13 @@ describe("parseCourseForm — Validierungsfehler", () => {
     }
   });
 
-  it("lehnt ein Enddatum vor dem Startdatum ab", () => {
+  it("lehnt ein Bewilligungsende vor dem Startdatum ab", () => {
     const result = parseCourseForm(
       fd({ ...validFields(), startDate: "2026-06-30", endDate: "2026-06-01" }),
     );
     expect(result).toEqual({
       ok: false,
-      error: "Enddatum darf nicht vor dem Startdatum liegen.",
+      error: "Bewilligungsende darf nicht vor dem Startdatum liegen.",
     });
   });
 
@@ -159,5 +163,63 @@ describe("parseCourseForm — Validierungsfehler", () => {
       fd({ ...validFields(), startDate: "2026-06-15", endDate: "2026-06-15" }),
     );
     expect(result.ok).toBe(true);
+  });
+
+  it("verlangt die AVGS-Gutschein-Gültigkeit", () => {
+    const result = parseCourseForm(
+      fd({ ...validFields(), avgsGueltigVon: "", avgsGueltigBis: "" }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("alle Kurs-Felder");
+  });
+
+  it("lehnt eine Gutschein-Spanne ab, deren Ende vor dem Beginn liegt", () => {
+    const result = parseCourseForm(
+      fd({
+        ...validFields(),
+        avgsGueltigVon: "2026-06-30",
+        avgsGueltigBis: "2026-06-01",
+        startDate: "",
+        endDate: "",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("gültig bis");
+  });
+
+  it("lehnt ein Startdatum außerhalb der Gutschein-Gültigkeit ab", () => {
+    const result = parseCourseForm(
+      fd({ ...validFields(), startDate: "2026-07-02", endDate: "" }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: "Startdatum muss innerhalb der AVGS-Gutschein-Gültigkeit liegen.",
+    });
+  });
+});
+
+describe("parseCourseForm — gestufte Erfassung", () => {
+  it("akzeptiert eine Anlage nur mit Gutschein-Gültigkeit (Startdatum/Ende offen)", () => {
+    const result = parseCourseForm(
+      fd({ ...validFields(), startDate: "", endDate: "" }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.values.startDate).toBeNull();
+    expect(result.values.endDate).toBeNull();
+    expect(result.values.avgsGueltigVon).toBe("2026-06-01");
+    expect(result.values.avgsGueltigBis).toBe("2026-06-30");
+  });
+
+  it("akzeptiert ein Startdatum ohne Bewilligungsende (Bewilligung ausstehend)", () => {
+    const result = parseCourseForm(
+      fd({ ...validFields(), startDate: "2026-06-29", endDate: "" }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.values.startDate).toBe("2026-06-29");
+    expect(result.values.endDate).toBeNull();
   });
 });

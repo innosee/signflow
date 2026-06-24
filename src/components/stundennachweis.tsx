@@ -21,8 +21,10 @@ export type StundennachweisSheet = {
     title: string;
     avgsNummer: string;
     durchfuehrungsort: string;
-    startDate: string;
-    endDate: string;
+    avgsGueltigVon: string;
+    avgsGueltigBis: string;
+    startDate: string | null;
+    endDate: string | null;
     anzahlBewilligteUe: number;
     flagUnter2Termine: boolean;
     flagVorzeitigesEnde: boolean;
@@ -81,7 +83,8 @@ export type StundennachweisSheet = {
 
 const BEDARFSTRAEGER_LABEL = { JC: "Jobcenter", AA: "Arbeitsagentur" } as const;
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
   const [y, m, d] = iso.split("-");
   return y && m && d ? `${d}.${m}.${y}` : iso;
 }
@@ -152,7 +155,11 @@ export function Stundennachweis(props: StundennachweisSheet) {
               <MetaRow label="Typ" value={course.title} />
               <MetaRow label="Durchführungsort" value={course.durchfuehrungsort} />
               <MetaRow
-                label="Zeitraum"
+                label="AVGS-Gültigkeit"
+                value={`${formatDate(course.avgsGueltigVon)} – ${formatDate(course.avgsGueltigBis)}`}
+              />
+              <MetaRow
+                label="Bewilligungszeitraum"
                 value={`${formatDate(course.startDate)} – ${formatDate(course.endDate)}`}
               />
               <MetaRow

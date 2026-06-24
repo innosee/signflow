@@ -22,6 +22,8 @@ type CourseFormValues = {
   bedarfstraegerId: string;
   massnahmeTyp: string;
   bundesland: string;
+  avgsGueltigVon: string;
+  avgsGueltigBis: string;
   startDate: string;
   endDate: string;
   p_name: string;
@@ -37,6 +39,8 @@ const EMPTY: CourseFormValues = {
   bedarfstraegerId: "",
   massnahmeTyp: "EKC",
   bundesland: "",
+  avgsGueltigVon: "",
+  avgsGueltigBis: "",
   startDate: "",
   endDate: "",
   p_name: "",
@@ -195,20 +199,40 @@ export function CourseForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
-            name="startDate"
-            label="Startdatum"
+            name="avgsGueltigVon"
+            label="AVGS-Gutschein gültig von"
             type="date"
             required
+            value={head.avgsGueltigVon}
+            onChange={setField("avgsGueltigVon")}
+            hint="Gültigkeit laut Gutschein. Startdatum + erster Termin müssen in dieses Fenster fallen."
+          />
+          <Field
+            name="avgsGueltigBis"
+            label="AVGS-Gutschein gültig bis"
+            type="date"
+            required
+            value={head.avgsGueltigBis}
+            onChange={setField("avgsGueltigBis")}
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            name="startDate"
+            label="Startdatum (optional)"
+            type="date"
             value={head.startDate}
             onChange={setField("startDate")}
+            hint="Wird nach dem Erstgespräch vereinbart und bei der AA/JC eingereicht. Muss in der Gutschein-Gültigkeit liegen."
           />
           <Field
             name="endDate"
-            label="Enddatum"
+            label="Bewilligungsende (optional)"
             type="date"
-            required
             value={head.endDate}
             onChange={setField("endDate")}
+            hint="Kommt mit der Bewilligung der AA/JC zurück. Der letzte Termin muss ≤ diesem Datum sein."
           />
         </div>
       </section>
@@ -295,8 +319,12 @@ export function CourseForm({
 function Field({
   label,
   className,
+  hint,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  hint?: string;
+}) {
   return (
     <label className="block space-y-1.5">
       <span className="text-sm font-medium text-zinc-800">{label}</span>
@@ -304,6 +332,7 @@ function Field({
         {...props}
         className={`block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black ${className ?? ""}`}
       />
+      {hint && <span className="block text-xs text-zinc-500">{hint}</span>}
     </label>
   );
 }

@@ -20,8 +20,8 @@ export type CoachCourseListItem = {
   title: string;
   customerName: string;
   avgsNummer: string | null;
-  startDate: string;
-  endDate: string;
+  startDate: string | null;
+  endDate: string | null;
   status: string;
   anzahlBewilligteUe: number | null;
 };
@@ -90,8 +90,11 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-zinc-500">
-                    {c.title} · AVGS {c.avgsNummer} · {c.startDate} bis{" "}
-                    {c.endDate} · {c.anzahlBewilligteUe} UE bewilligt
+                    {c.title} · AVGS {c.avgsNummer} ·{" "}
+                    {c.startDate && c.endDate
+                      ? `${c.startDate} bis ${c.endDate}`
+                      : "Zeitraum offen"}{" "}
+                    · {c.anzahlBewilligteUe} UE bewilligt
                   </div>
                 </div>
                 <span aria-hidden className="text-zinc-400">

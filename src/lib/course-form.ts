@@ -28,8 +28,13 @@ export type ParsedCourseForm = {
   /** Kein Freitext mehr: Titel = Label des Maßnahmentyps. */
   title: string;
   bundesland: Bundesland;
-  startDate: string;
-  endDate: string;
+  /** AVGS-Gutschein-Gültigkeit (Pflicht). Startdatum + erster Termin müssen rein. */
+  avgsGueltigVon: string;
+  avgsGueltigBis: string;
+  /** Nach Erstgespräch vereinbart; bis dahin null (gestufte Erfassung). */
+  startDate: string | null;
+  /** Bewilligungsende; kommt mit der Bewilligung, bis dahin null. */
+  endDate: string | null;
   customerName: string;
   customerEmail: string;
   customerKundenNr: string;
@@ -61,6 +66,8 @@ export function parseCourseForm(
   );
   const massnahmeTypRaw = String(formData.get("massnahmeTyp") ?? "").trim();
   const bundeslandRaw = String(formData.get("bundesland") ?? "").trim();
+  const avgsGueltigVon = String(formData.get("avgsGueltigVon") ?? "").trim();
+  const avgsGueltigBis = String(formData.get("avgsGueltigBis") ?? "").trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
 
@@ -94,8 +101,8 @@ export function parseCourseForm(
     !anzahlBewilligteUeRaw ||
     !bedarfstraegerId ||
     coachIds.length === 0 ||
-    !startDate ||
-    !endDate
+    !avgsGueltigVon ||
+    !avgsGueltigBis
   ) {
     return {
       ok: false,
@@ -122,10 +129,25 @@ export function parseCourseForm(
       error: "Bewilligte UE muss eine positive ganze Zahl sein.",
     };
   }
-  if (endDate < startDate) {
+  // AVGS-Datumslogik (gestufte Erfassung): ISO-Strings (YYYY-MM-DD) sind
+  // lexikografisch vergleichbar — wie im Rest des Codes (sessions actions).
+  // Jede Prüfung feuert nur, wenn ihr Grenzdatum gesetzt ist.
+  if (avgsGueltigBis < avgsGueltigVon) {
     return {
       ok: false,
-      error: "Enddatum darf nicht vor dem Startdatum liegen.",
+      error: 'AVGS-Gutschein: „gültig bis" darf nicht vor „gültig von" liegen.',
+    };
+  }
+  if (startDate && (startDate < avgsGueltigVon || startDate > avgsGueltigBis)) {
+    return {
+      ok: false,
+      error: "Startdatum muss innerhalb der AVGS-Gutschein-Gültigkeit liegen.",
+    };
+  }
+  if (startDate && endDate && endDate < startDate) {
+    return {
+      ok: false,
+      error: "Bewilligungsende darf nicht vor dem Startdatum liegen.",
     };
   }
 
@@ -141,8 +163,10 @@ export function parseCourseForm(
       massnahmeTyp,
       title,
       bundesland,
-      startDate,
-      endDate,
+      avgsGueltigVon,
+      avgsGueltigBis,
+      startDate: startDate || null,
+      endDate: endDate || null,
       customerName,
       customerEmail,
       customerKundenNr,

@@ -418,8 +418,25 @@ export const courses = pgTable("courses", {
    * unschädlichste Annahme ist (Bausteine sehr ähnlich zu ESC).
    */
   massnahmeTyp: massnahmeTyp("massnahme_typ").notNull().default("EKC"),
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date").notNull(),
+  /**
+   * AVGS-Gutschein-Gültigkeit (steht auf dem Gutschein, bei Anlage bekannt).
+   * Pflicht. Sowohl das vereinbarte `startDate` als auch der erste Termin
+   * müssen in dieses Fenster [von, bis] fallen — rechtlich bindende AfA-Frist.
+   */
+  avgsGueltigVon: date("avgs_gueltig_von").notNull(),
+  avgsGueltigBis: date("avgs_gueltig_bis").notNull(),
+  /**
+   * Startdatum: wird NACH dem Erstgespräch mit dem Kunden vereinbart, muss in
+   * der Gutschein-Gültigkeit liegen, und wird damit bei der AA/JC eingereicht.
+   * Bis dahin null (gestufte Erfassung). Der Bewilligungszeitraum-von wird mit
+   * diesem Startdatum gleichgesetzt — keine eigene Spalte.
+   */
+  startDate: date("start_date"),
+  /**
+   * Bewilligungsende: kommt mit der Bewilligung von der AA/JC zurück. Der letzte
+   * Termin muss ≤ diesem Datum liegen. Bis zur Bewilligung null (gestuft).
+   */
+  endDate: date("end_date"),
   status: courseStatus("status").notNull().default("active"),
   /**
    * Ergänzende Angaben / Begründungen für den AfA-Footer. Werden auf jedem

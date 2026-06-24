@@ -262,6 +262,22 @@ async function validateCrossSessionRules(params: {
   isErstgespraech: boolean;
   excludeSessionId?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  // AVGS-Datums-Fenster + Bundesland (für Feiertags-Check) einmal laden.
+  // Jede Fenster-Prüfung feuert nur, wenn ihr Grenzdatum gesetzt ist —
+  // gestufte Erfassung: Startdatum/Bewilligungsende kommen erst später.
+  const [course] = await db
+    .select({
+      bundesland: schema.courses.bundesland,
+      avgsVon: schema.courses.avgsGueltigVon,
+      avgsBis: schema.courses.avgsGueltigBis,
+      startDate: schema.courses.startDate,
+      endDate: schema.courses.endDate,
+    })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, params.courseId))
+    .limit(1);
+  const sd = params.sessionDate;
+
   // #4 — nur ein Erstgespräch je Maßnahme.
   if (params.isErstgespraech) {
     const [existing] = await db
@@ -285,8 +301,40 @@ async function validateCrossSessionRules(params: {
           "Es gibt bereits ein Erstgespräch für diese Maßnahme — ein zweites ist nicht möglich.",
       };
     }
+    // Erstgespräch (0 UE) findet VOR der Startdatum-Vereinbarung statt → die
+    // „≥ Startdatum"-Regel gilt nicht. Es muss aber innerhalb der
+    // AVGS-Gutschein-Gültigkeit liegen (rechtlich bindende AfA-Frist).
+    if (course?.avgsVon && sd < course.avgsVon) {
+      return {
+        ok: false,
+        error:
+          "Das Erstgespräch muss innerhalb der AVGS-Gutschein-Gültigkeit liegen (Datum liegt davor).",
+      };
+    }
+    if (course?.avgsBis && sd > course.avgsBis) {
+      return {
+        ok: false,
+        error:
+          "Das Erstgespräch muss innerhalb der AVGS-Gutschein-Gültigkeit liegen (Datum liegt danach).",
+      };
+    }
     // Erstgespräch zählt 0 UE → die Erste-UE-Regel (#5) gilt dafür nicht.
     return { ok: true };
+  }
+
+  // Reguläre UE: Fenster-Grenzen (jeweils nur wenn Grenzdatum gesetzt).
+  // ≥ Startdatum (vereinbarter Coaching-Beginn) und ≤ Bewilligungsende.
+  if (course?.startDate && sd < course.startDate) {
+    return {
+      ok: false,
+      error: "Termin liegt vor dem vereinbarten Startdatum der Maßnahme.",
+    };
+  }
+  if (course?.endDate && sd > course.endDate) {
+    return {
+      ok: false,
+      error: "Termin liegt nach dem Bewilligungsende der Maßnahme.",
+    };
   }
 
   // #5 — gilt nur für die chronologisch früheste reguläre UE.
@@ -312,6 +360,16 @@ async function validateCrossSessionRules(params: {
     earliestOther === null || params.sessionDate <= earliestOther;
   if (!istErsteUe) return { ok: true };
 
+  // Die erste reguläre UE muss noch innerhalb der Gutschein-Gültigkeit
+  // beginnen (spätestens am letzten Gültigkeitstag des AVGS-Gutscheins).
+  if (course?.avgsBis && sd > course.avgsBis) {
+    return {
+      ok: false,
+      error:
+        "Die erste UE muss innerhalb der AVGS-Gutschein-Gültigkeit beginnen (Gutschein bereits abgelaufen).",
+    };
+  }
+
   const [y, m, d] = params.sessionDate
     .split("-")
     .map((s) => Number.parseInt(s, 10));
@@ -323,11 +381,6 @@ async function validateCrossSessionRules(params: {
         "Die erste UE der Maßnahme muss an einem Wochentag (Mo–Fr) liegen — Wochenende ist nur für spätere Termine erlaubt.",
     };
   }
-  const [course] = await db
-    .select({ bundesland: schema.courses.bundesland })
-    .from(schema.courses)
-    .where(eq(schema.courses.id, params.courseId))
-    .limit(1);
   const feiertag = getFeiertag(params.sessionDate, course?.bundesland ?? null);
   if (feiertag) {
     return {

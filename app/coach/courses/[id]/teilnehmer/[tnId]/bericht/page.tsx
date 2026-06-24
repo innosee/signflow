@@ -84,8 +84,11 @@ export default async function BerEditorPage({ params }: Props) {
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
           Kunden-Nr. {row.participant.kundenNr} · AVGS {row.course.avgsNummer}{" "}
-          · {row.course.startDate} bis {row.course.endDate} ·{" "}
-          {row.course.anzahlBewilligteUe} UE bewilligt
+          ·{" "}
+          {row.course.startDate && row.course.endDate
+            ? `${row.course.startDate} bis ${row.course.endDate}`
+            : "Bewilligungszeitraum offen"}{" "}
+          · {row.course.anzahlBewilligteUe} UE bewilligt
         </p>
       </div>
 
@@ -102,7 +105,11 @@ export default async function BerEditorPage({ params }: Props) {
         participantName={row.participant.name}
         kundenNr={row.participant.kundenNr}
         avgsNummer={row.course.avgsNummer}
-        zeitraum={`${row.course.startDate} – ${row.course.endDate}`}
+        zeitraum={
+          row.course.startDate && row.course.endDate
+            ? `${row.course.startDate} – ${row.course.endDate}`
+            : ""
+        }
         gesamtzahlUe={String(row.course.anzahlBewilligteUe)}
         initialBer={initialBer}
         impersonating={isImpersonating(session)}

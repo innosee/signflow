@@ -184,10 +184,12 @@ const tn2Id = tn2Rows[0].id;
 const { rows: courseRows } = await client.query(
   `INSERT INTO courses (
      coach_id, participant_id, title, avgs_nummer, durchfuehrungsort,
-     anzahl_bewilligte_ue, bedarfstraeger_id, start_date, end_date, status
+     anzahl_bewilligte_ue, bedarfstraeger_id, avgs_gueltig_von, avgs_gueltig_bis,
+     start_date, end_date, status
    ) VALUES (
      $1, $2, 'Demo AVGS-Coaching „Karriere & Selbständigkeit"', 'AVGS-2026-DEMO',
-     'Singen, Demo-Adresse', 80, $3, '2026-03-01', '2026-04-30', 'active'
+     'Singen, Demo-Adresse', 80, $3, '2026-02-15', '2026-03-15',
+     '2026-03-01', '2026-04-30', 'active'
    ) RETURNING id`,
   [coachAId, tn1Id, bedId],
 );
@@ -197,10 +199,12 @@ const courseId = courseRows[0].id;
 await client.query(
   `INSERT INTO courses (
      coach_id, participant_id, title, avgs_nummer, durchfuehrungsort,
-     anzahl_bewilligte_ue, bedarfstraeger_id, start_date, end_date, status
+     anzahl_bewilligte_ue, bedarfstraeger_id, avgs_gueltig_von, avgs_gueltig_bis,
+     start_date, end_date, status
    ) VALUES (
      $1, $2, 'Demo AVGS-Coaching „Bewerbungstraining"', 'AVGS-2026-DEMO-2',
-     'Online', 60, $3, '2026-03-15', '2026-05-15', 'active'
+     'Online', 60, $3, '2026-03-01', '2026-03-31',
+     '2026-03-15', '2026-05-15', 'active'
    )`,
   [coachAId, tn2Id, bedId],
 );
