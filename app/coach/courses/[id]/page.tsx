@@ -277,28 +277,45 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
         </div>
       )}
 
-      <header className="space-y-2">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         {/* 1:1: Genau ein Kunde pro Kurs. Kundenname als Überschrift für die
             Zuordnung, Kurs-Titel als Subline darunter. */}
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {participants[0]?.name ?? course.title}
-        </h1>
-        {participants[0] && (
-          <p className="text-base text-zinc-700">{course.title}</p>
-        )}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-600">
-          <span>AVGS {course.avgsNummer}</span>
-          <span>{course.durchfuehrungsort}</span>
-          <span>
-            {course.bedarfstraegerName} (
-            {BEDARFSTRAEGER_LABEL[course.bedarfstraegerType] ??
-              course.bedarfstraegerType}
-            )
-          </span>
-          <span>
-            {formatDate(course.startDate)} bis {formatDate(course.endDate)}
-          </span>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {participants[0]?.name ?? course.title}
+          </h1>
+          {participants[0] && (
+            <p className="text-base text-zinc-700">{course.title}</p>
+          )}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-600">
+            <span>AVGS {course.avgsNummer}</span>
+            <span>{course.durchfuehrungsort}</span>
+            <span>
+              {course.bedarfstraegerName} (
+              {BEDARFSTRAEGER_LABEL[course.bedarfstraegerType] ??
+                course.bedarfstraegerType}
+              )
+            </span>
+            <span>
+              {formatDate(course.startDate)} bis {formatDate(course.endDate)}
+            </span>
+          </div>
         </div>
+        {/* Prominenter Einstieg zur ANW: öffnet die pixel-identische Vorschau
+            (HTML-as-Source-of-Truth, 1:1 zum finalen AfA-PDF) in neuem Tab.
+            Vorher nur über kleine Links tief in der Seite erreichbar — Coaches
+            haben den Nachweis schlicht nicht gefunden. */}
+        {participants[0] && (
+          <a
+            href={`/coach/courses/${course.id}/print/${participants[0].id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span aria-hidden="true">📄</span>
+            Anwesenheitsnachweis (ANW) ansehen
+          </a>
+        )}
       </header>
 
       <section className="grid gap-4 sm:grid-cols-3">
@@ -471,9 +488,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                     key={p.id}
                     href={`/api/courses/${course.id}/participants/${p.id}/pdf`}
                     className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 transition hover:bg-zinc-50"
-                    title={`Stundennachweis-PDF für ${p.name} herunterladen`}
+                    title={`Anwesenheitsnachweis (ANW) als PDF für ${p.name} herunterladen`}
                   >
-                    <span aria-hidden="true">📄</span> PDF: {p.name}
+                    <span aria-hidden="true">⬇</span> ANW als PDF
                   </a>
                 ))}
               </div>
@@ -751,13 +768,15 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       {ber ? "BER bearbeiten" : "BER schreiben"}
                     </Link>
                   )}
-                  <a
-                    href={`/api/courses/${course.id}/participants/${p.id}/pdf`}
+                  <Link
+                    href={`/coach/courses/${course.id}/print/${p.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-zinc-700 underline-offset-2 hover:underline"
-                    title="Stundennachweis-PDF herunterladen"
+                    title="Anwesenheitsnachweis (ANW) ansehen — mit PDF-Download auf der Seite"
                   >
-                    Nachweis (PDF)
-                  </a>
+                    ANW ansehen
+                  </Link>
                   {canManage && (
                     <>
                       {smsEnabled && p.phone && (
