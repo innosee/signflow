@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -516,8 +516,13 @@ export async function deleteCourse(formData: FormData): Promise<void> {
       .limit(1);
 
     if (course) {
-      // Audit-Eintrag + Hard-Delete atomar. resource_id ist kein FK, der
-      // Log-Eintrag überlebt das Löschen des Kurses.
+      // Audit-Eintrag + Soft-Delete atomar. BEWUSST kein Hard-Delete: ein
+      // `tx.delete(courses)` würde per FK-Cascade alle Sessions, Signaturen,
+      // Review-Notes UND das gesiegelte FES-PDF mitreißen — also genau die
+      // rechtlichen Beweismittel für die AfA, unwiederbringlich. Wir setzen
+      // nur `deleted_at`; alle Listen-Queries filtern ohnehin `isNull(deletedAt)`,
+      // d.h. der Kurs verschwindet aus der UI, die Daten bleiben erhalten und
+      // sind notfalls wiederherstellbar.
       await db.transaction(async (tx) => {
         await logAudit(
           {
@@ -529,26 +534,16 @@ export async function deleteCourse(formData: FormData): Promise<void> {
           },
           tx,
         );
-        await tx.delete(schema.courses).where(eq(schema.courses.id, courseId));
+        await tx
+          .update(schema.courses)
+          .set({ deletedAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.courses.id, courseId));
       });
 
-      // Verwaiste Kunden-Person aufräumen: nur löschen, wenn keine weitere
-      // Maßnahme mehr auf sie zeigt. Best-effort und außerhalb der Lösch-
-      // Transaction — eine verbleibende Referenz (z.B. ein Ad-hoc-Bericht)
-      // darf das Kurs-Löschen nicht zurückrollen, dann bleibt die Person.
-      try {
-        const [remaining] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(schema.courses)
-          .where(eq(schema.courses.participantId, course.participantId));
-        if ((remaining?.count ?? 0) === 0) {
-          await db
-            .delete(schema.participants)
-            .where(eq(schema.participants.id, course.participantId));
-        }
-      } catch {
-        // Verbleibende FK-Referenzen → Person bewusst behalten.
-      }
+      // Die Kunden-Person (participants) bleibt erhalten: der soft-gelöschte
+      // Kurs referenziert sie weiterhin, und Stammdaten sind günstig zu halten.
+      // Kein Hard-Delete der Person mehr — Wiederherstellung des Kurses bliebe
+      // sonst kaputt.
     }
   }
 
