@@ -262,11 +262,14 @@ async function validateCrossSessionRules(params: {
   courseId: string;
   sessionDate: string;
   isErstgespraech: boolean;
+  /** UE des anzulegenden/bearbeiteten Termins (für die Budget-Prüfung). */
+  anzahlUe?: number;
   excludeSessionId?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  // AVGS-Datums-Fenster + Bundesland (für Feiertags-Check) einmal laden.
-  // Jede Fenster-Prüfung feuert nur, wenn ihr Grenzdatum gesetzt ist —
-  // gestufte Erfassung: Startdatum/Bewilligungsende kommen erst später.
+  // AVGS-Datums-Fenster + Bundesland (für Feiertags-Check) + bewilligte UE
+  // (für die Budget-Prüfung) einmal laden. Jede Fenster-Prüfung feuert nur,
+  // wenn ihr Grenzdatum gesetzt ist — gestufte Erfassung: Startdatum/
+  // Bewilligungsende kommen erst später.
   const [course] = await db
     .select({
       bundesland: schema.courses.bundesland,
@@ -274,6 +277,7 @@ async function validateCrossSessionRules(params: {
       avgsBis: schema.courses.avgsGueltigBis,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
+      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
     })
     .from(schema.courses)
     .where(eq(schema.courses.id, params.courseId))
@@ -393,6 +397,44 @@ async function validateCrossSessionRules(params: {
     };
   }
 
+  // UE-Budget: Summe aller regulären UE (ohne die ggf. bearbeitete Zeile) plus
+  // die neue UE darf die bewilligten UE nicht überschreiten — mehr ist für die
+  // AfA nicht abrechenbar. Harte Grenze, damit gar nicht erst ein Über-Budget-
+  // Nachweis entsteht, den der Teilnehmer signiert. Erstgespräch zählt 0 UE.
+  if (course && params.anzahlUe && params.anzahlUe > 0) {
+    const ueRows = await db
+      .select({ anzahlUe: schema.sessions.anzahlUe })
+      .from(schema.sessions)
+      .where(
+        and(
+          eq(schema.sessions.courseId, params.courseId),
+          eq(schema.sessions.isErstgespraech, false),
+          isNull(schema.sessions.deletedAt),
+          ...(params.excludeSessionId
+            ? [ne(schema.sessions.id, params.excludeSessionId)]
+            : []),
+        ),
+      );
+    const verplant = ueRows.reduce(
+      (sum, r) => sum + Number.parseFloat(r.anzahlUe),
+      0,
+    );
+    const gesamt = verplant + params.anzahlUe;
+    if (gesamt > course.anzahlBewilligteUe) {
+      const fmt = (n: number) =>
+        Number.isInteger(n) ? `${n}` : n.toString().replace(".", ",");
+      const frei = course.anzahlBewilligteUe - verplant;
+      return {
+        ok: false,
+        error: `Mit diesem Termin wären ${fmt(gesamt)} UE verplant — die Maßnahme hat aber nur ${course.anzahlBewilligteUe} bewilligte UE${
+          verplant > 0 ? ` (bereits verplant: ${fmt(verplant)})` : ""
+        }. Mehr als bewilligt kann die AfA nicht abrechnen — bitte UE reduzieren${
+          frei > 0 ? ` (noch ${fmt(frei)} UE frei)` : ""
+        }.`,
+      };
+    }
+  }
+
   // #5 — gilt nur für die chronologisch früheste reguläre UE.
   const others = await db
     .select({ sessionDate: schema.sessions.sessionDate })
@@ -469,6 +511,7 @@ export async function createSession(
     courseId: ownedCourseId,
     sessionDate: v.sessionDate,
     isErstgespraech: v.isErstgespraech,
+    anzahlUe: Number.parseFloat(v.anzahlUe),
   });
   if (!rules.ok) return { error: rules.error };
 
@@ -572,6 +615,7 @@ export async function updateSession(
     courseId: ownedCourseId,
     sessionDate: v.sessionDate,
     isErstgespraech: v.isErstgespraech,
+    anzahlUe: Number.parseFloat(v.anzahlUe),
     excludeSessionId: sessionId,
   });
   if (!rules.ok) return { error: rules.error };

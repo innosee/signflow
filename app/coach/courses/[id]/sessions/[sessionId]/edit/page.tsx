@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
@@ -28,6 +28,7 @@ export default async function EditSessionPage({ params }: Props) {
       id: schema.courses.id,
       title: schema.courses.title,
       bundesland: schema.courses.bundesland,
+      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
     })
     .from(schema.courses)
     .where(
@@ -74,6 +75,24 @@ export default async function EditSessionPage({ params }: Props) {
     redirect(`/coach/courses/${course.id}?signed=${sessionId}`);
   }
 
+  // Bereits verplante reguläre UE OHNE diesen Termin — für den Budget-Hinweis
+  // (dieser Termin wird ja gerade geändert, seine UE darf nicht doppelt zählen).
+  const ueRows = await db
+    .select({ anzahlUe: schema.sessions.anzahlUe })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, course.id),
+        eq(schema.sessions.isErstgespraech, false),
+        isNull(schema.sessions.deletedAt),
+        ne(schema.sessions.id, sessionId),
+      ),
+    );
+  const bereitsVerplanteUe = ueRows.reduce(
+    (sum, r) => sum + Number.parseFloat(r.anzahlUe),
+    0,
+  );
+
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
       <header>
@@ -88,6 +107,8 @@ export default async function EditSessionPage({ params }: Props) {
         courseId={course.id}
         courseTitle={course.title}
         bundesland={course.bundesland}
+        bewilligteUe={course.anzahlBewilligteUe}
+        bereitsVerplanteUe={bereitsVerplanteUe}
         session={{
           id: sess.id,
           sessionDate: sess.sessionDate,

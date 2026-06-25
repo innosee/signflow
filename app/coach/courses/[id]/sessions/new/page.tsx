@@ -26,6 +26,7 @@ export default async function NewSessionPage({ params }: Props) {
       id: schema.courses.id,
       title: schema.courses.title,
       bundesland: schema.courses.bundesland,
+      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
     })
     .from(schema.courses)
     .where(
@@ -54,9 +55,13 @@ export default async function NewSessionPage({ params }: Props) {
     )
     .limit(1);
 
-  // Bestehende reguläre UE-Termine → weiche „2 Termine/Woche"-Warnung im Formular.
+  // Bestehende reguläre UE-Termine → „2 Termine/Woche"-Warnung (Datum) +
+  // UE-Budget-Hinweis (Summe) im Formular.
   const ueRows = await db
-    .select({ sessionDate: schema.sessions.sessionDate })
+    .select({
+      sessionDate: schema.sessions.sessionDate,
+      anzahlUe: schema.sessions.anzahlUe,
+    })
     .from(schema.sessions)
     .where(
       and(
@@ -66,6 +71,10 @@ export default async function NewSessionPage({ params }: Props) {
       ),
     );
   const existingUeDates = ueRows.map((r) => r.sessionDate);
+  const bereitsVerplanteUe = ueRows.reduce(
+    (sum, r) => sum + Number.parseFloat(r.anzahlUe),
+    0,
+  );
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -83,6 +92,8 @@ export default async function NewSessionPage({ params }: Props) {
         bundesland={course.bundesland}
         erstgespraechExists={!!erstgespraech}
         existingUeDates={existingUeDates}
+        bewilligteUe={course.anzahlBewilligteUe}
+        bereitsVerplanteUe={bereitsVerplanteUe}
       />
     </div>
   );
