@@ -15,6 +15,8 @@ export function SessionForm({
   bundesland,
   erstgespraechExists = false,
   existingUeDates = [],
+  bewilligteUe,
+  bereitsVerplanteUe = 0,
 }: {
   courseId: string;
   courseTitle: string;
@@ -23,6 +25,10 @@ export function SessionForm({
   erstgespraechExists?: boolean;
   /** Reguläre UE-Termine des Kurses — für die „2 Termine/Woche"-Warnung. */
   existingUeDates?: string[];
+  /** Bewilligte UE der Maßnahme — für den UE-Budget-Hinweis. */
+  bewilligteUe: number;
+  /** Bereits verplante reguläre UE (ohne diesen Termin). */
+  bereitsVerplanteUe?: number;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
@@ -30,6 +36,19 @@ export function SessionForm({
   );
   const [isErstgespraech, setIsErstgespraech] = useState(false);
   const [sessionDate, setSessionDate] = useState("");
+  const [anzahlUe, setAnzahlUe] = useState("");
+
+  // UE-Budget-Hinweis (live, „bei der Eingabe"): bereits verplante UE + die
+  // gerade eingegebene dürfen die bewilligten UE nicht überschreiten. Reine
+  // Vorab-Anzeige — die harte Grenze zieht die Server-Action (validateCross-
+  // SessionRules). Erstgespräch zählt 0 UE → kein Budget-Verbrauch.
+  const ueNum = Number.parseFloat(anzahlUe.replace(",", "."));
+  const ueEingabe = !isErstgespraech && Number.isFinite(ueNum) ? ueNum : 0;
+  const verplantMitNeu = bereitsVerplanteUe + ueEingabe;
+  const ueFrei = bewilligteUe - bereitsVerplanteUe;
+  const ueUeberschritten = verplantMitNeu > bewilligteUe;
+  const fmtUe = (n: number) =>
+    Number.isInteger(n) ? `${n}` : n.toString().replace(".", ",");
 
   // Weiche Warnung: Coaching findet an Feiertagen i.d.R. nicht statt. Nur ein
   // Hinweis, kein Block — Ausnahmen kommen vor (anders als das harte Wochenend-
@@ -112,8 +131,24 @@ export function SessionForm({
                 max="24"
                 required
                 placeholder="z.B. 2"
-                className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                value={anzahlUe}
+                onChange={(e) => setAnzahlUe(e.target.value)}
+                aria-invalid={ueUeberschritten}
+                className={`block w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ${
+                  ueUeberschritten
+                    ? "border-red-500 focus:border-red-600"
+                    : "border-zinc-500 focus:border-black"
+                }`}
               />
+              <span
+                className={`text-xs ${
+                  ueUeberschritten ? "font-medium text-red-700" : "text-zinc-500"
+                }`}
+              >
+                {ueUeberschritten
+                  ? `Überschreitet die bewilligten ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Anlegen wird blockiert.`
+                  : `Noch ${fmtUe(ueFrei)} von ${bewilligteUe} UE frei.`}
+              </span>
             </label>
           )}
         </div>

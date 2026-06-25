@@ -25,11 +25,17 @@ export function SessionEditForm({
   courseTitle,
   bundesland,
   session,
+  bewilligteUe,
+  bereitsVerplanteUe = 0,
 }: {
   courseId: string;
   courseTitle: string;
   bundesland: Bundesland | null;
   session: SessionInitial;
+  /** Bewilligte UE der Maßnahme — für den UE-Budget-Hinweis. */
+  bewilligteUe: number;
+  /** Bereits verplante reguläre UE OHNE diesen Termin (wird ja gerade geändert). */
+  bereitsVerplanteUe?: number;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     updateSession,
@@ -37,9 +43,21 @@ export function SessionEditForm({
   );
   const [isErstgespraech, setIsErstgespraech] = useState(session.isErstgespraech);
   const [sessionDate, setSessionDate] = useState(session.sessionDate);
+  const [anzahlUe, setAnzahlUe] = useState(session.anzahlUe);
 
   // Weiche Feiertags-Warnung, identisch zur Neu-Anlage (nur Hinweis, kein Block).
   const feiertag = getFeiertag(sessionDate, bundesland);
+
+  // UE-Budget-Hinweis (live) — harte Grenze zieht die Server-Action. Die UE
+  // dieses Termins zählt NICHT zu bereitsVerplanteUe (excludeSessionId in der
+  // Action), darum hier mit der aktuellen Eingabe rechnen.
+  const ueNum = Number.parseFloat(anzahlUe.replace(",", "."));
+  const ueEingabe = !isErstgespraech && Number.isFinite(ueNum) ? ueNum : 0;
+  const verplantMitNeu = bereitsVerplanteUe + ueEingabe;
+  const ueFrei = bewilligteUe - bereitsVerplanteUe;
+  const ueUeberschritten = verplantMitNeu > bewilligteUe;
+  const fmtUe = (n: number) =>
+    Number.isInteger(n) ? `${n}` : n.toString().replace(".", ",");
 
   return (
     <form action={action} className="space-y-8">
@@ -99,10 +117,25 @@ export function SessionEditForm({
                 min="0.5"
                 max="24"
                 required
-                defaultValue={session.anzahlUe}
+                value={anzahlUe}
+                onChange={(e) => setAnzahlUe(e.target.value)}
                 placeholder="z.B. 2"
-                className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                aria-invalid={ueUeberschritten}
+                className={`block w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ${
+                  ueUeberschritten
+                    ? "border-red-500 focus:border-red-600"
+                    : "border-zinc-500 focus:border-black"
+                }`}
               />
+              <span
+                className={`text-xs ${
+                  ueUeberschritten ? "font-medium text-red-700" : "text-zinc-500"
+                }`}
+              >
+                {ueUeberschritten
+                  ? `Überschreitet die bewilligten ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Speichern wird blockiert.`
+                  : `Noch ${fmtUe(ueFrei)} von ${bewilligteUe} UE frei (ohne diesen Termin).`}
+              </span>
             </label>
           )}
         </div>
