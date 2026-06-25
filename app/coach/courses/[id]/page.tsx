@@ -467,16 +467,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             {participants.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {participants.map((p) => (
-                  <Link
+                  <a
                     key={p.id}
-                    href={`/coach/courses/${course.id}/print/${p.id}`}
-                    target="_blank"
-                    rel="noreferrer"
+                    href={`/api/courses/${course.id}/participants/${p.id}/pdf`}
                     className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 transition hover:bg-zinc-50"
-                    title={`PDF-Vorschau für ${p.name}`}
+                    title={`Stundennachweis-PDF für ${p.name} herunterladen`}
                   >
                     <span aria-hidden="true">📄</span> PDF: {p.name}
-                  </Link>
+                  </a>
                 ))}
               </div>
             )}
@@ -753,13 +751,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       {ber ? "BER bearbeiten" : "BER schreiben"}
                     </Link>
                   )}
-                  <Link
-                    href={`/coach/courses/${course.id}/print/${p.id}`}
+                  <a
+                    href={`/api/courses/${course.id}/participants/${p.id}/pdf`}
                     className="text-zinc-700 underline-offset-2 hover:underline"
-                    title="Stundennachweis-Druckvorschau"
+                    title="Stundennachweis-PDF herunterladen"
                   >
-                    Nachweis
-                  </Link>
+                    Nachweis (PDF)
+                  </a>
                   {canManage && (
                     <>
                       {smsEnabled && p.phone && (

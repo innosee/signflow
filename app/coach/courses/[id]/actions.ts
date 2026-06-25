@@ -21,7 +21,7 @@ import {
   getTenantId,
   requireSigningEnabled,
 } from "@/lib/dal";
-import { sealWithFes } from "@/lib/firma";
+import { sealWithFes } from "@/lib/fes";
 import {
   coachCanAccessCourse,
   courseVisibleToCoach,
@@ -1683,7 +1683,7 @@ export type SealState = { error?: string; sealed?: boolean } | undefined;
 
 /**
  * Coach löst FES-Siegelung für den gesamten Kurs aus (CLAUDE.md Schritt 9-10,
- * aktuell gegen `src/lib/firma.ts` **gemockt**). Pre-Conditions:
+ * aktuell gegen `src/lib/fes.ts` **gemockt**). Pre-Conditions:
  *   - Coach besitzt den Kurs, nicht unter Impersonation
  *   - Jede nicht-gelöschte Session ist `status = 'completed'`
  *   - JEDER enrollte Teilnehmer hat eine Freigabe in `participant_approvals`
@@ -1695,8 +1695,8 @@ export type SealState = { error?: string; sealed?: boolean } | undefined;
  *
  * Der PDF-URL zeigt für den Mock aktuell auf den bestehenden Per-TN-PDF-
  * Endpoint des ersten Teilnehmers, damit der "Download"-Link im Coach-UI
- * überhaupt was liefert. Real-Flow: Firma.dev liefert das gesiegelte PDF,
- * wir laden es in unser Storage und zeigen dessen URL.
+ * überhaupt was liefert. Real-Flow: self-hosted PAdES siegelt das PDF mit
+ * dem D-Trust-Cert, wir schreiben es in unser Storage und zeigen dessen URL.
  */
 /** Kurs-interne FES-Gate-Verletzungen → Coach-Fehlermeldung. */
 const SEAL_BLOCK_MESSAGES: Record<SealBlock, string> = {
@@ -1858,8 +1858,8 @@ export async function sealCourse(
 
   // Mock-URL: zeigt auf den bestehenden Per-TN-PDF-Endpoint des ersten TN,
   // damit der Coach aus dem UI heraus einen sinnvollen Download-Klick hat.
-  // Real-Flow (TODO): PDF rendern → Firma.dev hochladen → signed-PDF
-  // herunterladen → eigenen Storage + URL.
+  // Real-Flow (TODO): PDF rendern → self-hosted PAdES mit D-Trust-Cert
+  // siegeln → in eigenen Storage schreiben → URL.
   const firstParticipantId = enrolled[0]!.participantId;
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const pdfUrl = `${base}/api/courses/${ownedCourseId}/participants/${firstParticipantId}/pdf`;
@@ -1915,11 +1915,11 @@ export async function sealCourse(
     envelopeId = seal.envelopeId;
     // Gesiegelte URL als finalen Artefakt-Link persistieren — im Mock
     // unterscheidet sie sich vom Input-PDF nur durch `?sealed=<env>`,
-    // im Live-Modus wäre es der Firma.dev-Signed-PDF-Link bzw. der
-    // Storage-Link nach Download.
+    // im Live-Modus wäre es der Storage-Link auf das self-hosted
+    // PAdES-gesiegelte PDF.
     signedPdfUrl = seal.signedPdfUrl;
   } catch (err) {
-    console.error("firma.dev seal failed:", err);
+    console.error("fes seal failed:", err);
     // Reservierung zurückdrehen, damit ein erneuter Klick einen neuen
     // Versuch machen kann statt im „sent"-Limbo festzuhängen.
     await db
@@ -1948,7 +1948,7 @@ export async function sealCourse(
         action: "course.seal",
         resourceType: "course",
         resourceId: ownedCourseId,
-        metadata: { envelopeId, mock: process.env.FIRMA_DEV_MODE !== "live" },
+        metadata: { envelopeId, mock: process.env.FES_MODE !== "live" },
       },
       tx,
     );
