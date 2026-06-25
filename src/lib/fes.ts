@@ -3,21 +3,24 @@ import "server-only";
 import crypto from "node:crypto";
 
 /**
- * Firma.dev Client — **aktuell komplett gemockt**, bis der echte Account
- * eingerichtet ist. Interface ist bewusst minimal gehalten (ein einziger
- * Call pro Kurs, siehe CLAUDE.md → FES), damit der spätere Real-Swap
- * eine reine Implementation-Austausch-Aufgabe ist.
+ * FES-Siegel-Client — **aktuell komplett gemockt**, bis das D-Trust-Cert
+ * (via PSW Group, self-hosted PAdES) eingerichtet ist. Interface ist bewusst
+ * minimal gehalten (ein einziger Call pro Kurs, siehe CLAUDE.md → FES), damit
+ * der spätere Real-Swap eine reine Implementation-Austausch-Aufgabe ist.
+ *
+ * Anbieter: D-Trust-Siegel (AES) via PSW Group, self-hosted PAdES — das PDF
+ * verlässt unsere Infrastruktur nie (Details: Memory `project_fes_provider_decision`).
  *
  * Real-Flow (TODO):
- *   1. `POST /envelopes` mit PDF + Signer-Daten (Coach)
- *   2. Poll oder Webhook → `completed`
- *   3. `GET /envelopes/:id/pdf` → gesiegeltes PDF zurück
+ *   1. PDF laden, PAdES-Signatur mit dem D-Trust-Cert lokal applizieren
+ *   2. gesiegeltes PDF in unseren Storage zurückschreiben
+ *   3. signedPdfUrl + Envelope-/Referenz-ID zurückgeben
  *
  * Mock-Flow:
  *   - `sealWithFes()` gibt synchron einen Fake-Envelope-Status
  *     `"completed"` zurück und liefert die ursprüngliche PDF-URL einfach
  *     weiter — realistisch genug, um den UI-Flow end-to-end zu testen,
- *     ohne externen Service.
+ *     ohne externes Cert.
  */
 
 export type FesSealResult = {
@@ -42,10 +45,10 @@ export type FesSealInput = {
 };
 
 function isMockMode(): boolean {
-  // Explizites Opt-In: sobald FIRMA_DEV_API_KEY + FIRMA_DEV_MODE=live
-  // gesetzt sind, würde der Real-Flow greifen. Default = Mock, damit
-  // Dev/Preview-Deployments ohne externe API laufen.
-  return process.env.FIRMA_DEV_MODE !== "live";
+  // Explizites Opt-In: sobald das D-Trust-Cert eingerichtet und FES_MODE=live
+  // gesetzt ist, würde der Real-Flow greifen. Default = Mock, damit
+  // Dev/Preview-Deployments ohne Cert laufen.
+  return process.env.FES_MODE !== "live";
 }
 
 export async function sealWithFes(input: FesSealInput): Promise<FesSealResult> {
@@ -55,13 +58,13 @@ export async function sealWithFes(input: FesSealInput): Promise<FesSealResult> {
     // annimmt, das Siegel wäre echt.
     const envelopeId = `mock_env_${crypto.randomBytes(8).toString("hex")}`;
     console.info(
-      `[firma.dev mock] sealed course "${input.courseTitle}" → ${envelopeId}`,
+      `[fes mock] sealed course "${input.courseTitle}" → ${envelopeId}`,
     );
     // Distinct URL zurückgeben, damit im Audit-/UI-Layer klar ist: der
     // gespeicherte Artefakt-Link ist NICHT identisch mit dem (mutable)
-    // Input-PDF. Im Live-Modus wäre das der Firma.dev-Signed-PDF-Link
-    // nach Upload in unseren Storage — im Mock reicht ein Query-Param
-    // mit Envelope-ID als Marker.
+    // Input-PDF. Im Live-Modus wäre das der Link auf das self-hosted
+    // PAdES-gesiegelte PDF in unserem Storage — im Mock reicht ein
+    // Query-Param mit Envelope-ID als Marker.
     const sep = input.pdfUrl.includes("?") ? "&" : "?";
     return {
       envelopeId,
@@ -71,6 +74,6 @@ export async function sealWithFes(input: FesSealInput): Promise<FesSealResult> {
   }
 
   throw new Error(
-    "firma.dev live mode not yet implemented — set FIRMA_DEV_MODE=mock or unset it",
+    "FES live mode not yet implemented — set FES_MODE=mock or unset it",
   );
 }
