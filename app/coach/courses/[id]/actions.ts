@@ -1957,10 +1957,9 @@ export async function sealCourse(
       courseTitle: course.title,
     });
     envelopeId = seal.envelopeId;
-    // Gesiegelte URL als finalen Artefakt-Link persistieren — im Mock
-    // unterscheidet sie sich vom Input-PDF nur durch `?sealed=<env>`,
-    // im Live-Modus wäre es der Storage-Link auf das self-hosted
-    // PAdES-gesiegelte PDF.
+    // Finalen Artefakt-Link persistieren — im Bridge-Modus (kein FES) ist
+    // das identisch zur gerenderten Input-PDF-URL; im Live-Modus wäre es der
+    // Storage-Link auf das self-hosted PAdES-gesiegelte PDF.
     signedPdfUrl = seal.signedPdfUrl;
   } catch (err) {
     console.error("fes seal failed:", err);
