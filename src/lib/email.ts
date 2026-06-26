@@ -193,6 +193,33 @@ export async function sendCourseAssignedToCoach(params: {
   });
 }
 
+/**
+ * Der BT hat die E-Mail-Adresse eines Kunden korrigiert → die bisher
+ * verschickten Magic-Links zeigten auf die ALTE Adresse und sind jetzt
+ * revoked. Der Coach muss den Teilnehmer aktiv erneut einladen, sonst bleibt
+ * der Nachweis im „wartet auf TN"-Limbo (TN bekam nie einen funktionierenden
+ * Link). Diese Mail macht das sichtbar.
+ */
+export async function sendParticipantEmailChangedToCoach(params: {
+  to: string;
+  coachName: string;
+  customerName: string;
+  courseTitle: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo ${esc(params.coachName)},</p>
+    <p>die E-Mail-Adresse des Kunden <strong>${esc(params.customerName)}</strong> (${esc(params.courseTitle)}) wurde geändert.</p>
+    <p>Die bisher verschickten Einladungslinks sind dadurch <strong>ungültig</strong> geworden. Bitte benachrichtige den Teilnehmer erneut, damit er die offenen Termine an der neuen Adresse unterschreiben kann.</p>
+    ${renderButton(params.url, "Kunde öffnen")}
+  `;
+  await sendEmail({
+    to: params.to,
+    subject: `E-Mail geändert – ${params.customerName} bitte erneut einladen`,
+    html: renderLayout("E-Mail-Adresse des Kunden geändert", body),
+  });
+}
+
 export async function sendParticipantMagicLink(params: {
   to: string;
   participantName: string;
