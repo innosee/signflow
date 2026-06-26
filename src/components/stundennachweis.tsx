@@ -360,9 +360,8 @@ export function Stundennachweis(props: StundennachweisSheet) {
         )}
 
         <footer className="sheet-footer">
-          Erzeugt via Signflow. Finale Versiegelung via fortgeschrittener
-          elektronischer Signatur (FES) durch den Coach nach Freigabe der
-          Teilnehmer:in.
+          Erzeugt via Signflow. Einfache elektronische Signatur — abgesichert
+          durch Zeitstempel, Identitätsnachweis und Audit-Protokoll.
         </footer>
       </article>
     </>

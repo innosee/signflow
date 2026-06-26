@@ -687,7 +687,7 @@ export async function reopenSession(
   if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
     return {
       error:
-        "Dieser Kunde ist bereits mit FES versiegelt und kann rechtlich nicht mehr verändert werden. Für eine neue Maßnahme bitte den Bildungsträger einen neuen Kunden anlegen lassen.",
+        "Dieser Kunde ist bereits abgeschlossen und kann rechtlich nicht mehr verändert werden. Für eine neue Maßnahme bitte den Bildungsträger einen neuen Kunden anlegen lassen.",
     };
   }
 
@@ -795,7 +795,7 @@ export async function correctSessionTopic(
   if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
     return {
       error:
-        "Dieser Kunde ist bereits mit FES versiegelt und kann rechtlich nicht mehr verändert werden.",
+        "Dieser Kunde ist bereits abgeschlossen und kann rechtlich nicht mehr verändert werden.",
     };
   }
 
@@ -1745,12 +1745,12 @@ export type SealState = { error?: string; sealed?: boolean } | undefined;
 /** Kurs-interne FES-Gate-Verletzungen → Coach-Fehlermeldung. */
 const SEAL_BLOCK_MESSAGES: Record<SealBlock, string> = {
   anw_check_missing:
-    "ANW-Compliance-Check muss vor der Versiegelung mit Status „Freigabe“ durchlaufen sein.",
+    "ANW-Compliance-Check muss vor dem Abschluss mit Status „Freigabe“ durchlaufen sein.",
   not_abgeschlossen:
-    "Maßnahme muss vor der Versiegelung aktiv als abgeschlossen markiert werden.",
+    "Maßnahme muss vor dem Abschluss aktiv als abgeschlossen markiert werden.",
   review_not_approved:
-    "Der Bildungsträger muss die Anwesenheitsliste vor der Versiegelung prüfen und freigeben.",
-  no_sessions: "Kurs hat keine Sessions — nichts zu siegeln.",
+    "Der Bildungsträger muss die Anwesenheitsliste vor dem Abschluss prüfen und freigeben.",
+  no_sessions: "Kurs hat keine Sessions — nichts abzuschließen.",
   sessions_incomplete:
     "Mindestens eine Session ist noch nicht vollständig signiert.",
 };
@@ -1781,10 +1781,10 @@ export async function sealCourse(
     .where(eq(schema.finalDocuments.courseId, ownedCourseId))
     .limit(1);
   if (existingDoc?.fesStatus === "completed") {
-    return { error: "Kurs ist bereits mit FES gesiegelt." };
+    return { error: "Kurs ist bereits abgeschlossen." };
   }
   if (existingDoc?.fesStatus === "sent") {
-    return { error: "Siegelung läuft bereits — bitte warten." };
+    return { error: "Abschluss läuft bereits — bitte warten." };
   }
 
   // FES-Gates (zusätzlich zu Sessions/Approval): ANW-Check muss durch
@@ -1857,7 +1857,7 @@ export async function sealCourse(
   if (wrongCoach.length > 0) {
     return {
       error:
-        "Mindestens ein Termin wurde nicht von seinem zugewiesenen Coach signiert — die Versiegelung ist blockiert. Bitte den betroffenen Termin wieder öffnen und vom zugewiesenen Coach neu signieren lassen.",
+        "Mindestens ein Termin wurde nicht von seinem zugewiesenen Coach signiert — der Abschluss ist blockiert. Bitte den betroffenen Termin wieder öffnen und vom zugewiesenen Coach neu signieren lassen.",
     };
   }
 
@@ -1880,7 +1880,7 @@ export async function sealCourse(
   if (missing.length > 0) {
     return {
       error:
-        "Der Kunde hat den Nachweis noch nicht freigegeben — Siegel erst danach möglich.",
+        "Der Kunde hat den Nachweis noch nicht freigegeben — Abschluss erst danach möglich.",
     };
   }
 
@@ -1943,7 +1943,7 @@ export async function sealCourse(
 
   if (!reservedId) {
     return {
-      error: "Siegelung läuft bereits oder wurde soeben abgeschlossen.",
+      error: "Abschluss läuft bereits oder wurde soeben abgeschlossen.",
     };
   }
 
@@ -1970,7 +1970,7 @@ export async function sealCourse(
       .update(schema.finalDocuments)
       .set({ fesStatus: "pending" })
       .where(eq(schema.finalDocuments.id, reservedId));
-    return { error: "Siegelung fehlgeschlagen — bitte erneut versuchen." };
+    return { error: "Abschluss fehlgeschlagen — bitte erneut versuchen." };
   }
 
   const now = new Date();

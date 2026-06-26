@@ -18,8 +18,8 @@ const FEATURES = [
   },
   {
     icon: ShieldIcon,
-    title: "Fortgeschrittene Signatur (FES)",
-    desc: "Das finale PDF bekommt genau 1× eine fortgeschrittene elektronische Signatur (FES) nach eIDAS — ausreichend für die AfA, ohne den Aufwand einer QES.",
+    title: "Einfache elektronische Signatur",
+    desc: "Coach und Teilnehmer:in signieren digital per Canvas — mit Zeitstempel, Identitätsnachweis und Audit-Protokoll. Das finale A4-PDF ist ausreichend für die AfA, ohne den Aufwand einer QES. Das fortgeschrittene FES-Siegel nach eIDAS ist in Vorbereitung.",
   },
   {
     icon: ClockIcon,
@@ -34,7 +34,7 @@ const FEATURES = [
   {
     icon: GateIcon,
     title: "Bildungsträger gibt frei",
-    desc: "Vor dem Siegel prüft der Bildungsträger jede Anwesenheitsliste und gibt sie frei — oder fordert Nachbesserung an. Erst dann öffnet sich die FES-Versiegelung.",
+    desc: "Vor dem Abschluss prüft der Bildungsträger jede Anwesenheitsliste und gibt sie frei — oder fordert Nachbesserung an. Erst dann kann der Coach den Nachweis abschließen.",
   },
   {
     icon: SparkIcon,

@@ -16,8 +16,8 @@ const STEPS = [
   },
   {
     num: "04",
-    title: "Freigabe, FES & Übermittlung",
-    desc: "Der Bildungsträger prüft die fertige Liste und gibt sie frei. Erst dann versiegelt der Coach das A4-PDF mit fortgeschrittener elektronischer Signatur (FES nach eIDAS) — fertig für die AfA.",
+    title: "Freigabe, Abschluss & Übermittlung",
+    desc: "Der Bildungsträger prüft die fertige Liste und gibt sie frei. Erst dann schließt der Coach das A4-PDF mit einfacher elektronischer Signatur ab — fertig für die AfA. Das FES-Siegel nach eIDAS ist in Vorbereitung.",
   },
 ];
 
