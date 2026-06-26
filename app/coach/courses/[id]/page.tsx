@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
@@ -154,6 +154,32 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     )
     .groupBy(schema.sessions.id, schema.users.name)
     .orderBy(asc(schema.sessions.sessionDate));
+
+  // „Magic-Link aktiv?" — existiert ein nicht-revoketer, nicht abgelaufener
+  // Einladungslink für (Kurs × Kunde)? Steuert, ob offene Termine „Link
+  // verschickt, wartet auf TN" oder „Teilnehmer einladen" anzeigen. Nach einer
+  // BT-E-Mail-Korrektur sind die Alt-Links revoked → Coach muss neu einladen.
+  const participantId = participants[0]?.id ?? null;
+  const hasActiveInvite = participantId
+    ? (
+        await db
+          .select({ id: schema.participantAccessTokens.id })
+          .from(schema.participantAccessTokens)
+          .where(
+            and(
+              eq(schema.participantAccessTokens.courseId, id),
+              eq(schema.participantAccessTokens.participantId, participantId),
+              isNull(schema.participantAccessTokens.usedAt),
+              gt(schema.participantAccessTokens.expiresAt, new Date()),
+            ),
+          )
+          .limit(1)
+      ).length > 0
+    : false;
+  // Offene Termine warten auf eine TN-Unterschrift (Coach signiert, TN noch
+  // nicht). Nur dann ist eine (erneute) Einladung sinnvoll.
+  const needsInvite =
+    !hasActiveInvite && sessions.some((s) => s.status === "coach_signed");
 
   // Mehrere Coaches im Spiel? Dann zeigen wir pro Termin, wer zugewiesen ist.
   const distinctCoachIds = new Set(
@@ -327,6 +353,31 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
         <Stat label="Sessions" value={sessions.length.toString()} />
       </section>
 
+      {needsInvite && (
+        <section className="rounded-xl border border-orange-300 bg-orange-50 px-6 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="max-w-2xl">
+              <h2 className="text-sm font-semibold text-orange-900">
+                Teilnehmer (erneut) einladen
+              </h2>
+              <p className="mt-1 text-sm text-orange-800">
+                Es gibt offene Termine, für die aktuell kein gültiger
+                Einladungslink unterwegs ist — z.&nbsp;B. weil die E-Mail-Adresse
+                des Kunden geändert wurde oder der Link nach 24&nbsp;h abgelaufen
+                ist. Bitte benachrichtige den Teilnehmer, damit er unterschreiben
+                kann.
+              </p>
+            </div>
+            {!impersonating && (
+              <NotifyParticipantsButton
+                courseId={course.id}
+                participantCount={participants.length}
+              />
+            )}
+          </div>
+        </section>
+      )}
+
       <section className="rounded-xl border border-zinc-300 bg-white">
         <div className="flex items-center justify-between border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">
@@ -394,7 +445,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                     <div className="flex-1 space-y-1.5">
                       <p className="text-zinc-700">{s.topic}</p>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                        <SessionStatusBadge status={s.status} />
+                        <SessionStatusBadge
+                          status={s.status}
+                          hasActiveInvite={hasActiveInvite}
+                        />
                         {isKompetenzteam && s.coachName && (
                           <span
                             className="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800"
@@ -877,7 +931,24 @@ function formatDate(iso: string | null): string {
   return y && m && d ? `${d}.${m}.${y}` : iso;
 }
 
-function SessionStatusBadge({ status }: { status: string }) {
+function SessionStatusBadge({
+  status,
+  hasActiveInvite,
+}: {
+  status: string;
+  hasActiveInvite: boolean;
+}) {
+  // „coach_signed" ohne aktiven Magic-Link = Coach hat signiert, aber es ist
+  // (noch) keine gültige Einladung unterwegs → der TN kann nicht unterschreiben.
+  // „Link verschickt" würde hier fälschlich suggerieren, alles sei unterwegs
+  // (z.B. nachdem der BT eine falsche E-Mail korrigiert hat).
+  if (status === "coach_signed" && !hasActiveInvite) {
+    return (
+      <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-800">
+        Teilnehmer einladen
+      </span>
+    );
+  }
   return (
     <span
       className={`rounded-full px-2 py-0.5 ${SESSION_STATUS_BADGE[status] ?? ""}`}

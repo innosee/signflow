@@ -2,11 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
-import { sendCourseAssignedToCoach } from "@/lib/email";
+import {
+  sendCourseAssignedToCoach,
+  sendParticipantEmailChangedToCoach,
+} from "@/lib/email";
 import {
   assertNotImpersonating,
   getTenantId,
@@ -246,11 +249,84 @@ async function notifyAssignedCoaches(
 }
 
 /**
+ * Nach einer Kunden-E-Mail-Korrektur: alle Coaches benachrichtigen, deren
+ * Maßnahme dieses (ggf. geteilten) Kunden noch offene, auf eine TN-Unterschrift
+ * wartende Termine hat (`status='coach_signed'`) — nur dort ist ein erneutes
+ * Einladen überhaupt nötig. Best-effort, blockiert das Speichern nie.
+ */
+async function notifyCoachesParticipantEmailChanged(
+  participantId: string,
+  tenantId: string,
+): Promise<void> {
+  try {
+    const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const rows = await db
+      .selectDistinct({
+        courseId: schema.courses.id,
+        courseTitle: schema.courses.title,
+        customerName: schema.participants.name,
+        coachName: schema.users.name,
+        coachEmail: schema.users.email,
+      })
+      .from(schema.courses)
+      .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+      .innerJoin(
+        schema.participants,
+        eq(schema.participants.id, schema.courses.participantId),
+      )
+      .innerJoin(
+        schema.sessions,
+        eq(schema.sessions.courseId, schema.courses.id),
+      )
+      .where(
+        and(
+          eq(schema.courses.participantId, participantId),
+          eq(schema.users.tenantId, tenantId),
+          ne(schema.courses.status, "archived"),
+          isNull(schema.courses.deletedAt),
+          eq(schema.sessions.status, "coach_signed"),
+          isNull(schema.sessions.deletedAt),
+        ),
+      );
+    const results = await Promise.allSettled(
+      rows.map((r) =>
+        sendParticipantEmailChangedToCoach({
+          to: r.coachEmail,
+          coachName: r.coachName,
+          customerName: r.customerName,
+          courseTitle: r.courseTitle,
+          url: `${base}/coach/courses/${r.courseId}`,
+        }),
+      ),
+    );
+    results.forEach((res) => {
+      if (res.status === "rejected") {
+        console.error(
+          `email-changed notification failed for participant ${participantId}:`,
+          res.reason,
+        );
+      }
+    });
+  } catch (err) {
+    console.error(
+      `email-changed notification lookup failed for participant ${participantId}:`,
+      err,
+    );
+  }
+}
+
+/**
  * Bildungsträger bearbeitet die Stammdaten eines bestehenden Kunden — Maßnahme-
  * Felder (AVGS, Ort, UE, Bedarfsträger, Typ, Bundesland, Zeitraum, zugewiesener
- * Coach) UND die Kunden-Person (Name, E-Mail, Kunden-Nr.). Reine Stammdaten:
- * Signaturen, Termine und FES-Gates bleiben unangetastet — geändert wird nur,
- * was nicht an einer Unterschrift hängt. `courseId` kommt als Hidden-Feld.
+ * Coach) UND die Kunden-Person (Name, E-Mail, Kunden-Nr.). Signaturen, Termine
+ * und FES-Gates bleiben unangetastet — geändert wird nur, was nicht an einer
+ * Unterschrift hängt. `courseId` kommt als Hidden-Feld.
+ *
+ * AUSNAHME E-Mail-Korrektur: Ändert sich die Kunden-E-Mail, sind die bisher
+ * verschickten Magic-Links wertlos (gingen an die alte Adresse). Sie werden
+ * revoked (`participant_access_tokens.used_at`) und die betroffenen Coaches
+ * per Mail informiert, dass sie den TN erneut einladen müssen. Signaturen
+ * bleiben erhalten — nur offene Termine brauchen einen neuen Link.
  */
 export async function updateCourse(
   _prev: CourseFormState,
@@ -268,9 +344,14 @@ export async function updateCourse(
     .select({
       id: schema.courses.id,
       participantId: schema.courses.participantId,
+      participantEmail: schema.participants.email,
     })
     .from(schema.courses)
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courses.participantId),
+    )
     .where(
       and(
         eq(schema.courses.id, courseId),
@@ -301,6 +382,13 @@ export async function updateCourse(
     customerEmail,
     customerKundenNr,
   } = parsed.values;
+
+  // E-Mail-Korrektur erkennen: die bisher verschickten Magic-Links zeigten auf
+  // die alte Adresse. Bei einer Änderung müssen sie revoked werden und der
+  // Coach den TN erneut einladen (sonst „wartet auf TN"-Limbo).
+  const emailChanged =
+    course.participantEmail.trim().toLowerCase() !==
+    customerEmail.trim().toLowerCase();
 
   const refs = await validateCourseRefs(parsed.values, tenantId);
   if (!refs.ok) return { error: refs.error };
@@ -346,6 +434,26 @@ export async function updateCourse(
             eq(schema.participants.tenantId, tenantId),
           ),
         );
+
+      if (emailChanged) {
+        // Alt-Links zeigten auf die falsche Adresse → explizit revoken
+        // (used_at). Greift über ALLE Maßnahmen dieses (ggf. geteilten)
+        // Kunden. Die Coach-Seite leitet daraus „Teilnehmer (erneut)
+        // einladen" ab; Coach-/TN-Signaturen bleiben unangetastet.
+        await tx
+          .update(schema.participantAccessTokens)
+          .set({ usedAt: new Date() })
+          .where(
+            and(
+              eq(
+                schema.participantAccessTokens.participantId,
+                course.participantId,
+              ),
+              isNull(schema.participantAccessTokens.usedAt),
+              gt(schema.participantAccessTokens.expiresAt, new Date()),
+            ),
+          );
+      }
 
       await tx
         .update(schema.courses)
@@ -427,6 +535,13 @@ export async function updateCourse(
   // Nur NEU ins Team aufgenommene Coaches benachrichtigen — wer schon zugewiesen
   // war, bekommt beim reinen Stammdaten-Edit keine erneute Mail.
   await notifyAssignedCoaches(courseId, addedCoachIds, customerName, title);
+
+  // E-Mail-Korrektur: Coaches mit offenen (auf TN wartenden) Terminen dieses
+  // Kunden aktiv informieren, dass sie den TN an die neue Adresse erneut
+  // einladen müssen.
+  if (emailChanged) {
+    await notifyCoachesParticipantEmailChanged(course.participantId, tenantId);
+  }
 
   redirect("/bildungstraeger/courses");
 }

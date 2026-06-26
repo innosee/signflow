@@ -679,8 +679,10 @@ export const participantAccessTokens = pgTable(
     // Magic-Link-Mail versendet, nie in der DB gespeichert.
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    // Wird gesetzt wenn ein neuer Token für dieselbe (course, participant)
-    // ausgestellt wird — invalidiert den alten Link.
+    // Expliziter Revoke-Marker. Re-Issue invalidiert alte Links NICHT mehr
+    // (seit 2026-06-19, mehrere aktive Links pro Paarung erlaubt). used_at wird
+    // nur beim aktiven Revoke gesetzt — z.B. wenn der BT die Kunden-E-Mail
+    // korrigiert und die an die alte Adresse verschickten Links wertlos werden.
     usedAt: timestamp("used_at", { withTimezone: true }),
   },
   (t) => [
