@@ -54,7 +54,7 @@ export default async function BildungstraegerReviewsPage() {
           <p className="mt-1 text-sm text-zinc-600">
             Coaches reichen abgeschlossene, vom Kunden freigegebene
             Anwesenheitslisten zur Prüfung ein. Erst nach deiner Freigabe kann
-            der Coach mit FES versiegeln.
+            der Coach den Nachweis abschließen.
           </p>
         </div>
         <Link

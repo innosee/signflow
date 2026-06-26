@@ -206,7 +206,7 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
             <p className="mt-1 text-sm text-zinc-600">
               {pendingSubmissions === 0
                 ? "Aktuell kein Kurs zur Übermittlung bereit."
-                : `${pendingSubmissions} gesiegelter ${
+                : `${pendingSubmissions} abgeschlossener ${
                     pendingSubmissions === 1 ? "Kurs wartet" : "Kurse warten"
                   } auf Übermittlung.`}
             </p>

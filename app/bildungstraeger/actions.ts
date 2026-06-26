@@ -506,9 +506,9 @@ export async function submitCourseToAfa(
       ),
     )
     .limit(1);
-  if (!doc) return { error: "Kurs ist noch nicht gesiegelt." };
+  if (!doc) return { error: "Kurs ist noch nicht abgeschlossen." };
   if (doc.fesStatus !== "completed") {
-    return { error: "FES-Siegel fehlt — erst muss der Coach siegeln." };
+    return { error: "Abschluss fehlt — erst muss der Coach den Nachweis abschließen." };
   }
   if (doc.afaStatus === "submitted") {
     return { error: "Kurs wurde bereits an die AfA übermittelt." };

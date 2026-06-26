@@ -27,14 +27,14 @@ const COACH_FAQ: Q[] = [
   },
   {
     q: "Kann ich eine Maßnahme nach Abschluss korrigieren?",
-    a: "Vor der FES-Versiegelung: ja, alle Felder editierbar. Nach der Versiegelung ist das PDF unveränderlich (das ist Sinn der elektronischen Signatur). Bei echten Fehlern kannst du einen Korrektur-Nachtrag mit neuer FES erzeugen.",
+    a: "Vor dem Abschluss: ja, alle Felder editierbar. Nach dem Abschluss ist das PDF fixiert (das ist Sinn der elektronischen Signatur). Bei echten Fehlern legt der Bildungsträger eine neue Maßnahme für den Korrektur-Nachtrag an.",
   },
 ];
 
 const BILDUNGSTRAEGER_FAQ: Q[] = [
   {
     q: "Ist die elektronische Signatur rechtsgültig für die AfA?",
-    a: "Ja. Wir nutzen die fortgeschrittene elektronische Signatur (FES) nach eIDAS (EU-Verordnung 910/2014) über Firma.dev. Die AfA akzeptiert FES für Stundennachweise — eine qualifizierte Signatur (QES) ist nicht erforderlich und würde deutlich höhere Kosten verursachen.",
+    a: "Ja. Die Anwesenheitslisten werden digital von Coach und Teilnehmer:in signiert (einfache elektronische Signatur nach eIDAS, EU-Verordnung 910/2014) — abgesichert durch Zeitstempel, Identitätsnachweis und Audit-Protokoll. Das ergänzende fortgeschrittene Siegel (FES via D-Trust) ist in Vorbereitung. Eine qualifizierte Signatur (QES) ist für AfA-Stundennachweise nicht erforderlich und würde deutlich höhere Kosten verursachen.",
   },
   {
     q: "Wo werden die Daten gespeichert?",

@@ -132,7 +132,7 @@ export default async function BildungstraegerSubmissionsPage() {
                 `AVGS ${r.avgsNummer}`,
                 r.bedarfstraegerName,
                 `Coach: ${r.coachName}`,
-                "Noch nicht gesiegelt",
+                "Noch nicht abgeschlossen",
               ]}
               pdfUrl={null}
             />

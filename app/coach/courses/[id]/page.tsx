@@ -476,9 +476,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               <h2 className="text-lg font-semibold">Abschluss</h2>
               <p className="mt-1 text-sm text-zinc-600">
                 Wenn alle Termine signiert sind, sende dem Teilnehmer die
-                Vorschau. Nach dessen Freigabe versiegelst du das Dokument mit
-                FES und übergibst es an deinen Bildungsträger zur Übermittlung
-                an die Agentur für Arbeit.
+                Vorschau. Nach dessen Freigabe schließt du den Nachweis ab
+                (einfache elektronische Signatur) und übergibst ihn an deinen
+                Bildungsträger zur Übermittlung an die Agentur für Arbeit.
               </p>
             </div>
             {participants.length > 0 && (
@@ -631,12 +631,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </Step>
           <Step
             index={6}
-            title="Mit FES versiegeln"
+            title="Nachweis abschließen"
             done={isSealed}
             subtitle={
               isSealed
-                ? `Gesiegelt am ${finalDoc?.completedAt ? new Date(finalDoc.completedAt).toLocaleString("de-DE") : "—"}.`
-                : "Letzter Schritt vor der Übergabe an den Bildungsträger."
+                ? `Abgeschlossen am ${finalDoc?.completedAt ? new Date(finalDoc.completedAt).toLocaleString("de-DE") : "—"}.`
+                : "Erzeugt das finale Dokument mit einfacher elektronischer Signatur — letzter Schritt vor der Übergabe an den Bildungsträger."
             }
           >
             {!impersonating && !isSealed && (

@@ -15,9 +15,9 @@ import { getActiveRole, getCurrentSession } from "@/lib/dal";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Signflow — digitale AfA-Stundennachweise mit FES",
+  title: "Signflow — digitale AfA-Stundennachweise",
   description:
-    "Stundennachweise für AVGS-Maßnahmen digital erfassen, von Coach und Teilnehmer:innen signieren, als A4-PDF mit fortgeschrittener elektronischer Signatur (FES) an die Agentur für Arbeit übermitteln.",
+    "Stundennachweise für AVGS-Maßnahmen digital erfassen, von Coach und Teilnehmer:innen signieren, als A4-PDF mit einfacher elektronischer Signatur an die Agentur für Arbeit übermitteln. FES-Siegel in Vorbereitung.",
 };
 
 export default async function Home() {

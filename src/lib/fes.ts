@@ -56,20 +56,21 @@ export async function sealWithFes(input: FesSealInput): Promise<FesSealResult> {
     // Mock-Envelope-ID so formatieren, dass sie in Logs sofort als Fake
     // erkennbar ist — hilft bei Debugging, falls jemand versehentlich
     // annimmt, das Siegel wäre echt.
-    const envelopeId = `mock_env_${crypto.randomBytes(8).toString("hex")}`;
+    // Bridge-Modus (kein FES): das finale Dokument trägt die einfachen
+    // elektronischen Signaturen (Canvas + Zeitstempel + Audit), KEIN Siegel.
+    // Wir hängen daher KEINEN Fake-`?sealed=`-Marker an — die Artefakt-URL
+    // ist die echte gerenderte PDF-URL. Die `envelopeId` bleibt nur als
+    // interne Abschluss-Referenz erhalten (klar als Nicht-FES erkennbar).
+    // Im Live-Modus (FES_MODE=live) wäre signedPdfUrl der Storage-Link auf
+    // das self-hosted PAdES-gesiegelte PDF.
+    const envelopeId = `bridge_${crypto.randomBytes(8).toString("hex")}`;
     console.info(
-      `[fes mock] sealed course "${input.courseTitle}" → ${envelopeId}`,
+      `[fes bridge] finalized course "${input.courseTitle}" (einfache Signatur, kein FES) → ${envelopeId}`,
     );
-    // Distinct URL zurückgeben, damit im Audit-/UI-Layer klar ist: der
-    // gespeicherte Artefakt-Link ist NICHT identisch mit dem (mutable)
-    // Input-PDF. Im Live-Modus wäre das der Link auf das self-hosted
-    // PAdES-gesiegelte PDF in unserem Storage — im Mock reicht ein
-    // Query-Param mit Envelope-ID als Marker.
-    const sep = input.pdfUrl.includes("?") ? "&" : "?";
     return {
       envelopeId,
       status: "completed",
-      signedPdfUrl: `${input.pdfUrl}${sep}sealed=${envelopeId}`,
+      signedPdfUrl: input.pdfUrl,
     };
   }
 
