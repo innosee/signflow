@@ -269,7 +269,6 @@ async function notifyCoachesParticipantEmailChanged(
         coachEmail: schema.users.email,
       })
       .from(schema.courses)
-      .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
       .innerJoin(
         schema.participants,
         eq(schema.participants.id, schema.courses.participantId),
@@ -277,6 +276,16 @@ async function notifyCoachesParticipantEmailChanged(
       .innerJoin(
         schema.sessions,
         eq(schema.sessions.courseId, schema.courses.id),
+      )
+      // Den für den offenen Termin VERANTWORTLICHEN Coach adressieren —
+      // sessions.coachId (Kompetenzteam) mit Fallback auf den Kurs-Lead.
+      // Spiegelt die Zuständigkeit der Coach-Seite (assignedToMe).
+      .innerJoin(
+        schema.users,
+        eq(
+          schema.users.id,
+          sql`coalesce(${schema.sessions.coachId}, ${schema.courses.coachId})`,
+        ),
       )
       .where(
         and(
