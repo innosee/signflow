@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 
 import { BUNDESLAENDER } from "@/lib/feiertage";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
@@ -305,12 +306,12 @@ export function CourseForm({
         >
           {pending ? "Wird gespeichert…" : submitLabel}
         </button>
-        <a
+        <Link
           href="/bildungstraeger/courses"
           className="text-sm text-zinc-600 underline-offset-2 hover:underline"
         >
           Abbrechen
-        </a>
+        </Link>
       </div>
     </form>
   );
