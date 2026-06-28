@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull, ne, sql as drizzleSql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import {
   assertNotImpersonating,
   getTenantId,
@@ -21,10 +22,10 @@ export default async function EditParticipantPage({ params }: Props) {
   const tenantId = getTenantId(session);
   const { id, tnId } = await params;
 
-  // Kurs + Coach-Ownership in einer Query mit dem TN-Stammdatensatz joinen,
-  // damit ein Coach durch URL-Manipulation NICHT auf TN-Daten anderer
-  // Kurse/Tenants zugreifen kann. `course_participants` ist das gating
-  // Element — fehlt die Enrollment-Zeile, gibt's 404.
+  // Kurs + Kompetenzteam-Zugehörigkeit in einer Query mit dem TN-Stammdatensatz
+  // joinen, damit ein Coach durch URL-Manipulation NICHT auf TN-Daten anderer
+  // Kurse/Tenants zugreifen kann. `courseVisibleToCoach` ist das gating
+  // Element — ist der Coach nicht im Team, gibt's 404.
   const [row] = await db
     .select({
       courseId: schema.courses.id,
@@ -43,7 +44,7 @@ export default async function EditParticipantPage({ params }: Props) {
     .where(
       and(
         eq(schema.courses.id, id),
-        eq(schema.courses.coachId, session.user.id),
+        courseVisibleToCoach(session.user.id),
         eq(schema.participants.id, tnId),
         eq(schema.participants.tenantId, tenantId),
         isNull(schema.courses.deletedAt),

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
 import type { Abschlussbericht } from "@/db/schema";
 
@@ -48,7 +49,7 @@ export default async function BerEditorPage({ params }: Props) {
     .where(
       and(
         eq(schema.courses.id, courseId),
-        eq(schema.courses.coachId, session.user.id),
+        courseVisibleToCoach(session.user.id),
         isNull(schema.courses.deletedAt),
         eq(schema.participants.id, participantId),
       ),

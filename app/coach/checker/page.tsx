@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import { requireCoach } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ export default async function CheckerDashboard() {
     )
     .where(
       and(
-        eq(schema.courses.coachId, session.user.id),
+        courseVisibleToCoach(session.user.id),
         isNull(schema.courses.deletedAt),
       ),
     )

@@ -6,6 +6,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
 export type BerActionState =
@@ -23,8 +24,8 @@ type OwnedContext = {
 };
 
 /**
- * Prüft: (1) Kurs gehört Coach, (2) TN ist im Kurs eingeschrieben.
- * Ohne beides darf weder draft noch submit durchgehen.
+ * Prüft: (1) Coach ist im Kompetenzteam des Kurses, (2) TN ist im Kurs
+ * eingeschrieben. Ohne beides darf weder draft noch submit durchgehen.
  */
 async function requireOwnedTnContext(
   courseId: string,
@@ -37,7 +38,7 @@ async function requireOwnedTnContext(
     .where(
       and(
         eq(schema.courses.id, courseId),
-        eq(schema.courses.coachId, coachId),
+        courseVisibleToCoach(coachId),
         isNull(schema.courses.deletedAt),
         eq(schema.courses.participantId, participantId),
       ),
