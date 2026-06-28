@@ -7,6 +7,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { courseVisibleToCoach } from "@/lib/course-access";
+import {
+  inputsEqual,
+  readHardBlocks,
+  readSnapshotInput,
+} from "@/lib/checker/snapshot";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
 export type BerActionState =
@@ -166,14 +171,14 @@ export async function saveBerDraftAction(
 /**
  * Finale Einreichung an den Bildungsträger.
  *
- * ⚠️ TODO (vor Production): `lastCheckPassed` kommt aktuell aus dem FormData
- * — also vom Client. Das ist bewusst so gelöst, weil die Validierung im
- * MVP-Stand client-seitig (Regex-Dummy) läuft und es keine zweite Quelle
- * gäbe, die der Server prüfen könnte. **Sobald das IONOS-/Azure-Wiring
- * steht, muss dieser Pfad auf serverseitige Re-Validierung umgestellt
- * werden** — die Azure-Response ist dann der autoritative Pass/Fail-Wert.
- * Bis dahin bleibt Submit effektiv optional-gesichert; ein bewusst
- * manipulierter Client kann submitten. Im Audit-Log ist das nachvollziehbar.
+ * Der Berichts-Checker ist bewusst rein beratend (Produktentscheidung) —
+ * Hinweise, Verstöße und fehlende Pflichtbausteine blockieren das Einreichen
+ * NIE. EINZIGE harte Hürde: Hard-Blocks (explizite Gesundheits-/Art-9-Daten,
+ * harte Ablehnungs-Prognose) brauchen eine dokumentierte Override-Begründung,
+ * weil die DSGVO-Grundlage (Art. 6 lit. b) Art-9-Freiheit der gespeicherten
+ * Berichte voraussetzt. Sonst nur die minimale Struktur-Bedingung (mind. ein
+ * Abschnitt mit Inhalt). Die DB-Spalte `lastCheckPassed` bleibt aus Back-Compat
+ * auf `true`; der autoritative Inhalts-Review passiert beim Bildungsträger.
  */
 export async function submitBerAction(
   _prev: BerActionState,
@@ -197,7 +202,6 @@ export async function submitBerAction(
     formData.get("mustHaveOverrideReason") ?? "",
   ).trim();
   const overrideActive = overrideReasonRaw.length > 0;
-  const lastCheckPassed = formData.get("lastCheckPassed") === "true";
   const checkSnapshotRaw = formData.get("checkSnapshot");
   // Snapshot ist ein String (JSON) vom Client. Wir validieren beim Parse
   // grob auf Objekt-Form — Zod-freie Variante, da das Shape stabil ist
@@ -217,11 +221,24 @@ export async function submitBerAction(
   if (!courseId || !participantId) {
     return { error: "Kurs oder Teilnehmer fehlt." };
   }
-  if (!lastCheckPassed && !overrideActive) {
-    return {
-      error:
-        "Der Bericht hat die finale Prüfung nicht bestanden — bitte erst korrigieren.",
-    };
+  // Der Berichts-Checker ist rein beratend — Hinweise/Verstöße/fehlende
+  // Pflichtbausteine blockieren das Einreichen NIE. EINZIGE Ausnahme:
+  // Hard-Blocks (explizite Gesundheits-/Art-9-Daten, harte Ablehnungs-
+  // Prognose) dürfen nicht ungeprüft gespeichert werden (DSGVO Art. 6 lit. b
+  // setzt Art-9-Freiheit voraus). Defense-in-Depth gegen den Client-Gate:
+  // hat der mitgeschickte Snapshot Hard-Blocks für GENAU den eingereichten
+  // Text und fehlt eine Override-Begründung → ablehnen.
+  if (!overrideActive) {
+    const snapHardBlocks = readHardBlocks(checkSnapshot);
+    const snapInput = readSnapshotInput(checkSnapshot);
+    const matchesSubmitted =
+      !!snapInput && inputsEqual(snapInput, { teilnahme, ablauf, fazit });
+    if (snapHardBlocks.length > 0 && matchesSubmitted) {
+      return {
+        error:
+          "Der Bericht enthält als sensibel markierte Inhalte (z.B. Gesundheitsangaben oder eine harte negative Prognose). Bitte entferne die Stelle — oder begründe den Fehlalarm.",
+      };
+    }
   }
   if (overrideActive) {
     if (overrideReasonRaw.length < OVERRIDE_REASON_MIN) {
@@ -235,19 +252,11 @@ export async function submitBerAction(
       };
     }
   }
-  // Vollständige 3-Abschnitt-Pflicht gilt nur ohne Override. Mit Override
-  // (kurze AVGS-Maßnahme, Coach hat dokumentiert warum) reicht mindestens
-  // ein gefüllter Abschnitt — die fehlenden Sektionen bleiben sichtbar
-  // leer im PDF und die Begründung erklärt warum.
-  if (!overrideActive && (!teilnahme.trim() || !ablauf.trim() || !fazit.trim())) {
-    return { error: "Alle drei Abschnitte müssen ausgefüllt sein." };
-  }
-  if (
-    overrideActive &&
-    !teilnahme.trim() &&
-    !ablauf.trim() &&
-    !fazit.trim()
-  ) {
+  // Einzige harte Struktur-Bedingung: mindestens ein Abschnitt mit Inhalt —
+  // sonst gibt es buchstäblich nichts einzureichen. Leere Abschnitte bleiben
+  // sichtbar leer im PDF; Vollständigkeit beurteilt der Coach (und der
+  // Bildungsträger), nicht ein Hard-Gate.
+  if (!teilnahme.trim() && !ablauf.trim() && !fazit.trim()) {
     return {
       error:
         "Mindestens ein Abschnitt muss Inhalt haben — sonst gibt es nichts einzureichen.",

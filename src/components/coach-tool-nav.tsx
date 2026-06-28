@@ -43,6 +43,14 @@ const CHECK_TOOL: Tool = {
 };
 
 /**
+ * Der BER-Editor liegt URL-technisch unter `/coach/courses/<id>/teilnehmer/
+ * <tnId>/bericht`, ist aber Checker-Funktionalität (Abschlussbericht
+ * schreiben + prüfen). Würde der breite `/coach/courses`-Prefix des Sign-
+ * Tools greifen, zeigte der Switcher fälschlich „Signatur" als aktiv.
+ */
+const BER_EDITOR_RE = /^\/coach\/courses\/[^/]+\/teilnehmer\/[^/]+\/bericht/;
+
+/**
  * Aktives Tool aus dem Pfad ableiten. `/coach` (exact) gilt als Sign-
  * Tool-Landing — Prefix-Matching würde sonst alle Coach-Routen treffen.
  * Settings (`/coach/settings`) ist tool-übergreifend und bleibt deshalb
@@ -50,6 +58,11 @@ const CHECK_TOOL: Tool = {
  * Switcher zeigt für /settings das Sign-Tool als aktiv (Default).
  */
 function detectTool(pathname: string, tools: Tool[]): Tool {
+  // Spezifischer Override vor dem breiten Prefix-Matching: der BER-Editor
+  // gehört zum Checker, auch wenn er unter /coach/courses hängt.
+  if (BER_EDITOR_RE.test(pathname)) {
+    return tools.find((t) => t.key === "check") ?? tools[0]!;
+  }
   for (const t of tools) {
     if (pathname === t.href) return t;
     if (t.pathPrefixes.some((p) => pathname.startsWith(p))) return t;

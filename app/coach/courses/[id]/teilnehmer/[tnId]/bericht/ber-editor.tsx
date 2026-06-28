@@ -362,10 +362,41 @@ export function BerEditor({
   }
 
   function handleSubmitBer() {
-    if (!result) return;
+    if (!canSubmit) return;
     const overrideTrim = mustHaveOverrideReason.trim();
     const overrideActive = overrideTrim.length >= 10;
-    if (result.status !== "pass" && !overrideActive) return;
+    // EINZIGE harte Hürde: Hard-Blocks (explizite Gesundheits-/Art-9-Daten,
+    // harte Ablehnungs-Prognose) dürfen nicht ungeprüft gespeichert werden —
+    // die DSGVO-Grundlage (Art. 6 lit. b) setzt voraus, dass solche Inhalte
+    // nicht im Bericht landen. Der Coach muss die Stelle entfernen ODER (bei
+    // Fehlalarm) bewusst begründen. Alles andere ist rein beratend.
+    if (hasHardBlock && !overrideActive) {
+      setSubmitError(
+        "Der Bericht enthält als sensibel markierte Inhalte (z.B. Gesundheitsangaben oder eine harte negative Prognose). Bitte entferne die Stelle — oder begründe unten (mind. 10 Zeichen), warum es ein Fehlalarm ist. Erst dann ist das Einreichen möglich.",
+      );
+      return;
+    }
+    // Sonstige offene Hinweise: nur sanfte Rückfrage, nie Block.
+    const hasOpenHints =
+      !!result &&
+      (result.status !== "pass" ||
+        result.violations.length > 0 ||
+        result.mustHaves.some((m) => !m.covered));
+    if (!result) {
+      if (
+        !window.confirm(
+          "Du hast den Bericht noch nicht final geprüft. Trotzdem an den Bildungsträger einreichen?",
+        )
+      )
+        return;
+    } else if (hasOpenHints) {
+      if (
+        !window.confirm(
+          "Es gibt noch offene Hinweise des Checkers. Der Bildungsträger sieht den Bericht so wie er ist — trotzdem einreichen?",
+        )
+      )
+        return;
+    }
     setSubmitError(null);
     const fd = new FormData();
     fd.append("courseId", courseId);
@@ -432,17 +463,10 @@ export function BerEditor({
     input.ablauf.trim().length > 0 ||
     input.fazit.trim().length > 0;
 
-  const overrideReasonTrim = mustHaveOverrideReason.trim();
-  const overrideActive = overrideReasonTrim.length >= 10;
-  const hasMissingMustHaves =
-    !!result && result.mustHaves.some((m) => !m.covered);
+  // Hard-Block = die einzige Hürde fürs Einreichen (siehe handleSubmitBer).
   const hasHardBlock =
     !!result && result.violations.some((v) => v.severity === "hard_block");
-  const effectivePass =
-    !isProcessing &&
-    !!result &&
-    (result.status === "pass" ||
-      (overrideActive && !hasHardBlock && hasMissingMustHaves));
+  const overrideActive = mustHaveOverrideReason.trim().length >= 10;
 
   // 60-Sekunden-Buffer filtert Mikro-Autosaves direkt nach dem Submit raus
   // (z.B. wenn der Submit kurz nach einem Tipp kommt). Gleicher Wert wie
@@ -455,7 +479,6 @@ export function BerEditor({
 
   const inputUnchangedSinceCheck =
     !!result && !!lastCheckedInput && inputsEqual(input, lastCheckedInput);
-  const passed = effectivePass;
   const checkLabel = isProcessing
     ? "Prüfung läuft…"
     : result
@@ -556,6 +579,39 @@ export function BerEditor({
           </span>
         </label>
 
+        {hasHardBlock && status !== "submitted" && (
+          <div className="space-y-2 rounded-xl border border-rose-300 bg-rose-50 p-5">
+            <p className="text-sm font-medium text-rose-900">
+              Sensible Inhalte markiert — Einreichen erfordert eine Aktion
+            </p>
+            <p className="text-xs text-rose-800">
+              Der Checker hat Inhalte gefunden, die nicht in einen AVGS-Bericht
+              gehören (z.B. Gesundheitsangaben, Diagnosen, harte negative
+              Prognose). <strong>Entferne die Stelle</strong> (siehe Sidebar) und
+              prüfe erneut — oder, falls es ein <strong>Fehlalarm</strong> ist,
+              begründe es kurz, dann kannst du trotzdem einreichen.
+            </p>
+            <textarea
+              rows={3}
+              value={mustHaveOverrideReason}
+              onChange={(e) => setMustHaveOverrideReason(e.target.value)}
+              maxLength={500}
+              placeholder="z.B. Fehlalarm — der Satz ist positiv formuliert und enthält keine Gesundheitsangabe."
+              spellCheck
+              lang="de"
+              data-gramm="false"
+              data-gramm_editor="false"
+              data-enable-grammarly="false"
+              className="block w-full resize-y rounded-md border border-rose-300 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"
+            />
+            <p className="text-[11px] text-rose-700">
+              {overrideActive
+                ? "✓ Begründung erfasst — Einreichen ist möglich (wird beim Bildungsträger protokolliert)."
+                : `Noch ${Math.max(0, 10 - mustHaveOverrideReason.trim().length)} Zeichen Begründung nötig.`}
+            </p>
+          </div>
+        )}
+
         {submitError && (
           <div className="rounded-xl border border-rose-300 bg-rose-50 px-5 py-3 text-sm text-rose-800">
             {submitError}
@@ -591,7 +647,7 @@ export function BerEditor({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {passed && (
+            {canSubmit && status !== "submitted" && (
               <button
                 type="button"
                 onClick={handleExportPdf}
@@ -600,24 +656,24 @@ export function BerEditor({
                 Als Erango-PDF exportieren
               </button>
             )}
-            {passed &&
-              (status === "submitted" ? (
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white">
-                    ✓ Bereits eingereicht
-                  </div>
-                  {submittedBerId && (
-                    <Link
-                      href={`/coach/abschlussberichte/${submittedBerId}/print`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-lg border border-emerald-400 bg-white px-3 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
-                    >
-                      PDF öffnen ↗
-                    </Link>
-                  )}
+            {status === "submitted" ? (
+              <div className="flex items-center gap-2">
+                <div className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white">
+                  ✓ Bereits eingereicht
                 </div>
-              ) : (
+                {submittedBerId && (
+                  <Link
+                    href={`/coach/abschlussberichte/${submittedBerId}/print`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg border border-emerald-400 bg-white px-3 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+                  >
+                    PDF öffnen ↗
+                  </Link>
+                )}
+              </div>
+            ) : (
+              canSubmit && (
                 <button
                   type="button"
                   onClick={handleSubmitBer}
@@ -633,7 +689,8 @@ export function BerEditor({
                     ? "Reiche ein …"
                     : "Einreichen + PDF anzeigen →"}
                 </button>
-              ))}
+              )
+            )}
             <button
               type="submit"
               disabled={
@@ -727,9 +784,10 @@ function StatusBanner({
     return (
       <div className="rounded-xl border border-zinc-300 bg-white p-5 text-sm text-zinc-700">
         <p>
-          Schreib den Bericht direkt hier. Autosave läuft im Hintergrund —
-          wenn alles stimmt, klick &bdquo;Bericht final prüfen&ldquo; und
-          danach &bdquo;An Bildungsträger einreichen&ldquo;.
+          Schreib den Bericht direkt hier. Autosave läuft im Hintergrund. Der
+          Checker ist <strong>optional</strong> — &bdquo;Bericht final
+          prüfen&ldquo; gibt dir Hinweise, blockiert das Einreichen aber nie. Du
+          kannst jederzeit &bdquo;Einreichen + PDF anzeigen&ldquo; klicken.
         </p>
       </div>
     );

@@ -69,6 +69,18 @@ export function readSoftFlags(raw: unknown): Violation[] {
   return result.violations.filter((v) => v && v.severity === "soft_flag");
 }
 
+/**
+ * Hard-Blocks aus der Snapshot-Result-Struktur (explizite Gesundheits-/
+ * Art-9-Daten, harte Ablehnungs-Prognose). Server-seitiges Defense-in-Depth
+ * beim Einreichen: solche Inhalte dürfen nur mit dokumentierter Begründung
+ * gespeichert werden (DSGVO Art. 6 lit. b setzt Art-9-Freiheit voraus).
+ */
+export function readHardBlocks(raw: unknown): Violation[] {
+  const result = readSnapshotResult(raw);
+  if (!result || !Array.isArray(result.violations)) return [];
+  return result.violations.filter((v) => v && v.severity === "hard_block");
+}
+
 /** Strikter Vergleich: alle drei Abschnitte 1:1 identisch? */
 export function inputsEqual(
   a: CheckerInput | null,
