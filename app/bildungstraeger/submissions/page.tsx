@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { AFA_SUBMISSION_ENABLED } from "@/lib/feature-flags";
 
 import { SubmitAfaButton } from "./submit-button";
 
@@ -75,6 +76,18 @@ export default async function BildungstraegerSubmissionsPage() {
         </Link>
       </header>
 
+      {!AFA_SUBMISSION_ENABLED && (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <span className="font-semibold">AfA-Übermittlung — Coming soon.</span>{" "}
+          Das tatsächliche Übermitteln ist derzeit deaktiviert. Du kannst die
+          gesiegelten Stundennachweise weiterhin einsehen und als PDF
+          herunterladen; die Übermittlung wird in Kürze freigeschaltet.
+        </div>
+      )}
+
       <Section
         title={`Zu übermitteln (${pending.length})`}
         empty="Aktuell kein Kurs zur Übermittlung bereit."
@@ -93,7 +106,15 @@ export default async function BildungstraegerSubmissionsPage() {
                 : null,
             ]}
             pdfUrl={`/api/bildungstraeger/courses/${r.courseId}/anw-pdf`}
-            action={<SubmitAfaButton courseId={r.courseId} />}
+            action={
+              AFA_SUBMISSION_ENABLED ? (
+                <SubmitAfaButton courseId={r.courseId} />
+              ) : (
+                <span className="rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-500">
+                  Übermittlung – Coming soon
+                </span>
+              )
+            }
           />
         ))}
       </Section>

@@ -10,6 +10,7 @@ import { APIError } from "better-auth/api";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
+import { AFA_SUBMISSION_ENABLED } from "@/lib/feature-flags";
 import {
   assertNotImpersonating,
   getCurrentSession,
@@ -478,6 +479,15 @@ export async function submitCourseToAfa(
   formData: FormData,
 ): Promise<SubmitAfaState> {
   const session = await requireBildungstraeger();
+  // Feature vorübergehend deaktiviert (Coming soon) — harter Server-Guard,
+  // damit auch ein direkter Form-POST keinen Datensatz mehr als „übermittelt"
+  // markieren kann.
+  if (!AFA_SUBMISSION_ENABLED) {
+    return {
+      error:
+        "Die AfA-Übermittlung ist derzeit deaktiviert (Coming soon) und wird in Kürze freigeschaltet.",
+    };
+  }
   if (isImpersonating(session)) {
     return { error: "Während Impersonation nicht möglich." };
   }
