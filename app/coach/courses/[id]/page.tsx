@@ -736,7 +736,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Gesiegeltes PDF öffnen
+                Nachweis-PDF öffnen
               </a>
             )}
           </Step>
