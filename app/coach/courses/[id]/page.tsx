@@ -194,6 +194,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
   const geleisteteUe = sessions
     .filter((s) => s.status === "completed")
     .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
+  // "Geplant" zählt ALLE angelegten Termine (unabhängig vom Signatur-Stand) —
+  // damit der Coach beim Durchplanen sofort sieht, wie viele UE er insgesamt
+  // verplant hat, ohne selbst zu addieren. Erstgespräch zählt 0 UE.
+  const geplanteUe = sessions.reduce(
+    (sum, s) => sum + Number.parseFloat(s.anzahlUe),
+    0,
+  );
   // Letzter tatsächlich geleisteter Termin (max. Datum der completed Sessions) —
   // Referenz für „zeitlich vorzeitig" gegen das Bewilligungsende.
   const letzterTermin = sessions
@@ -344,8 +351,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
         )}
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-4">
         <Stat label="Bewilligte UE" value={`${course.anzahlBewilligteUe}`} />
+        <Stat
+          label="Geplante UE"
+          value={geplanteUe.toString().replace(".", ",")}
+        />
         <Stat
           label="Geleistete UE"
           value={geleisteteUe.toString().replace(".", ",")}
