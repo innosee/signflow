@@ -8,7 +8,6 @@ import {
   requireBildungstraeger,
 } from "@/lib/dal";
 
-import { BerProgressList } from "./ber-progress-list";
 import { CoachListItem } from "./coach-list-item";
 import { InviteCoachForm } from "./invite-form";
 
@@ -89,48 +88,6 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
       ),
     )
     .orderBy(desc(schema.users.createdAt));
-
-  /**
-   * BER-Fortschritt pro Kurs: wie viele Teilnehmer haben schon einen
-   * eingereichten Bericht gegen wie viele eingeschriebene. Aggregiert in
-   * einer Query, um N+1 zu vermeiden. Tenant-Filter via Coach.
-   */
-  const berProgress = await db
-    .select({
-      courseId: schema.courses.id,
-      courseTitle: schema.courses.title,
-      coachName: schema.users.name,
-      courseStatus: schema.courses.status,
-      tnCount: sql<number>`count(distinct ${schema.courses.participantId})::int`,
-      submittedCount: sql<number>`count(distinct ${schema.abschlussberichte.participantId}) filter (where ${schema.abschlussberichte.status} = 'submitted')::int`,
-      draftCount: sql<number>`count(distinct ${schema.abschlussberichte.participantId}) filter (where ${schema.abschlussberichte.status} = 'draft')::int`,
-    })
-    .from(schema.courses)
-    .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
-    .leftJoin(
-      schema.abschlussberichte,
-      and(
-        eq(schema.abschlussberichte.courseId, schema.courses.id),
-        eq(
-          schema.abschlussberichte.participantId,
-          schema.courses.participantId,
-        ),
-      ),
-    )
-    .where(
-      and(
-        eq(schema.users.tenantId, tenantId),
-        isNull(schema.courses.deletedAt),
-      ),
-    )
-    .groupBy(
-      schema.courses.id,
-      schema.courses.title,
-      schema.users.name,
-      schema.courses.status,
-      schema.courses.createdAt,
-    )
-    .orderBy(desc(schema.courses.createdAt));
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-10">
@@ -220,19 +177,23 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-300 bg-white">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+      <section className="rounded-xl border border-zinc-300 bg-white p-6">
+        <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold">
-              Abschlussberichte — Fortschritt
-            </h2>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Überblick über TN-bezogene Berichte pro Kurs. Grün = eingereicht,
-              Gelb = Entwurf, Grau = noch nicht begonnen.
+            <h2 className="text-lg font-semibold">Kunden</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Zentrale Übersicht pro Kunde: Stand von Anwesenheitsliste und
+              Abschlussbericht, PDF-Downloads für den Versand sowie Verwalten,
+              Archivieren und Löschen.
             </p>
           </div>
+          <Link
+            href="/bildungstraeger/courses"
+            className="shrink-0 rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+          >
+            Öffnen
+          </Link>
         </div>
-        <BerProgressList rows={berProgress} />
       </section>
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6">

@@ -620,16 +620,23 @@ export async function deleteCourse(formData: FormData): Promise<void> {
   assertNotImpersonating(session);
   const tenantId = getTenantId(session);
   const courseId = String(formData.get("courseId") ?? "").trim();
+  const confirmName = String(formData.get("confirmName") ?? "").trim();
 
   if (courseId) {
-    // Besitz tenant-scoped prüfen und participantId für die Aufräum-Logik holen.
+    // Besitz tenant-scoped prüfen und participantId + Name für die Aufräum-
+    // bzw. Bestätigungs-Logik holen.
     const [course] = await db
       .select({
         id: schema.courses.id,
         participantId: schema.courses.participantId,
+        participantName: schema.participants.name,
       })
       .from(schema.courses)
       .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+      .innerJoin(
+        schema.participants,
+        eq(schema.participants.id, schema.courses.participantId),
+      )
       .where(
         and(
           eq(schema.courses.id, courseId),
@@ -639,7 +646,13 @@ export async function deleteCourse(formData: FormData): Promise<void> {
       )
       .limit(1);
 
-    if (course) {
+    // Tippbestätigung serverseitig gegenprüfen — der Client ist manipulierbar.
+    // Bei Mismatch wird kommentarlos NICHT gelöscht (defensive No-Op).
+    const nameConfirmed =
+      !!course &&
+      confirmName.toLowerCase() === course.participantName.trim().toLowerCase();
+
+    if (course && nameConfirmed) {
       // Audit-Eintrag + Hard-Delete atomar. resource_id ist kein FK, der
       // Log-Eintrag überlebt das Löschen des Kurses.
       await db.transaction(async (tx) => {
