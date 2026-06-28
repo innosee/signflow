@@ -138,7 +138,7 @@ export function LandingWaitlist() {
               <button
                 type="submit"
                 disabled={pending}
-                className="inline-flex items-center justify-center rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-60"
               >
                 {pending ? "Wird gesendet…" : "Auf Warteliste setzen"}
               </button>

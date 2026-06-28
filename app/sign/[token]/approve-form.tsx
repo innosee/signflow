@@ -28,7 +28,7 @@ export function ApproveForm({ token }: { token: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-lg bg-black px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
+        className="w-full rounded-lg bg-black px-4 py-3 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-60"
       >
         {pending ? "Wird freigegeben…" : "Nachweis freigeben"}
       </button>

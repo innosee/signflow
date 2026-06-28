@@ -40,7 +40,7 @@ export function SmsResendButton({
         type="submit"
         disabled={pending}
         title={`Magic-Link per SMS an ${phone} senden (Kosten ca. 8 Cent)`}
-        className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-900 transition hover:bg-sky-100 disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-900 transition enabled:hover:bg-sky-100 disabled:opacity-40"
       >
         <span aria-hidden="true">📱</span>
         {pending ? "Wird gesendet…" : state?.success ? "SMS gesendet ✓" : "SMS senden"}

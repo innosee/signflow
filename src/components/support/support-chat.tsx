@@ -191,7 +191,7 @@ export function SupportChat() {
                       type="button"
                       onClick={escalate}
                       disabled={escalateState === "sending"}
-                      className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                      className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-zinc-800 disabled:opacity-50"
                     >
                       {escalateState === "sending" ? "Senden…" : "Absenden"}
                     </button>
@@ -219,7 +219,7 @@ export function SupportChat() {
                   type="button"
                   onClick={() => void send()}
                   disabled={loading || input.trim().length === 0}
-                  className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                  className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white enabled:hover:bg-zinc-800 disabled:opacity-50"
                 >
                   Senden
                 </button>

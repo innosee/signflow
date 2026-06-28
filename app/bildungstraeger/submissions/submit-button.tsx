@@ -16,7 +16,7 @@ export function SubmitAfaButton({ courseId }: { courseId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40"
+        className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white enabled:hover:bg-zinc-800 disabled:opacity-40"
       >
         {pending ? "Wird übermittelt…" : "An AfA übermitteln"}
       </button>

@@ -154,7 +154,7 @@ export function DiagnoseRunner() {
           type="button"
           onClick={runDiagnostics}
           disabled={phase === "running"}
-          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white enabled:hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {phase === "running"
             ? "läuft …"

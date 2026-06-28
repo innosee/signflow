@@ -45,7 +45,7 @@ export function ReopenSessionButton({
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900 transition hover:bg-amber-100 disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900 transition enabled:hover:bg-amber-100 disabled:opacity-40"
         title="Datum / UE / Modus / Erstgespräch dieses Termins ändern — nur die Signaturen DIESES Termins werden dabei zurückgesetzt, alle anderen Termine bleiben signiert"
       >
         <span aria-hidden="true">✎</span>

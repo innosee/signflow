@@ -58,7 +58,7 @@ export function ReviewSubmitButton({
           type="submit"
           disabled={pending || disabled}
           title={disabled ? disabledReason : undefined}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40"
+          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-40"
         >
           {pending
             ? "Wird eingereicht…"
