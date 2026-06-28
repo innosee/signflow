@@ -69,6 +69,7 @@ export default async function BildungstraegerPrintSheetPage({ params }: Props) {
       </div>
 
       <Stundennachweis
+        branding={sheet.branding}
         course={sheet.course}
         bedarfstraeger={sheet.bedarfstraeger}
         coach={sheet.coach}

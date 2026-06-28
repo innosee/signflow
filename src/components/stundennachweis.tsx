@@ -17,6 +17,14 @@ import {
 } from "@/lib/eignung";
 
 export type StundennachweisSheet = {
+  /**
+   * Bildungsträger-Branding (tenant-scoped via `getBranding`). Aktuell nur das
+   * Logo im Header — fehlt es, bleibt der Header byte-identisch zu vorher
+   * (rein additiv). Adresse o.ä. kann später nachgezogen werden.
+   */
+  branding?: {
+    logoUrl: string | null;
+  };
   course: {
     title: string;
     avgsNummer: string;
@@ -106,7 +114,8 @@ function formatDateTime(iso: string | null): string {
 }
 
 export function Stundennachweis(props: StundennachweisSheet) {
-  const { course, bedarfstraeger, coach, participant, sessions, audit } = props;
+  const { course, bedarfstraeger, coach, participant, sessions, audit, branding } =
+    props;
 
   // Kompetenzteams: sind mehrere Coaches im Spiel, wird der Coach PRO Termin
   // ausgewiesen (statt eines globalen Coaches). Bei genau einem Coach bleibt
@@ -140,13 +149,23 @@ export function Stundennachweis(props: StundennachweisSheet) {
               AVGS-Maßnahme · Nachweis gemäß §45 SGB III
             </p>
           </div>
-          <dl className="sheet-meta">
-            <MetaRow label="Maßnahmen-Nr." value={course.avgsNummer} />
-            <MetaRow
-              label="Bedarfsträger"
-              value={`${bedarfstraeger.name} (${BEDARFSTRAEGER_LABEL[bedarfstraeger.type]})`}
-            />
-          </dl>
+          <div className="sheet-header-right">
+            {branding?.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={branding.logoUrl}
+                alt="Logo Bildungsträger"
+                className="sheet-logo-image"
+              />
+            )}
+            <dl className="sheet-meta">
+              <MetaRow label="Maßnahmen-Nr." value={course.avgsNummer} />
+              <MetaRow
+                label="Bedarfsträger"
+                value={`${bedarfstraeger.name} (${BEDARFSTRAEGER_LABEL[bedarfstraeger.type]})`}
+              />
+            </dl>
+          </div>
         </header>
 
         <section className="sheet-parties">
@@ -463,6 +482,20 @@ const printCss = `
     margin-bottom: 6mm;
   }
   .sheet-meta { text-align: right; margin: 0; }
+  .sheet-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3mm;
+  }
+  .sheet-logo-image {
+    max-height: 18mm;
+    max-width: 55mm;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+  }
   .sheet-parties {
     display: grid;
     grid-template-columns: 1fr 1fr;

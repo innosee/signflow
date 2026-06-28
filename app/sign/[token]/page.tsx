@@ -122,6 +122,7 @@ export default async function ParticipantSignPage({ params }: Props) {
         </header>
         <div className="preview-sheet">
           <Stundennachweis
+            branding={sheet.branding}
             course={sheet.course}
             bedarfstraeger={sheet.bedarfstraeger}
             coach={sheet.coach}

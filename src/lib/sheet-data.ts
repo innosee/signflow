@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, or } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import type { StundennachweisSheet } from "@/components/stundennachweis";
+import { getBranding } from "@/lib/branding";
 import { resolveAssetUrl } from "@/lib/storage";
 
 /**
@@ -42,6 +43,9 @@ export async function loadStundennachweisSheet(params: {
       bedarfstraegerName: schema.bedarfstraeger.name,
       bedarfstraegerType: schema.bedarfstraeger.type,
       coachName: schema.users.name,
+      // Branding ist tenant-scoped → über den (Lead-)Coach des Kurses an den
+      // Mandanten kommen. getBranding holt das aktuelle Logo des Tenants.
+      tenantId: schema.users.tenantId,
     })
     .from(schema.courses)
     .innerJoin(
@@ -57,6 +61,10 @@ export async function loadStundennachweisSheet(params: {
     )
     .limit(1);
   if (!ctx) return null;
+
+  // Tenant-Branding (Logo) für den Sheet-Header. Fehlt eins, bleibt der Header
+  // wie bisher — `getBranding` liefert dann `logoUrl: null`.
+  const branding = await getBranding(ctx.tenantId);
 
   // 1:1: Der angefragte Teilnehmer muss der Kunde dieses Kurses sein.
   const [enrollment] = await db
@@ -218,6 +226,7 @@ export async function loadStundennachweisSheet(params: {
   auditEntries.sort((a, b) => a.at.localeCompare(b.at));
 
   return {
+    branding: { logoUrl: branding.logoUrl },
     course: {
       title: ctx.title,
       avgsNummer: ctx.avgsNummer,
