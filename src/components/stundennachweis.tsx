@@ -18,12 +18,13 @@ import {
 
 export type StundennachweisSheet = {
   /**
-   * Bildungsträger-Branding (tenant-scoped via `getBranding`). Aktuell nur das
-   * Logo im Header — fehlt es, bleibt der Header byte-identisch zu vorher
-   * (rein additiv). Adresse o.ä. kann später nachgezogen werden.
+   * Bildungsträger-Branding (tenant-scoped via `getBranding`). Logo im Header;
+   * fehlt ein Logo, wird der `name` (Tenant-/BT-Name) als Text-Fallback
+   * geschrieben. Ist beides leer, bleibt der Header wie vorher.
    */
   branding?: {
     logoUrl: string | null;
+    name?: string | null;
   };
   course: {
     title: string;
@@ -150,14 +151,16 @@ export function Stundennachweis(props: StundennachweisSheet) {
             </p>
           </div>
           <div className="sheet-header-right">
-            {branding?.logoUrl && (
+            {branding?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={branding.logoUrl}
                 alt="Logo Bildungsträger"
                 className="sheet-logo-image"
               />
-            )}
+            ) : branding?.name ? (
+              <div className="sheet-logo-fallback">{branding.name}</div>
+            ) : null}
             <dl className="sheet-meta">
               <MetaRow label="Maßnahmen-Nr." value={course.avgsNummer} />
               <MetaRow
@@ -495,6 +498,13 @@ const printCss = `
     height: auto;
     object-fit: contain;
     display: block;
+  }
+  .sheet-logo-fallback {
+    font-weight: 700;
+    font-size: 12pt;
+    color: #111;
+    text-align: right;
+    max-width: 60mm;
   }
   .sheet-parties {
     display: grid;

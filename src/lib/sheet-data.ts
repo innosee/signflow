@@ -44,8 +44,10 @@ export async function loadStundennachweisSheet(params: {
       bedarfstraegerType: schema.bedarfstraeger.type,
       coachName: schema.users.name,
       // Branding ist tenant-scoped → über den (Lead-)Coach des Kurses an den
-      // Mandanten kommen. getBranding holt das aktuelle Logo des Tenants.
+      // Mandanten kommen. getBranding holt das aktuelle Logo des Tenants;
+      // der Tenant-Name dient als Header-Fallback, wenn kein Logo gesetzt ist.
       tenantId: schema.users.tenantId,
+      tenantName: schema.tenants.name,
     })
     .from(schema.courses)
     .innerJoin(
@@ -53,6 +55,7 @@ export async function loadStundennachweisSheet(params: {
       eq(schema.bedarfstraeger.id, schema.courses.bedarfstraegerId),
     )
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.users.tenantId))
     .where(
       and(
         eq(schema.courses.id, params.courseId),
@@ -226,7 +229,7 @@ export async function loadStundennachweisSheet(params: {
   auditEntries.sort((a, b) => a.at.localeCompare(b.at));
 
   return {
-    branding: { logoUrl: branding.logoUrl },
+    branding: { logoUrl: branding.logoUrl, name: ctx.tenantName },
     course: {
       title: ctx.title,
       avgsNummer: ctx.avgsNummer,
