@@ -98,7 +98,7 @@ export function BrandingForm({
               type="button"
               onClick={handleClearLogo}
               disabled={logoStatus === "clearing"}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition enabled:hover:bg-zinc-50 disabled:opacity-60"
             >
               {logoStatus === "clearing" ? "Wird entfernt…" : "Entfernen"}
             </button>
@@ -171,7 +171,7 @@ export function BrandingForm({
         <button
           type="submit"
           disabled={addressPending}
-          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
+          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-60"
         >
           {addressPending ? "Wird gespeichert…" : "Adresse speichern"}
         </button>

@@ -32,7 +32,7 @@ export function CoachSignForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-40"
+        className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-zinc-800 disabled:opacity-40"
       >
         {pending ? "…" : "Signieren"}
       </button>

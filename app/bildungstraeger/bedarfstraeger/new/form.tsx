@@ -67,7 +67,7 @@ export function BedarfstraegerForm() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
+          className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-60"
         >
           {pending ? "Wird angelegt…" : "Anlegen"}
         </button>

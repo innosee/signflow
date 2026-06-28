@@ -57,7 +57,7 @@ export function CorrectTopicButton({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40"
+          className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-40"
         >
           {pending ? "Speichert…" : "Speichern"}
         </button>

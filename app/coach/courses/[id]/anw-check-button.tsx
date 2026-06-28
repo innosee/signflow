@@ -52,7 +52,7 @@ export function AnwCheckButton({
           type="submit"
           disabled={pending || disabled}
           title={disabled ? disabledReason : "Inhalte der Einträge KI-gestützt prüfen"}
-          className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-40"
+          className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition enabled:hover:bg-zinc-50 disabled:opacity-40"
         >
           <span aria-hidden="true">🔍</span>
           {pending ? "Prüfe ANW-Einträge…" : "ANW-Compliance prüfen (KI)"}
@@ -89,7 +89,7 @@ export function AnwCheckButton({
           <button
             type="submit"
             disabled={ackPending}
-            className="rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
+            className="rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition enabled:hover:bg-amber-50 disabled:opacity-40"
           >
             {ackPending
               ? "Wird freigegeben…"

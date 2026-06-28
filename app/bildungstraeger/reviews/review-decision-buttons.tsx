@@ -45,7 +45,7 @@ export function ReviewDecisionButtons({ courseId }: { courseId: string }) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-40"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-emerald-700 disabled:opacity-40"
           >
             {approvePending ? "Wird freigegeben…" : "Freigeben"}
           </button>
@@ -66,7 +66,7 @@ export function ReviewDecisionButtons({ courseId }: { courseId: string }) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
+            className="rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition enabled:hover:bg-amber-50 disabled:opacity-40"
           >
             {changesPending ? "Wird gesendet…" : "Nachbesserung anfordern"}
           </button>

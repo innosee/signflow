@@ -32,7 +32,7 @@ export function SignForm({
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-lg bg-black px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
+        className="w-full rounded-lg bg-black px-3 py-2 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-60"
       >
         {pending ? "Wird bestätigt…" : "Bestätigen"}
       </button>
