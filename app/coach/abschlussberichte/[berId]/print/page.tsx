@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
+import { courseVisibleToCoach } from "@/lib/course-access";
 import { getTenantId, requireCoach } from "@/lib/dal";
 import { resolveAssetUrl } from "@/lib/storage";
 
@@ -17,11 +18,12 @@ type Props = {
 };
 
 /**
- * Coach-eigene Print-Ansicht des BER. Owner-Check verhindert, dass ein
- * Coach BERs anderer Coaches einsehen kann (siehe `coach_id`-Filter).
- * Reine Print-Ansicht — Toolbar nur im Bildschirm-Modus, im Print-CSS
- * versteckt. Öffnet sich i.d.R. nach „Einreichen + PDF" oder via Link
- * aus der Berichts-Übersicht.
+ * Coach-Print-Ansicht des BER. Zugriff hat der Autor des Berichts ODER —
+ * bei kurs-gebundenen Berichten — jeder Coach im Kompetenzteam des Kurses
+ * (`courseVisibleToCoach` greift auf den gejointen `schema.courses`). Ad-hoc-
+ * Berichte (ohne `course_id`) bleiben rein Autor-eigen. Reine Print-Ansicht —
+ * Toolbar nur im Bildschirm-Modus, im Print-CSS versteckt. Öffnet sich i.d.R.
+ * nach „Einreichen + PDF" oder via Link aus der Berichts-Übersicht.
  */
 export default async function CoachBerPrintPage({ params }: Props) {
   const session = await requireCoach();
@@ -77,8 +79,12 @@ export default async function CoachBerPrintPage({ params }: Props) {
     .where(
       and(
         eq(schema.abschlussberichte.id, berId),
-        // Owner-Check: nur eigene Berichte
-        eq(schema.abschlussberichte.coachId, session.user.id),
+        // Autor ODER Team-Coach des kurs-gebundenen Berichts. Bei ad-hoc-
+        // Berichten (courseId null) ist der gejointe Kurs NULL → nur der Autor.
+        or(
+          eq(schema.abschlussberichte.coachId, session.user.id),
+          courseVisibleToCoach(session.user.id),
+        ),
       ),
     )
     .limit(1);
