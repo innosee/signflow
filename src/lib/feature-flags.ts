@@ -4,10 +4,13 @@
  */
 
 /**
- * AfA-Übermittlung. Vorübergehend deaktiviert, nachdem eine versehentliche
- * (rein dokumentarische) Übermittlung ausgelöst wurde — der echte Versand-/
- * Rechnungs-Flow ist noch nicht gebaut. Auf `true` setzen, sobald die
- * tatsächliche Übermittlung (Anhang an den Bedarfsträger / Portal-Upload)
- * implementiert und abgesichert ist.
+ * AfA-„übermittelt"-Markierung. Bewusst ein MANUELLER Status-Haken: der BT
+ * übermittelt händisch außerhalb der App und markiert den Nachweis danach als
+ * übermittelt, damit er visuell abgeschlossen ist — KEIN automatischer Versand.
+ * Der echte Versand kommt später mit dem Rechnungs-Feature (Phase 2).
+ *
+ * Kill-Switch: auf `false` setzen, um die Markierung temporär zu sperren (z.B.
+ * nach versehentlichen Klicks). Der Button hat zusätzlich einen Bestätigungs-
+ * schritt gegen Fehlklicks.
  */
-export const AFA_SUBMISSION_ENABLED = false;
+export const AFA_SUBMISSION_ENABLED = true;

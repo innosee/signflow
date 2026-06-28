@@ -64,8 +64,11 @@ export default async function BildungstraegerSubmissionsPage() {
             AfA-Übermittlungen
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Abgeschlossene Stundennachweise aller Coaches. Nach der Übermittlung
-            an die AfA wird der Kurs später mit dem Rechnungsflow gekoppelt.
+            Abgeschlossene Stundennachweise aller Coaches. Die Übermittlung an
+            die AfA erfolgt aktuell <span className="font-medium">manuell</span>{" "}
+            außerhalb der App — hier wird sie nur als „übermittelt“ markiert,
+            damit der Vorgang visuell abgeschlossen ist. Der automatische Versand
+            kommt später mit dem Rechnungs-Feature.
           </p>
         </div>
         <Link
@@ -81,10 +84,11 @@ export default async function BildungstraegerSubmissionsPage() {
           role="status"
           className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
         >
-          <span className="font-semibold">AfA-Übermittlung — Coming soon.</span>{" "}
-          Das tatsächliche Übermitteln ist derzeit deaktiviert. Du kannst die
-          gesiegelten Stundennachweise weiterhin einsehen und als PDF
-          herunterladen; die Übermittlung wird in Kürze freigeschaltet.
+          <span className="font-semibold">
+            „Übermittelt“-Markierung vorübergehend gesperrt.
+          </span>{" "}
+          Gesiegelte Stundennachweise lassen sich weiterhin einsehen und als PDF
+          herunterladen; das manuelle Markieren ist gerade deaktiviert.
         </div>
       )}
 
@@ -111,7 +115,7 @@ export default async function BildungstraegerSubmissionsPage() {
                 <SubmitAfaButton courseId={r.courseId} />
               ) : (
                 <span className="rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-500">
-                  Übermittlung – Coming soon
+                  Markieren gesperrt
                 </span>
               )
             }
