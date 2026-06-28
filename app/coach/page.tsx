@@ -45,6 +45,7 @@ export default async function CoachDashboard() {
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
       status: schema.courses.status,
+      reviewStatus: schema.courses.reviewStatus,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
     })
     .from(schema.courses)
@@ -61,6 +62,12 @@ export default async function CoachDashboard() {
     )
     .orderBy(desc(schema.courses.createdAt));
 
+  // In-App-Benachrichtigung: Kurse, bei denen der Bildungsträger eine
+  // Nachbesserung angefordert hat → der Coach ist am Zug.
+  const nachbesserung = courses.filter(
+    (c) => c.reviewStatus === "changes_requested",
+  );
+
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
       <header>
@@ -68,6 +75,32 @@ export default async function CoachDashboard() {
           Coach Dashboard
         </h1>
       </header>
+
+      {nachbesserung.length > 0 && !impersonating && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
+          <p className="font-medium">
+            {nachbesserung.length === 1
+              ? "Eine Anwesenheitsliste braucht deine Nachbesserung."
+              : `${nachbesserung.length} Anwesenheitslisten brauchen deine Nachbesserung.`}
+          </p>
+          <p className="mt-1">
+            Der Bildungsträger hat eine Rückmeldung hinterlassen. Öffne den
+            Kunden, lies den Verlauf und antworte oder bessere nach.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {nachbesserung.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/coach/courses/${c.id}`}
+                  className="font-medium underline underline-offset-2 hover:no-underline"
+                >
+                  {c.customerName} — {c.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {!hasSignature && !impersonating && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">

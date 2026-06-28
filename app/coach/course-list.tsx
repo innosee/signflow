@@ -23,6 +23,7 @@ export type CoachCourseListItem = {
   startDate: string | null;
   endDate: string | null;
   status: string;
+  reviewStatus: string | null;
   anzahlBewilligteUe: number | null;
 };
 
@@ -88,6 +89,11 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
                     >
                       {STATUS_LABELS[c.status] ?? c.status}
                     </span>
+                    {c.reviewStatus === "changes_requested" && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        Nachbesserung angefordert
+                      </span>
+                    )}
                   </div>
                   <div className="mt-1 text-xs text-zinc-500">
                     {c.title} · AVGS {c.avgsNummer} ·{" "}

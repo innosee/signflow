@@ -663,10 +663,11 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 : course.reviewStatus === "pending"
                   ? `Beim Bildungsträger in Prüfung${course.reviewRequestedAt ? ` seit ${new Date(course.reviewRequestedAt).toLocaleString("de-DE")}` : ""}.`
                   : course.reviewStatus === "changes_requested"
-                    ? "Nachbesserung angefordert — Hinweis unten beachten, Termine korrigieren und erneut einreichen."
+                    ? "Nachbesserung angefordert — Verlauf lesen, dann antworten oder Termine korrigieren und erneut einreichen."
                     : "Reiche die freigegebene Liste beim Bildungsträger zur Prüfung ein."
             }
           >
+            {reviewNotes.length > 0 && <ReviewThread notes={reviewNotes} />}
             {!impersonating &&
               course.reviewStatus !== "approved" &&
               course.reviewStatus !== "pending" && (
@@ -692,7 +693,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   }
                 />
               )}
-            {reviewNotes.length > 0 && <ReviewThread notes={reviewNotes} />}
           </Step>
           <Step
             index={6}

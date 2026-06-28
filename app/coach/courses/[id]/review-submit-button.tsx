@@ -30,18 +30,32 @@ export function ReviewSubmitButton({
     requestBildungstraegerReview,
     undefined,
   );
-  const [showNote, setShowNote] = useState(false);
+  // Nach einer Nachbesserung das Antwortfeld direkt offen zeigen — der Coach
+  // soll auf die Rückmeldung des BT antworten können, ohne es erst suchen zu
+  // müssen. Bei der Erst-Einreichung bleibt die Notiz optional/eingeklappt.
+  const [showNote, setShowNote] = useState(!!resubmit);
 
   return (
     <form action={action} className="space-y-2">
       <input type="hidden" name="courseId" value={courseId} />
       {showNote ? (
-        <textarea
-          name="note"
-          rows={3}
-          placeholder="Optionale Notiz an den Bildungsträger…"
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
-        />
+        <div className="space-y-1">
+          {resubmit && (
+            <label className="block text-xs font-medium text-zinc-700">
+              Deine Antwort an den Bildungsträger
+            </label>
+          )}
+          <textarea
+            name="note"
+            rows={3}
+            placeholder={
+              resubmit
+                ? "z.B. weil der letzte Termin einzeln in eine Woche fiel …"
+                : "Optionale Notiz an den Bildungsträger…"
+            }
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+          />
+        </div>
       ) : (
         !disabled && (
           <button
@@ -63,7 +77,7 @@ export function ReviewSubmitButton({
           {pending
             ? "Wird eingereicht…"
             : resubmit
-              ? "Erneut zur Prüfung einreichen"
+              ? "Antwort senden & erneut einreichen"
               : "Zur Prüfung einreichen"}
         </button>
       </div>
