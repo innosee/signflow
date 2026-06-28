@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -40,6 +40,47 @@ async function loadReviewCourse(courseId: string, tenantId: string) {
     )
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Alle Coaches einer Maßnahme als Mail-Empfänger: primärer Coach
+ * (`courses.coachId`) UND alle Team-Coaches (`course_coaches`), aktiv und
+ * dedupliziert. Bugfix: bei mehreren zugewiesenen Coaches bekam vorher nur der
+ * primäre (zuerst angelegte) die Review-Benachrichtigung — gewünscht ist, dass
+ * ALLE zugewiesenen Coaches informiert werden. Tenant-Scope ist durch den
+ * vorgelagerten `loadReviewCourse`-Check bereits sichergestellt.
+ */
+async function courseCoachRecipients(courseId: string) {
+  const [primary, team] = await Promise.all([
+    db
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        email: schema.users.email,
+      })
+      .from(schema.courses)
+      .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+      .where(
+        and(eq(schema.courses.id, courseId), isNull(schema.users.deletedAt)),
+      ),
+    db
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        email: schema.users.email,
+      })
+      .from(schema.courseCoaches)
+      .innerJoin(schema.users, eq(schema.users.id, schema.courseCoaches.coachId))
+      .where(
+        and(
+          eq(schema.courseCoaches.courseId, courseId),
+          isNull(schema.users.deletedAt),
+        ),
+      ),
+  ]);
+  const byId = new Map<string, { id: string; name: string; email: string }>();
+  for (const r of [...primary, ...team]) byId.set(r.id, r);
+  return [...byId.values()];
 }
 
 /**
@@ -116,14 +157,30 @@ export async function approveCourseReview(
 
   try {
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-    await sendReviewApprovedToCoach({
-      to: course.coachEmail,
-      coachName: course.coachName,
-      courseTitle: course.title,
-      url: `${base}/coach/courses/${courseId}`,
+    const recipients = await courseCoachRecipients(courseId);
+    const results = await Promise.allSettled(
+      recipients.map((c) =>
+        sendReviewApprovedToCoach({
+          to: c.email,
+          coachName: c.name,
+          courseTitle: course.title,
+          url: `${base}/coach/courses/${courseId}`,
+        }),
+      ),
+    );
+    results.forEach((r) => {
+      if (r.status === "rejected") {
+        console.error(
+          `review-approved notification failed for course ${courseId}:`,
+          r.reason,
+        );
+      }
     });
   } catch (err) {
-    console.error(`review-approved notification failed for course ${courseId}:`, err);
+    console.error(
+      `review-approved notification lookup failed for course ${courseId}:`,
+      err,
+    );
   }
 
   revalidatePath(`/bildungstraeger/reviews/${courseId}`);
@@ -212,15 +269,31 @@ export async function requestCourseChanges(
 
   try {
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-    await sendReviewChangesToCoach({
-      to: course.coachEmail,
-      coachName: course.coachName,
-      courseTitle: course.title,
-      note,
-      url: `${base}/coach/courses/${courseId}`,
+    const recipients = await courseCoachRecipients(courseId);
+    const results = await Promise.allSettled(
+      recipients.map((c) =>
+        sendReviewChangesToCoach({
+          to: c.email,
+          coachName: c.name,
+          courseTitle: course.title,
+          note,
+          url: `${base}/coach/courses/${courseId}`,
+        }),
+      ),
+    );
+    results.forEach((r) => {
+      if (r.status === "rejected") {
+        console.error(
+          `review-changes notification failed for course ${courseId}:`,
+          r.reason,
+        );
+      }
     });
   } catch (err) {
-    console.error(`review-changes notification failed for course ${courseId}:`, err);
+    console.error(
+      `review-changes notification lookup failed for course ${courseId}:`,
+      err,
+    );
   }
 
   revalidatePath(`/bildungstraeger/reviews/${courseId}`);
