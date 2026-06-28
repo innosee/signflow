@@ -3,18 +3,22 @@ import { and, desc, eq, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import {
+  ANW_STATUS_LABEL,
+  ANW_STATUS_TONE,
+  anwStatus,
+} from "@/lib/anw-status";
+import {
   AVGS_STAGE_BADGE,
   AVGS_STAGE_LABEL,
   avgsStage,
 } from "@/lib/avgs-stage";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 
+import { archiveAllCompleted } from "./actions";
 import {
-  archiveAllCompleted,
-  archiveCourse,
-  unarchiveCourse,
-} from "./actions";
-import { DeleteCourseButton } from "./delete-course-button";
+  KundenCockpitList,
+  type CockpitRow,
+} from "./kunden-cockpit-list";
 
 export const dynamic = "force-dynamic";
 
@@ -22,18 +26,29 @@ export default async function BildungstraegerCoursesPage() {
   const session = await requireBildungstraeger();
   const tenantId = getTenantId(session);
 
+  // Zentrales Kunden-Cockpit: pro Kunde alles, was den Versand-Stand ans
+  // Jobcenter/die AfA bestimmt — die drei FES-Gates + Siegel-/AfA-Stand
+  // (final_documents) und der Abschlussbericht (abschlussberichte, 1:1 über
+  // participant_id). Beide per leftJoin, weil sie erst spät im Flow entstehen.
   const customers = await db
     .select({
       id: schema.courses.id,
       title: schema.courses.title,
       status: schema.courses.status,
       abgeschlossenAt: schema.courses.abgeschlossenAt,
+      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
+      reviewStatus: schema.courses.reviewStatus,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
       participantName: schema.participants.name,
       kundenNr: schema.participants.kundenNr,
       coachName: schema.users.name,
       bedarfstraegerName: schema.bedarfstraeger.name,
+      fesStatus: schema.finalDocuments.fesStatus,
+      afaStatus: schema.finalDocuments.afaStatus,
+      pdfUrl: schema.finalDocuments.pdfUrl,
+      berId: schema.abschlussberichte.id,
+      berStatus: schema.abschlussberichte.status,
     })
     .from(schema.courses)
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
@@ -44,6 +59,17 @@ export default async function BildungstraegerCoursesPage() {
     .innerJoin(
       schema.bedarfstraeger,
       eq(schema.bedarfstraeger.id, schema.courses.bedarfstraegerId),
+    )
+    .leftJoin(
+      schema.finalDocuments,
+      eq(schema.finalDocuments.courseId, schema.courses.id),
+    )
+    .leftJoin(
+      schema.abschlussberichte,
+      and(
+        eq(schema.abschlussberichte.courseId, schema.courses.id),
+        eq(schema.abschlussberichte.participantId, schema.courses.participantId),
+      ),
     )
     .where(
       and(
@@ -60,12 +86,46 @@ export default async function BildungstraegerCoursesPage() {
     (c) => c.abgeschlossenAt && c.status !== "archived",
   ).length;
 
-  const statusLabel = (c: (typeof customers)[number]) =>
-    c.status === "archived"
-      ? "Archiviert"
-      : c.abgeschlossenAt
-        ? "Abgeschlossen"
-        : "Aktiv";
+  const rows: CockpitRow[] = customers.map((c) => {
+    const isArchived = c.status === "archived";
+    const stage = avgsStage(c);
+    const anw = anwStatus({
+      abgeschlossenAt: c.abgeschlossenAt,
+      anwCheckPassedAt: c.anwCheckPassedAt,
+      reviewStatus: c.reviewStatus,
+      fesStatus: c.fesStatus,
+    });
+    const sealed = c.fesStatus === "completed";
+    return {
+      id: c.id,
+      participantName: c.participantName,
+      title: c.title,
+      kundenNr: c.kundenNr,
+      coachName: c.coachName,
+      bedarfstraegerName: c.bedarfstraegerName,
+      status: c.status,
+      statusLabel: isArchived
+        ? "Archiviert"
+        : c.abgeschlossenAt
+          ? "Abgeschlossen"
+          : "Aktiv",
+      isArchived,
+      avgsStageLabel: isArchived ? null : AVGS_STAGE_LABEL[stage],
+      avgsStageBadge: isArchived ? null : AVGS_STAGE_BADGE[stage],
+      anwLabel: ANW_STATUS_LABEL[anw],
+      anwTone: ANW_STATUS_TONE[anw],
+      // Download nur, wenn wirklich gesiegelt (Entscheidung: „fertig" = Siegel).
+      anwPdfUrl: sealed ? c.pdfUrl : null,
+      afaSubmitted: c.afaStatus === "submitted",
+      berStatus:
+        c.berStatus === "submitted"
+          ? "submitted"
+          : c.berStatus === "draft"
+            ? "draft"
+            : "missing",
+      berId: c.berId,
+    };
+  });
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10 space-y-6">
@@ -75,8 +135,10 @@ export default async function BildungstraegerCoursesPage() {
             Kunden ({customers.length})
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Maßnahmen-Kunden des Bildungsträgers. Lege einen Kunden an und weise
-            ihn einem Coach zu — der Coach erfasst dann die Termine.
+            Zentrale Übersicht aller Maßnahmen-Kunden — Stand von
+            Anwesenheitsliste (ANW) und Abschlussbericht (BER), PDF-Downloads
+            für den Versand ans Jobcenter/die AfA sowie Verwaltung (Bearbeiten,
+            Archivieren, Löschen).
           </p>
         </header>
         <div className="flex shrink-0 items-center gap-2">
@@ -99,84 +161,7 @@ export default async function BildungstraegerCoursesPage() {
         </div>
       </div>
 
-      <section className="rounded-xl border border-zinc-300 bg-white">
-        {customers.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-zinc-500">
-            Noch keine Kunden. Lege den ersten an, um loszulegen.
-          </p>
-        ) : (
-          <ul className="divide-y divide-zinc-200">
-            {customers.map((c) => (
-              <li
-                key={c.id}
-                className="flex items-center justify-between gap-4 px-6 py-4 text-sm"
-              >
-                <Link
-                  href={`/bildungstraeger/courses/${c.id}/berichte`}
-                  className="min-w-0 flex-1 hover:underline"
-                >
-                  <div className="font-medium">
-                    {c.participantName} <span className="text-zinc-400">·</span>{" "}
-                    <span className="font-normal text-zinc-600">{c.title}</span>
-                  </div>
-                  <div className="mt-0.5 text-xs text-zinc-500">
-                    Kd-Nr. {c.kundenNr} · Coach: {c.coachName} ·{" "}
-                    {c.bedarfstraegerName}
-                  </div>
-                </Link>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  {c.status !== "archived" &&
-                    (() => {
-                      const stage = avgsStage(c);
-                      return (
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs ${AVGS_STAGE_BADGE[stage]}`}
-                        >
-                          {AVGS_STAGE_LABEL[stage]}
-                        </span>
-                      );
-                    })()}
-                  <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">
-                    {statusLabel(c)}
-                  </span>
-                  <Link
-                    href={`/bildungstraeger/courses/${c.id}/edit`}
-                    className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                  >
-                    Bearbeiten
-                  </Link>
-                  {c.status === "archived" ? (
-                    <form action={unarchiveCourse}>
-                      <input type="hidden" name="courseId" value={c.id} />
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                      >
-                        Wiederherstellen
-                      </button>
-                    </form>
-                  ) : (
-                    <form action={archiveCourse}>
-                      <input type="hidden" name="courseId" value={c.id} />
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                      >
-                        Archivieren
-                      </button>
-                    </form>
-                  )}
-                  <DeleteCourseButton
-                    courseId={c.id}
-                    participantName={c.participantName}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <KundenCockpitList rows={rows} />
     </div>
   );
 }
