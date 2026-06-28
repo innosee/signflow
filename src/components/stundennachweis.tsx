@@ -406,7 +406,13 @@ function SignatureCell({
 }
 
 function Checkbox({ checked }: { checked: boolean }) {
-  return <span className="checkbox">{checked ? "☒" : "☐"}</span>;
+  // CSS-gezeichnet statt Unicode-Glyph (☒/☐): der headless-Chromium-Font auf
+  // Vercel (@sparticuz/chromium) hat die Ballot-Box-Zeichen nicht → sie kamen
+  // im PDF leer raus (z.B. Eignungsanalyse). Border + gefüllter Kern rendern
+  // font-unabhängig in jedem Renderer.
+  return (
+    <span className={`checkbox${checked ? " checked" : ""}`} aria-hidden="true" />
+  );
 }
 
 function formatUe(value: string): string {
@@ -547,7 +553,24 @@ const printCss = `
     font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: 7.5pt;
   }
-  .checkbox { font-size: 12pt; margin-right: 2mm; }
+  .checkbox {
+    display: inline-block;
+    width: 3mm;
+    height: 3mm;
+    border: 0.4mm solid #000;
+    box-sizing: border-box;
+    vertical-align: -0.4mm;
+    margin-right: 2mm;
+    position: relative;
+  }
+  .checkbox.checked::after {
+    content: "";
+    position: absolute;
+    inset: 0.5mm;
+    background: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .sheet-notes ul { list-style: none; margin: 2mm 0; padding: 0; }
   .sheet-notes li { margin: 0 0 1.5mm 0; display: flex; align-items: center; }
   .sheet-begruendung { margin-top: 3mm; }

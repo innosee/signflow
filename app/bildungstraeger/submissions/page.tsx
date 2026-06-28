@@ -64,7 +64,7 @@ export default async function BildungstraegerSubmissionsPage() {
             AfA-Übermittlungen
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Gesiegelte Stundennachweise aller Coaches. Nach der Übermittlung
+            Abgeschlossene Stundennachweise aller Coaches. Nach der Übermittlung
             an die AfA wird der Kurs später mit dem Rechnungsflow gekoppelt.
           </p>
         </div>
@@ -90,7 +90,7 @@ export default async function BildungstraegerSubmissionsPage() {
               r.bedarfstraegerName,
               `Coach: ${r.coachName}`,
               r.sealedAt
-                ? `Gesiegelt ${new Date(r.sealedAt).toLocaleDateString("de-DE")}`
+                ? `Abgeschlossen ${new Date(r.sealedAt).toLocaleDateString("de-DE")}`
                 : null,
             ]}
             pdfUrl={r.pdfUrl}
