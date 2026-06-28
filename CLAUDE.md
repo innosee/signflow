@@ -4,7 +4,9 @@
 # Signflow – Projektkontext für Claude
 
 ## Was ist Signflow?
-Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kursteilnehmer im Kontext der Agentur für Arbeit (AfA). Coaches und Teilnehmer unterschreiben digitale Anwesenheitsnachweise, die am Ende als PDF mit einer fortgeschrittenen elektronischen Signatur (FES) versehen und an die AfA übermittelt werden.
+Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kursteilnehmer im Kontext der Agentur für Arbeit (AfA). Coaches und Teilnehmer unterschreiben digitale Anwesenheitsnachweise, die am Ende als A4-PDF an die AfA übermittelt werden.
+
+> **Stand Launch (Bridge-Modus):** Produktiv läuft die **einfache elektronische Signatur** (Canvas + Zeitstempel + Audit-Protokoll) als ehrlicher Standard — **kein Siegel**. Das fortgeschrittene **FES-Siegel** (D-Trust) ist gebaut, aber gemockt und wird später per `FES_MODE=live` scharf geschaltet. Details: Abschnitt „FES" unten + Memory `project_einfache_signatur_bridge`.
 
 ---
 
@@ -13,7 +15,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 - **Auth:** Better Auth (Magic Links für Teilnehmer, E-Mail/PW für Coaches)
 - **Datenbank:** Neon (PostgreSQL, serverless)
 - **ORM:** Drizzle ORM
-- **E-Signatur (FES):** D-Trust-Siegel (AES) via PSW Group, **self-hosted PAdES** (Cert auf innosee GmbH). `src/lib/firma.ts` aktuell gemockt; Live-Integration steht aus. (firma.dev/Skribble verworfen — siehe Memory `project_fes_provider_decision`.)
+- **Signatur:** Stand Launch **einfache elektronische Signatur** (Canvas + Zeitstempel + Audit), kein Siegel. Das **FES-Siegel** (D-Trust AES via PSW, self-hosted PAdES, Cert auf innosee GmbH) liegt in `src/lib/fes.ts` **gemockt** und wird später per `FES_MODE=live` aktiviert (Bridge-Modus → Memory `project_einfache_signatur_bridge`; Anbieter-Entscheidung → `project_fes_provider_decision`; firma.dev/Skribble verworfen).
 - **Canvas-Signatur:** signature_pad
 - **PDF-Generierung:** Puppeteer (Headless Chromium rendert die React-Komponente via `@media print` → A4-PDF; HTML-as-Source-of-Truth, siehe unten)
 - **Storage:** Cloudflare R2 oder ähnlich (für Signaturbilder als URL, nicht base64 in DB)
@@ -25,7 +27,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 | Rolle | Beschreibung |
 |---|---|
 | **bildungstraeger** | Super Admin (die Firma / der Bildungsträger) – verwaltet (lädt ein/deaktiviert) Coaches, hat Gesamtübersicht, kann Coaches impersonaten (Support) |
-| **coach** | Wird von Bildungsträger per Einladung angelegt, setzt Passwort über Invite-Token. Legt **Termine/Einheiten** zu zugewiesenen Kunden an (Kurs-Anlage selbst macht der BT) und unterschreibt als Erster |
+| **coach** | Wird von Bildungsträger per Einladung angelegt, setzt Passwort über Invite-Token. Legt **Termine/Einheiten** zu zugewiesenen Kunden an (Kurs-Anlage selbst macht der BT) und unterschreibt. **Kompetenzteam:** mehrere Coaches je Maßnahme möglich (`course_coaches` + `sessions.coach_id`); jeder zugewiesene Coach signiert seine eigenen Termine. Zugriffs-Check überall via `courseVisibleToCoach` (primär ODER Team), nicht nur `courses.coach_id` (Memory `project_multi_coach_per_course`). |
 | **participant** | Kein eigener Account – erhält Magic Link per E-Mail (24h gültig), unterschreibt nur |
 
 ---
@@ -39,9 +41,9 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 6. **ANW-Compliance-Check** (KI gegen AZAV) – empfohlen vor der Freigabe. Soft-Warnungen (`status="nacharbeit"`) sind **quittierbar** („Hinweise gesehen — trotzdem freigeben", audit-geloggt) → **kein Hard-Block** durch die KI.
 7. Coach **„Maßnahme als abgeschlossen markieren"** – bei weniger als voll geleisteten UE mit **Pflicht-Begründung** (vorzeitiges Ende).
 8. Coach **„Preview an Teilnehmer senden"** → Teilnehmer sieht das **pixel-identische** Enddokument und klickt **„Freigeben"** (Audit + Timestamp, keine FES).
-9. **Bildungsträger-Prüfung (FES-Gate 3/3):** Coach reicht die freigegebene Liste beim BT zur Prüfung ein → BT **gibt frei** oder fordert **Nachbesserung** an (Notiz-Thread, `/bildungstraeger/reviews`). Erst nach BT-Freigabe ist der FES-Schritt frei.
-10. Coach **„Mit FES versiegeln"** → System rendert HTML → PDF (Puppeteer) und appliziert **1× FES (D-Trust via PSW, self-hosted PAdES; aktuell in `src/lib/firma.ts` GEMOCKT)**.
-11. **Bildungsträger** übermittelt das gesiegelte PDF an die AfA (`/bildungstraeger/submissions`).
+9. **Bildungsträger-Prüfung (Abschluss-Gate 3/3):** Coach reicht die freigegebene Liste beim BT zur Prüfung ein → BT **gibt frei** oder fordert **Nachbesserung** an (Notiz-Thread, `/bildungstraeger/reviews`). Bei Nachbesserung kann der Coach auf seiner Kursseite **antworten** (Re-Submit mit Notiz → Status zurück auf `pending`, BT entscheidet erneut); alle zugewiesenen Coaches werden per Mail informiert + Dashboard-Badge. Erst nach BT-Freigabe ist der Abschluss frei.
+10. Coach **„Nachweis abschließen"** → System rendert HTML → PDF (Puppeteer). **Stand Launch: einfache elektronische Signatur** (kein Siegel). Das **FES-Siegel** (`src/lib/fes.ts`, gemockt → später `FES_MODE=live`) wird hier appliziert, sobald live.
+11. **Bildungsträger** übermittelt das abgeschlossene PDF an die AfA (`/bildungstraeger/submissions`).
 
 ### HTML-as-Source-of-Truth
 Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seite, die als PDF gedruckt wird – derselbe React-Baum in zwei Modi (`@media screen` interaktiv, `@media print` → Puppeteer-Render nach A4). Kein separates PDF-Layout, keine Design-Drift.
@@ -56,12 +58,10 @@ Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seit
 - Pro Session **aktive Bestätigung** erforderlich ("Ich bestätige für heute") + Zeitstempel
 - Das gibt rechtliche Absicherung ohne 30–50x neu unterschreiben zu müssen
 
-### FES (Fortgeschrittene Elektronische Signatur)
-- **Anbieter: D-Trust via PSW Group** (AES-Siegel, ~€722/Jahr), **self-hosted PAdES** — das PDF verlässt unsere Infrastruktur nie. firma.dev und Skribble sind verworfen (Details: Memory `project_fes_provider_decision`).
-- Nur **1 Siegel pro Kurs** auf das finale PDF, Coach-seitig ausgelöst.
-- **Aktuell GEMOCKT** in `src/lib/firma.ts` — Live-Integration (PAdES + Cert) ist der größte Restbau, hängt am D-Trust-Cert (KYB/CA läuft).
-- **FES-Gates (alle drei müssen erfüllt sein):** (1) ANW-Compliance-Check freigegeben/quittiert, (2) Maßnahme als abgeschlossen markiert, (3) **Bildungsträger-Prüfung freigegeben** + alle Termine signiert + Teilnehmer-Freigabe. Bei jeder Termin-Änderung werden die Gates zurückgesetzt.
-- Einfache Signaturen innerhalb des Dokuments sind selbst gebaut (Canvas).
+### Signatur & FES (Bridge-Modus)
+- **Stand Launch: einfache elektronische Signatur** ist der produktive Standard. Coach + Teilnehmer signieren per Canvas, abgesichert durch Zeitstempel + IP + aktive Bestätigung + Audit-Protokoll. Das finale PDF trägt **kein Siegel**. Rechtlich tragfähig (AZAV-Anwesenheitsnachweise haben keine Schriftform). Öffentliche Claims sagen ehrlich „FES in Vorbereitung".
+- **FES-Siegel später:** `src/lib/fes.ts` (`sealWithFes`) ist **gemockt**. Live = **D-Trust-Siegel (AES) via PSW Group, self-hosted PAdES** (Cert auf innosee GmbH) — das PDF verlässt unsere Infrastruktur nie. Aktiviert per `FES_MODE=live` (Memory `project_einfache_signatur_bridge`; Anbieter `project_fes_provider_decision`; firma.dev/Skribble verworfen). Nur **1 Siegel pro Kurs**, Coach-seitig ausgelöst.
+- **Abschluss-Gates (alle drei müssen erfüllt sein):** (1) ANW-Compliance-Check freigegeben/quittiert, (2) Maßnahme als abgeschlossen markiert, (3) **Bildungsträger-Prüfung freigegeben** + alle Termine signiert + Teilnehmer-Freigabe. Bei jeder Termin-Änderung werden die Gates zurückgesetzt. (Gaten heute den „Nachweis abschließen"-Schritt; mit `FES_MODE=live` gaten sie das Siegel.)
 - FES reicht für die AfA – QES wird nicht benötigt.
 
 ### Teilnehmer-Flow
@@ -78,7 +78,7 @@ Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seit
   3. **`/setup`** — einmaliger Bootstrap des Default-Tenants (unverändert).
 - **Impersonation (Bildungsträger → Coach)**: Bildungsträger kann in die Sicht eines Coaches wechseln. Session führt `impersonated_by`-Feld (DB-Spalte) / `impersonatedBy` (Drizzle/TS). Jede Aktion wird im Audit-Log mit beiden IDs geloggt.
 - **Schreibende Aktionen während Impersonation sind hart blockiert** – insbesondere das Leisten von Unterschriften. Sonst ist die Beweiskraft der digitalen Unterschrift kaputt (Coach könnte behaupten, Bildungsträger habe in seinem Namen signiert).
-- **Data-Isolation**: jede Coach-Query serverseitig mit `coach_id = session.user.id` filtern – nicht auf UI verlassen.
+- **Data-Isolation**: jede Coach-Query serverseitig scopen – nicht auf UI verlassen. Im Kompetenzteam-Modell **nicht** stumpf `coach_id = session.user.id`, sondern den Helper `courseVisibleToCoach(coachId)` (primärer Coach ODER `course_coaches`-Mitglied) verwenden — sonst sehen Team-Coaches „ihre" Kurse nicht.
 - **Multi-Tenant (live seit 2026-05)**: mehrere Bildungsträger pro Deployment, je ein `tenants`-Eintrag. `users`, `participants` und `bedarfstraeger` tragen `tenant_id`; jede Query ist tenant-scoped (nicht nur `coach_id`). Neue Tenants entstehen über das Bildungsträger-Onboarding oben.
 
 ---
@@ -119,9 +119,9 @@ status: enum('active', 'completed', 'archived')
 flag_unter_2_termine: boolean
 flag_vorzeitiges_ende: boolean
 begruendung_text: string | null    // Pflicht bei vorzeitigem Abschluss
-abgeschlossen_at: timestamp | null    // FES-Gate 1: "Maßnahme abgeschlossen"
-anw_check_passed_at: timestamp | null // FES-Gate 2: ANW-Check freigegeben/quittiert
-review_status: enum('none','pending','changes_requested','approved')  // FES-Gate 3: BT-Prüfung
+abgeschlossen_at: timestamp | null    // Abschluss-Gate 1: "Maßnahme abgeschlossen"
+anw_check_passed_at: timestamp | null // Abschluss-Gate 2: ANW-Check freigegeben/quittiert
+review_status: enum('none','pending','changes_requested','approved')  // Abschluss-Gate 3: BT-Prüfung
 review_requested_at / review_decided_at: timestamp | null
 review_decided_by: uuid | null
 created_at / updated_at / deleted_at
@@ -140,6 +140,9 @@ updated_at: timestamp
 
 #### `course_participants` / `session_participants` — **ENTFALLEN**
 Durch das 1:1-Modell (2026-06-12) gedroppt. Die Bindung läuft jetzt direkt über `courses.participant_id`.
+
+#### `course_coaches`  (Kompetenzteam: mehrere Coaches je Maßnahme)
+Verknüpft `course_id × coach_id` für zusätzlich zugewiesene Team-Coaches (zusätzlich zum primären `courses.coach_id`). `sessions.coach_id` hält fest, welcher Coach einen Termin verantwortet. Zugriffs-Checks nutzen den korrelierten SQL-Helper `courseVisibleToCoach(coachId)` ([src/lib/course-access.ts](src/lib/course-access.ts)) — primärer Coach ODER `course_coaches`-Mitglied. Migration: `apply-session-coach-migration.mjs` (Status vor Prod prüfen). Memory `project_multi_coach_per_course`.
 
 #### `sessions`
 ```ts
@@ -171,7 +174,7 @@ used_at: timestamp | null // null = aktiv; reserviert für späteren expliziten 
 
 **Semantik:** Mehrere Links pro Kurs × Teilnehmer können gleichzeitig gültig sein — jeder läuft 24 h ab seiner Ausstellung. Re-Issue legt einfach einen neuen Datensatz an, **ohne** alte zu invalidieren (geändert 2026-06-19, damit eine ältere Mail nicht ins Leere läuft). Gültigkeit hängt nur an `expires_at`; alle aktiven Links zeigen auf dieselbe Sign-Seite. Innerhalb der 24 h kann der Teilnehmer beliebige offene Session-Zeilen signieren — der Token wird NICHT pro Session verbraucht.
 
-#### `course_review_notes`  (Bildungsträger-Prüfung, FES-Gate 3)
+#### `course_review_notes`  (Bildungsträger-Prüfung, Abschluss-Gate 3)
 ```ts
 id: uuid PK
 course_id: uuid FK -> courses.id (cascade)
@@ -199,8 +202,8 @@ ip_address: string
 id: uuid PK
 course_id: uuid FK -> courses.id (unique – 1 pro Kurs)
 pdf_url: string
-firma_envelope_id: string | null
-fes_status: enum('pending', 'sent', 'completed')
+firma_envelope_id: string | null   // Spaltenname historisch (firma.dev), bleibt; im Bridge-Modus eine interne Abschluss-Ref ("bridge_…"), null Siegel
+fes_status: enum('pending', 'sent', 'completed')  // im Bridge-Modus 'completed' = abgeschlossen (kein echtes Siegel)
 created_at: timestamp
 completed_at: timestamp | null
 ```
@@ -242,12 +245,13 @@ course_participants.course_id
 
 ---
 
-## Nächste Schritte
-- [ ] Drizzle Schema implementieren (`src/db/schema.ts`)
-- [ ] Drizzle Config anlegen (`drizzle.config.ts`)
-- [ ] Better Auth konfigurieren (`src/lib/auth.ts`)
-- [ ] Erste Migration pushen (`npx drizzle-kit push`)
-- [ ] Frontend Design in Stitch (User Flows: Coach Dashboard, Session anlegen, Teilnehmer-Signaturseite)
+## Offene Punkte vor Production
+(App ist live in der Testphase; Go-Live 2026-06-29.)
+- **FES live schalten:** echten PAdES-Flow in `src/lib/fes.ts` + `FES_MODE=live` (hängt am D-Trust-Cert, KYB/CA läuft). Größter Restbau — bis dahin Bridge-Modus.
+- **`course_coaches` auf Prod:** Migration `apply-session-coach-migration.mjs` anwenden + prüfen, dass die BT-Kunden-Zuweisung die Zeilen wirklich schreibt (sonst sehen Team-Coaches ihre Kurse nicht).
+- **BER-Checker rein beratend:** der alte `lastCheckPassed`-Gate ist raus — Hinweise/Verstöße/fehlende Pflichtbausteine blockieren das Einreichen NIE. Einzige Hürde sind **Hard-Blocks** (Art-9/Gesundheit, harte Prognose) mit Override-Begründung (Client + Server-Snapshot). Offen: serverseitige Re-Validierung des Hard-Blocks gegen Azure, sobald live (Server vertraut aktuell dem mitgeschickten Snapshot).
+- **Secret-Rotation-Batch** (Neon-PW + IONOS-Secret + R2-Creds) gebündelt kurz vor Prod.
+- **Datenschutzerklärung** nennt noch FES-Cert + „gesiegelte PDFs" — Rechtstext, läuft mit der DSGVO-Beratung.
 
 ---
 
