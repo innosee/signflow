@@ -18,8 +18,18 @@ export function DeleteCourseButton({
   participantName: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirmName, setConfirmName] = useState("");
 
-  const close = useCallback(() => setOpen(false), []);
+  // Erst wenn der Kundenname exakt (getrimmt) getippt wurde, ist das Löschen
+  // freigegeben — schützt vor versehentlichem Klick. Wird zusätzlich
+  // serverseitig gegengeprüft (Client ist manipulierbar).
+  const nameMatches =
+    confirmName.trim().toLowerCase() === participantName.trim().toLowerCase();
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setConfirmName("");
+  }, []);
 
   // Escape schließt das Modal.
   useEffect(() => {
@@ -82,6 +92,26 @@ export function DeleteCourseButton({
                 unterschrieben oder Termine erfasst hat. Es gibt keine
                 Wiederherstellung.
               </p>
+              <div>
+                <label
+                  htmlFor="confirm-delete-name"
+                  className="block text-xs text-zinc-600"
+                >
+                  Zum Bestätigen den Kundennamen tippen:{" "}
+                  <span className="font-medium text-zinc-950">
+                    {participantName}
+                  </span>
+                </label>
+                <input
+                  id="confirm-delete-name"
+                  type="text"
+                  autoComplete="off"
+                  value={confirmName}
+                  onChange={(e) => setConfirmName(e.target.value)}
+                  placeholder={participantName}
+                  className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-red-500"
+                />
+              </div>
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-2">
@@ -94,9 +124,11 @@ export function DeleteCourseButton({
               </button>
               <form action={deleteCourse}>
                 <input type="hidden" name="courseId" value={courseId} />
+                <input type="hidden" name="confirmName" value={confirmName} />
                 <button
                   type="submit"
-                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                  disabled={!nameMatches}
+                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Endgültig löschen
                 </button>
