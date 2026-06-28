@@ -35,7 +35,41 @@ import { recomputeSessionStatus } from "@/lib/session-status";
 import { evaluateSealReadiness, type SealBlock } from "@/lib/sign-state";
 import { isValidE164, normalizePhoneInput } from "@/lib/sms";
 
-export type SessionFormState = { error?: string } | undefined;
+export type SessionFormValues = {
+  sessionDate: string;
+  modus: string;
+  anzahlUe: string;
+  isErstgespraech: boolean;
+  topic: string;
+  geeignet: boolean | null;
+  eignungsanalyse: Eignungsanalyse | null;
+};
+
+export type SessionFormState =
+  | { error?: string; values?: SessionFormValues }
+  | undefined;
+
+/**
+ * Liest die roh eingegebenen Formularwerte für den Fehler-Echo. React-19-Form-
+ * Actions resetten das <form> nach der Action — ohne diesen Echo verlöre der
+ * Coach bei einem Validierungsfehler alle Eingaben (v.a. die Eignungsanalyse).
+ * Das Form seedet daraus `defaultValue`/`defaultChecked`, sodass der Reset die
+ * getippten Werte wiederherstellt statt sie zu leeren.
+ */
+function readSessionFormValues(formData: FormData): SessionFormValues {
+  const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
+  const eignung = parseEignungsanalyseFromForm(formData);
+  return {
+    sessionDate: String(formData.get("sessionDate") ?? ""),
+    modus: String(formData.get("modus") ?? ""),
+    anzahlUe: String(formData.get("anzahlUe") ?? ""),
+    isErstgespraech: formData.get("isErstgespraech") === "on",
+    topic: String(formData.get("topic") ?? ""),
+    geeignet:
+      geeignetRaw === "ja" ? true : geeignetRaw === "nein" ? false : null,
+    eignungsanalyse: eignung.ok ? eignung.value : null,
+  };
+}
 
 /**
  * Gemeinsame Feld-Validierung für Create + Update einer Session — beide
@@ -503,8 +537,11 @@ export async function createSession(
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
+  // Eingaben für den Fehler-Echo festhalten (React-19-Form-Reset, s.o.).
+  const echo = readSessionFormValues(formData);
+
   const validation = validateSessionFormFields(formData);
-  if (!validation.ok) return { error: validation.error };
+  if (!validation.ok) return { error: validation.error, values: echo };
   const v = validation.values;
 
   const rules = await validateCrossSessionRules({
@@ -513,7 +550,7 @@ export async function createSession(
     isErstgespraech: v.isErstgespraech,
     anzahlUe: Number.parseFloat(v.anzahlUe),
   });
-  if (!rules.ok) return { error: rules.error };
+  if (!rules.ok) return { error: rules.error, values: echo };
 
   // 1:1: Der Termin gehört implizit dem einen Kunden des Kurses — keine
   // Teilnehmer-Auswahl pro Termin mehr.
@@ -550,7 +587,10 @@ export async function createSession(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { error: `Termin konnte nicht angelegt werden (${message}).` };
+    return {
+      error: `Termin konnte nicht angelegt werden (${message}).`,
+      values: echo,
+    };
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);
@@ -578,6 +618,9 @@ export async function updateSession(
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
 
+  // Eingaben für den Fehler-Echo festhalten (React-19-Form-Reset, s.o.).
+  const echo = readSessionFormValues(formData);
+
   // Pre-Check: gehört die Session zu diesem Kurs UND ist sie noch
   // unsigniert? Wenn schon mindestens 1 Signatur existiert: hart blocken,
   // weil ein Edit den Audit-Trail (signed_at, IP, Inhalts-Snapshot) gegen
@@ -593,7 +636,7 @@ export async function updateSession(
       ),
     )
     .limit(1);
-  if (!sess) return { error: "Session nicht gefunden." };
+  if (!sess) return { error: "Session nicht gefunden.", values: echo };
 
   const [existingSig] = await db
     .select({ id: schema.signatures.id })
@@ -604,11 +647,12 @@ export async function updateSession(
     return {
       error:
         "Diese Session ist bereits signiert und lässt sich so nicht mehr bearbeiten. Um zu korrigieren, muss die Session erst wieder geöffnet werden (Coach- und TN-Signaturen werden dabei entfernt).",
+      values: echo,
     };
   }
 
   const validation = validateSessionFormFields(formData);
-  if (!validation.ok) return { error: validation.error };
+  if (!validation.ok) return { error: validation.error, values: echo };
   const v = validation.values;
 
   const rules = await validateCrossSessionRules({
@@ -618,7 +662,7 @@ export async function updateSession(
     anzahlUe: Number.parseFloat(v.anzahlUe),
     excludeSessionId: sessionId,
   });
-  if (!rules.ok) return { error: rules.error };
+  if (!rules.ok) return { error: rules.error, values: echo };
 
   try {
     await db.transaction(async (tx) => {
@@ -641,7 +685,10 @@ export async function updateSession(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { error: `Termin konnte nicht aktualisiert werden (${message}).` };
+    return {
+      error: `Termin konnte nicht aktualisiert werden (${message}).`,
+      values: echo,
+    };
   }
 
   redirect(`/coach/courses/${ownedCourseId}`);

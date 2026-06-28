@@ -109,7 +109,7 @@ export function SessionForm({
             </span>
             <select
               name="modus"
-              defaultValue="praesenz"
+              defaultValue={state?.values?.modus || "praesenz"}
               required
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             >
@@ -199,7 +199,12 @@ export function SessionForm({
           </label>
         )}
 
-        {!erstgespraechExists && isErstgespraech && <EignungAnalyseFieldset />}
+        {!erstgespraechExists && isErstgespraech && (
+          <EignungAnalyseFieldset
+            defaultEignung={state?.values?.eignungsanalyse}
+            defaultGeeignet={state?.values?.geeignet}
+          />
+        )}
 
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-zinc-800">
@@ -209,6 +214,7 @@ export function SessionForm({
             name="topic"
             required
             rows={4}
+            defaultValue={state?.values?.topic ?? ""}
             placeholder="z.B. Lebenslauf-Feedback, Bewerbungstraining, Zielklärung"
             className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
           />

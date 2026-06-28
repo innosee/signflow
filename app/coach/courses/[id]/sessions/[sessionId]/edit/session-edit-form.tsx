@@ -96,7 +96,7 @@ export function SessionEditForm({
             </span>
             <select
               name="modus"
-              defaultValue={session.modus}
+              defaultValue={state?.values?.modus || session.modus}
               required
               className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             >
@@ -170,8 +170,10 @@ export function SessionEditForm({
 
         {isErstgespraech && (
           <EignungAnalyseFieldset
-            defaultGeeignet={session.geeignet}
-            defaultEignung={session.eignungsanalyse}
+            defaultGeeignet={state?.values?.geeignet ?? session.geeignet}
+            defaultEignung={
+              state?.values?.eignungsanalyse ?? session.eignungsanalyse
+            }
           />
         )}
 
@@ -183,7 +185,7 @@ export function SessionEditForm({
             name="topic"
             required
             rows={4}
-            defaultValue={session.topic}
+            defaultValue={state?.values?.topic ?? session.topic}
             placeholder="z.B. Lebenslauf-Feedback, Bewerbungstraining, Zielklärung"
             className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
           />
