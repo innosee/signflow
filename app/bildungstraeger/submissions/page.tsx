@@ -35,7 +35,6 @@ export default async function BildungstraegerSubmissionsPage() {
       afaStatus: schema.finalDocuments.afaStatus,
       sealedAt: schema.finalDocuments.completedAt,
       submittedToAfaAt: schema.finalDocuments.submittedToAfaAt,
-      pdfUrl: schema.finalDocuments.pdfUrl,
     })
     .from(schema.finalDocuments)
     .innerJoin(
@@ -93,7 +92,7 @@ export default async function BildungstraegerSubmissionsPage() {
                 ? `Abgeschlossen ${new Date(r.sealedAt).toLocaleDateString("de-DE")}`
                 : null,
             ]}
-            pdfUrl={r.pdfUrl}
+            pdfUrl={`/api/bildungstraeger/courses/${r.courseId}/anw-pdf`}
             action={<SubmitAfaButton courseId={r.courseId} />}
           />
         ))}
@@ -116,7 +115,7 @@ export default async function BildungstraegerSubmissionsPage() {
                 ? `Übermittelt ${new Date(r.submittedToAfaAt).toLocaleDateString("de-DE")}`
                 : null,
             ]}
-            pdfUrl={r.pdfUrl}
+            pdfUrl={`/api/bildungstraeger/courses/${r.courseId}/anw-pdf`}
           />
         ))}
       </Section>

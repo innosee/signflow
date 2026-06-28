@@ -46,7 +46,6 @@ export default async function BildungstraegerCoursesPage() {
       bedarfstraegerName: schema.bedarfstraeger.name,
       fesStatus: schema.finalDocuments.fesStatus,
       afaStatus: schema.finalDocuments.afaStatus,
-      pdfUrl: schema.finalDocuments.pdfUrl,
       berId: schema.abschlussberichte.id,
       berStatus: schema.abschlussberichte.status,
     })
@@ -115,7 +114,9 @@ export default async function BildungstraegerCoursesPage() {
       anwLabel: ANW_STATUS_LABEL[anw],
       anwTone: ANW_STATUS_TONE[anw],
       // Download nur, wenn wirklich gesiegelt (Entscheidung: „fertig" = Siegel).
-      anwPdfUrl: sealed ? c.pdfUrl : null,
+      // BT-eigener Endpoint — der gespeicherte pdfUrl zeigt auf den coach-
+      // scoped Endpoint und würde den BT abweisen.
+      anwPdfUrl: sealed ? `/api/bildungstraeger/courses/${c.id}/anw-pdf` : null,
       afaSubmitted: c.afaStatus === "submitted",
       berStatus:
         c.berStatus === "submitted"
