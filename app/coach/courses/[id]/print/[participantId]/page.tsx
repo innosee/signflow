@@ -55,8 +55,8 @@ export default async function PrintSheetPage({ params }: Props) {
             PDF herunterladen
           </a>
           <p className="text-xs text-zinc-500">
-            Headless-Chromium rendert dieselbe Seite nach A4 — 1:1 mit dem
-            finalen AfA-PDF.
+            Diese Vorschau entspricht 1:1 dem finalen PDF für die Agentur für
+            Arbeit.
           </p>
         </div>
       </div>
