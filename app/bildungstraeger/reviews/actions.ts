@@ -1,5 +1,7 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { and, eq, isNull } from "drizzle-orm";
 
@@ -25,6 +27,7 @@ async function loadReviewCourse(courseId: string, tenantId: string) {
     .select({
       id: schema.courses.id,
       title: schema.courses.title,
+      participantId: schema.courses.participantId,
       reviewStatus: schema.courses.reviewStatus,
       coachId: schema.users.id,
       coachName: schema.users.name,
@@ -138,6 +141,35 @@ export async function approveCourseReview(
       kind: "approve",
       body: note || null,
     });
+
+    // BT-Freigabe = Abschluss: das finale Dokument wird hier erzeugt (Bridge-
+    // Modus, KEINE FES — die einfache elektronische Signatur liegt bereits auf
+    // den einzelnen Terminen). Damit erscheint der Kurs in der AfA-
+    // Übermittlungs-Liste. `sealedBy` ist jetzt der Bildungsträger. Stale-
+    // Schutz: die Übermittlungs-Liste filtert zusätzlich auf reviewStatus=
+    // 'approved', falls der Coach danach noch Termine ändert.
+    const appBase = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const pdfUrl = `${appBase}/api/courses/${courseId}/participants/${course.participantId}/pdf`;
+    await tx
+      .insert(schema.finalDocuments)
+      .values({
+        courseId,
+        pdfUrl,
+        sealedBy: btUserId,
+        fesStatus: "completed",
+        firmaEnvelopeId: `bridge_${randomUUID().replace(/-/g, "")}`,
+        completedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.finalDocuments.courseId,
+        set: {
+          pdfUrl,
+          sealedBy: btUserId,
+          fesStatus: "completed",
+          completedAt: now,
+        },
+      });
+
     await logAudit(
       {
         actorType: "bildungstraeger",

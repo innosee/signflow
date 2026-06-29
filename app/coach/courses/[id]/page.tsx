@@ -18,11 +18,9 @@ import { CoachSignForm } from "./coach-sign-form";
 import { CorrectTopicButton } from "./correct-topic-button";
 import { MarkAbgeschlossenButton } from "./mark-abgeschlossen-button";
 import { NotifyParticipantsButton } from "./notify-button";
-import { SendPreviewButton } from "./preview-button";
 import { QrHandoverButton } from "./qr-handover-button";
 import { ReopenSessionButton } from "./reopen-session-button";
 import { ReviewSubmitButton } from "./review-submit-button";
-import { SealCourseButton } from "./seal-button";
 import { SmsResendButton } from "./sms-resend-button";
 
 export const dynamic = "force-dynamic";
@@ -292,8 +290,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
   const allApproved =
     participants.length > 0 &&
     participants.every((p) => approvalByParticipant.has(p.id));
-  const previewSent = approvedRows.length > 0; // heuristic; we don't track sent separately
-  const isSealed = finalDoc?.fesStatus === "completed";
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
@@ -618,53 +614,16 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </Step>
           <Step
             index={4}
-            title="Freigabe der Teilnehmer einholen"
-            done={allApproved}
-            subtitle={
-              participants.length === 0
-                ? "Noch keine Teilnehmer im Kurs."
-                : !course.abgeschlossenAt
-                  ? "Erst nach Markierung als abgeschlossen möglich."
-                  : `${approvalByParticipant.size} von ${participants.length} Teilnehmern haben freigegeben.`
-            }
-          >
-            {!impersonating && (
-              <SendPreviewButton
-                courseId={course.id}
-                disabled={
-                  participants.length === 0 ||
-                  !allSessionsCompleted ||
-                  !course.anwCheckPassedAt ||
-                  !course.abgeschlossenAt ||
-                  allApproved
-                }
-                disabledReason={
-                  participants.length === 0
-                    ? "Keine Teilnehmer im Kurs"
-                    : !allSessionsCompleted
-                      ? "Erst wenn alle Termine signiert sind"
-                      : !course.anwCheckPassedAt
-                        ? "ANW-Compliance-Check muss durchlaufen sein"
-                        : !course.abgeschlossenAt
-                          ? "Maßnahme muss als abgeschlossen markiert sein"
-                          : "Alle Teilnehmer haben bereits freigegeben"
-                }
-                alreadySent={previewSent}
-              />
-            )}
-          </Step>
-          <Step
-            index={5}
-            title="Bildungsträger-Prüfung"
+            title="Bildungsträger-Prüfung & Abschluss"
             done={course.reviewStatus === "approved"}
             subtitle={
               course.reviewStatus === "approved"
-                ? `Vom Bildungsträger freigegeben${course.reviewDecidedAt ? ` am ${new Date(course.reviewDecidedAt).toLocaleString("de-DE")}` : ""}.`
+                ? `Vom Bildungsträger freigegeben & abgeschlossen${course.reviewDecidedAt ? ` am ${new Date(course.reviewDecidedAt).toLocaleString("de-DE")}` : ""}. Der Bildungsträger übermittelt den Nachweis an die Agentur für Arbeit.`
                 : course.reviewStatus === "pending"
                   ? `Beim Bildungsträger in Prüfung${course.reviewRequestedAt ? ` seit ${new Date(course.reviewRequestedAt).toLocaleString("de-DE")}` : ""}.`
                   : course.reviewStatus === "changes_requested"
                     ? "Nachbesserung angefordert — Verlauf lesen, dann antworten oder Termine korrigieren und erneut einreichen."
-                    : "Reiche die freigegebene Liste beim Bildungsträger zur Prüfung ein."
+                    : "Reiche die freigegebene Liste beim Bildungsträger zur Prüfung ein. Mit der Freigabe schließt der Bildungsträger den Nachweis ab."
             }
           >
             {reviewNotes.length > 0 && <ReviewThread notes={reviewNotes} />}
@@ -693,43 +652,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   }
                 />
               )}
-          </Step>
-          <Step
-            index={6}
-            title="Nachweis abschließen"
-            done={isSealed}
-            subtitle={
-              isSealed
-                ? `Abgeschlossen am ${finalDoc?.completedAt ? new Date(finalDoc.completedAt).toLocaleString("de-DE") : "—"}.`
-                : "Erzeugt das finale Dokument mit einfacher elektronischer Signatur — letzter Schritt vor der Übergabe an den Bildungsträger."
-            }
-          >
-            {!impersonating && !isSealed && (
-              <SealCourseButton
-                courseId={course.id}
-                disabled={
-                  !allSessionsCompleted ||
-                  !allApproved ||
-                  !course.anwCheckPassedAt ||
-                  !course.abgeschlossenAt ||
-                  course.reviewStatus !== "approved"
-                }
-                disabledReason={
-                  !allSessionsCompleted
-                    ? "Erst wenn alle Termine signiert sind"
-                    : !allApproved
-                      ? "Mindestens ein Teilnehmer hat noch nicht freigegeben"
-                      : !course.anwCheckPassedAt
-                        ? "ANW-Compliance-Check muss durchlaufen sein"
-                        : !course.abgeschlossenAt
-                          ? "Maßnahme muss als abgeschlossen markiert sein"
-                          : course.reviewStatus !== "approved"
-                            ? "Der Bildungsträger muss die Liste erst freigeben"
-                            : undefined
-                }
-              />
-            )}
-            {isSealed && finalDoc?.pdfUrl && (
+            {course.reviewStatus === "approved" && finalDoc?.pdfUrl && (
               <a
                 href={finalDoc.pdfUrl}
                 className="text-xs text-emerald-800 underline-offset-2 hover:underline"

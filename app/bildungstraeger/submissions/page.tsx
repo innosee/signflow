@@ -34,6 +34,7 @@ export default async function BildungstraegerSubmissionsPage() {
       bedarfstraegerName: schema.bedarfstraeger.name,
       fesStatus: schema.finalDocuments.fesStatus,
       afaStatus: schema.finalDocuments.afaStatus,
+      reviewStatus: schema.courses.reviewStatus,
       sealedAt: schema.finalDocuments.completedAt,
       submittedToAfaAt: schema.finalDocuments.submittedToAfaAt,
     })
@@ -50,11 +51,20 @@ export default async function BildungstraegerSubmissionsPage() {
     .where(eq(schema.users.tenantId, tenantId))
     .orderBy(desc(schema.finalDocuments.completedAt));
 
+  // Stale-Schutz: nur Kurse anzeigen, die aktuell BT-freigegeben sind. Ändert
+  // der Coach nach der Freigabe noch Termine, fällt reviewStatus zurück auf
+  // 'none' → der (noch existierende) final_documents-Eintrag darf dann NICHT
+  // mehr zur AfA-Übermittlung anstehen.
   const pending = rows.filter(
-    (r) => r.fesStatus === "completed" && r.afaStatus === "pending",
+    (r) =>
+      r.fesStatus === "completed" &&
+      r.afaStatus === "pending" &&
+      r.reviewStatus === "approved",
   );
   const submitted = rows.filter((r) => r.afaStatus === "submitted");
-  const unsealed = rows.filter((r) => r.fesStatus !== "completed");
+  const unsealed = rows.filter(
+    (r) => r.fesStatus !== "completed" && r.reviewStatus === "approved",
+  );
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-10">
