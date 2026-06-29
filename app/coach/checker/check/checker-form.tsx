@@ -14,6 +14,10 @@ import { MassnahmetypPicker } from "@/components/checker/massnahmetyp-picker";
 import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
 import { AuthRequiredError } from "@/lib/checker/errors";
+import {
+  activeHardBlocks,
+  resolveHardBlockOverrideReason,
+} from "@/lib/checker/gate";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import {
   fingerprintApplied,
@@ -129,7 +133,15 @@ export function CheckerForm({
   // Override-Begründung wenn Pflicht-Bausteine in der Maßnahme nicht
   // abdeckbar sind (z.B. 5-UE-Bewerbungsoptimierung). Wird vom Sidebar-
   // Toggle befüllt, fließt in den Submit-Payload.
-  const [mustHaveOverrideReason, setMustHaveOverrideReason] = useState("");
+  // Pro Sensibel-Stelle (hard_block, per violation.id) die Fehlalarm-
+  // Begründung des Coaches. Wegklicken geht NUR mit Begründung (≥10 Zeichen) —
+  // der Bildungsträger prüft sie nach.
+  const [dismissReasons, setDismissReasons] = useState<Record<string, string>>(
+    {},
+  );
+  function handleDismissReasonChange(id: string, reason: string) {
+    setDismissReasons((prev) => ({ ...prev, [id]: reason }));
+  }
   const [steps, setSteps] = useState<CheckerStep[]>(INITIAL_STEPS);
   const [result, setResult] = useState<CheckerResult | null>(null);
   // Input-Snapshot des letzten Checks — kein erneuter Azure-Call wenn
@@ -165,6 +177,13 @@ export function CheckerForm({
   // kennzeichnen — damit der Coach erkennt: nicht-deterministisches
   // LLM-Rauschen, keine echte neue Anmerkung.
   const [appliedFingerprints, setAppliedFingerprints] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // Violation-IDs des VORHERIGEN Checks — Basis für den „neu seit letzter
+  // Prüfung"-Diff. `null` = noch kein Check gelaufen (erster Check badged nichts).
+  const [lastCheckIds, setLastCheckIds] = useState<Set<string> | null>(null);
+  // IDs, die im aktuellen Result neu hinzukamen → „Neu"-Badge in der Sidebar.
+  const [newViolationIds, setNewViolationIds] = useState<Set<string>>(
     () => new Set(),
   );
 
@@ -218,9 +237,40 @@ export function CheckerForm({
           const payload = maybe as {
             result: CheckerResult;
             lastCheckedInput: CheckerInput;
+            acceptedIds?: unknown;
+            dismissReasons?: unknown;
+            appliedFingerprints?: unknown;
+            lastCheckIds?: unknown;
           };
           setResult(payload.result);
           setLastCheckedInput(payload.lastCheckedInput);
+          // Review-State wiederherstellen (best effort, defensiv validiert).
+          const strArray = (v: unknown): string[] =>
+            Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+          if (Array.isArray(payload.acceptedIds)) {
+            setAcceptedIds(new Set(strArray(payload.acceptedIds)));
+          }
+          if (
+            payload.dismissReasons &&
+            typeof payload.dismissReasons === "object" &&
+            !Array.isArray(payload.dismissReasons)
+          ) {
+            const clean: Record<string, string> = {};
+            for (const [k, val] of Object.entries(
+              payload.dismissReasons as Record<string, unknown>,
+            )) {
+              if (typeof val === "string") clean[k] = val;
+            }
+            setDismissReasons(clean);
+          }
+          if (Array.isArray(payload.appliedFingerprints)) {
+            setAppliedFingerprints(
+              new Set(strArray(payload.appliedFingerprints)),
+            );
+          }
+          if (Array.isArray(payload.lastCheckIds)) {
+            setLastCheckIds(new Set(strArray(payload.lastCheckIds)));
+          }
         }
       }
     } catch {
@@ -250,7 +300,17 @@ export function CheckerForm({
       if (result && lastCheckedInput) {
         localStorage.setItem(
           resultKey,
-          JSON.stringify({ result, lastCheckedInput }),
+          JSON.stringify({
+            result,
+            lastCheckedInput,
+            // Review-State mitpersistieren, damit erledigte/weggeklickte
+            // Stellen einen Reload überleben (sonst zeigt der Check nach
+            // Refresh wieder alles offen).
+            acceptedIds: [...acceptedIds],
+            dismissReasons,
+            appliedFingerprints: [...appliedFingerprints],
+            lastCheckIds: lastCheckIds ? [...lastCheckIds] : null,
+          }),
         );
       } else {
         localStorage.removeItem(resultKey);
@@ -258,7 +318,16 @@ export function CheckerForm({
     } catch {
       // quota / blocked — silent fall-back, Result bleibt nur in-memory
     }
-  }, [result, lastCheckedInput, draftLoaded, resultKey]);
+  }, [
+    result,
+    lastCheckedInput,
+    acceptedIds,
+    dismissReasons,
+    appliedFingerprints,
+    lastCheckIds,
+    draftLoaded,
+    resultKey,
+  ]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -291,12 +360,14 @@ export function CheckerForm({
     }
     setInput(EMPTY_INPUT);
     setSonstiges("");
-    setMustHaveOverrideReason("");
+    setDismissReasons({});
     setSavedAt(null);
     setResult(null);
     setLastCheckedInput(null);
     setAcceptedIds(new Set());
     setAppliedFingerprints(new Set());
+    setLastCheckIds(null);
+    setNewViolationIds(new Set());
     setSubmitMode("idle");
     setSubmittedBerId(null);
   }
@@ -342,11 +413,11 @@ export function CheckerForm({
     setIsProcessing(true);
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
-    setAcceptedIds(new Set());
-    // Re-Check setzt einen ggf. aktiven Override zurück — Coach soll das
-    // bei verändertem Text bewusst neu entscheiden, falls weiterhin
-    // Bausteine fehlen.
-    setMustHaveOverrideReason("");
+    // Merge statt Reset: acceptedIds + dismissReasons bleiben über Re-Checks
+    // erhalten (per inhaltsstabiler violation.id). Erledigte/weggeklickte
+    // Stellen tauchen nicht erneut als „offen" auf; nur echte neue Treffer
+    // werden unten als „neu" markiert. Stale Keys (Stelle ist weg) schaden
+    // nicht — sie matchen einfach keine aktuelle Violation mehr.
     // Re-Check soll nicht den Erfolgs-Banner stehen lassen, sonst denkt
     // der Coach er hätte den neuen Bericht schon eingereicht.
     setSubmitMode("idle");
@@ -442,6 +513,16 @@ export function CheckerForm({
         : "Bericht muss überarbeitet werden — siehe Sidebar rechts.",
     });
 
+    // „Neu seit letzter Prüfung": IDs, die im vorigen Check noch nicht
+    // vorkamen. Beim ersten Check (lastCheckIds === null) ist nichts „neu".
+    const currentIds = new Set(mappedResult.violations.map((v) => v.id));
+    setNewViolationIds(
+      lastCheckIds
+        ? new Set([...currentIds].filter((id) => !lastCheckIds.has(id)))
+        : new Set(),
+    );
+    setLastCheckIds(currentIds);
+
     setResult(mappedResult);
     setLastCheckedInput({ ...input });
     setIsProcessing(false);
@@ -533,27 +614,29 @@ export function CheckerForm({
   // auch wenn der Coach danach noch Text editiert. Bei verändertem Text
   // werden sie disabled (siehe `inputUnchangedSinceCheck`), damit kein
   // ungeprüfter Stand exportiert oder eingereicht wird.
-  const overrideReasonTrim = mustHaveOverrideReason.trim();
-  const overrideActive = overrideReasonTrim.length >= 10;
-  const hasMissingMustHaves =
-    !!result && result.mustHaves.some((m) => !m.covered);
+  // Zwei-Kategorien-Modell (identisch zum Kurs-Editor): einzige Hürde ist ein
+  // AKTIVER hard_block — also einer, den der Coach weder im Text entschärft
+  // noch mit Fehlalarm-Begründung weggeklickt hat. Soft-Flags + fehlende
+  // Pflichtbausteine blockieren nie.
   const hasHardBlock =
-    !!result && result.violations.some((v) => v.severity === "hard_block");
-  // Effektiver Pass — wenn Coach Override mit gültiger Begründung gesetzt
-  // hat UND keine Hard-Blocks bestehen UND tatsächlich Bausteine fehlen,
-  // ist der Submit-Gate offen.
-  const effectivePass =
-    !isProcessing &&
     !!result &&
-    (result.status === "pass" ||
-      (overrideActive && !hasHardBlock && hasMissingMustHaves));
+    activeHardBlocks(result, dismissReasons, acceptedIds).length > 0;
+  const effectivePass = !isProcessing && !!result && !hasHardBlock;
+  // Begründung, die beim Einreichen den (severity-basierten) Server-Gate
+  // öffnet + im BT-Detail protokolliert wird: pro weggeklickter Sensibel-
+  // Stelle die Coach-Begründung, zusammengeführt.
+  const submitOverrideReason = result
+    ? resolveHardBlockOverrideReason(result, dismissReasons)
+    : null;
   const filledSectionCount = (Object.keys(input) as CheckerSection[]).filter(
     (k) => input[k].trim().length > 0,
   ).length;
   const partiallyFilled = filledSectionCount > 0 && filledSectionCount < 3;
   const showExport = effectivePass && submitMode !== "form";
   const showResetButton = hasAnyContent(input) || !!result;
-  const exportDisabled = !inputUnchangedSinceCheck;
+  // Re-Check ist optional: Abarbeiten (Vorschläge übernehmen, Stellen
+  // wegklicken) sperrt Export/Einreichen NICHT mehr. Bei verändertem Text
+  // gibt es nur einen Hinweis, kein Block.
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
@@ -653,7 +736,7 @@ export function CheckerForm({
             input={input}
             result={result}
             sonstiges={sonstiges}
-            mustHaveOverrideReason={overrideActive ? overrideReasonTrim : null}
+            mustHaveOverrideReason={submitOverrideReason}
             coachName={coachName}
             onSubmitted={(berId) => {
               setSubmittedBerId(berId);
@@ -693,6 +776,23 @@ export function CheckerForm({
           </div>
         )}
 
+        {hasHardBlock && submitMode !== "submitted" && (
+          <div className="rounded-xl border border-rose-300 bg-rose-50 p-5">
+            <p className="text-sm font-medium text-rose-900">
+              Sensible Inhalte markiert — eine Aktion nötig
+            </p>
+            <p className="mt-1 text-xs text-rose-800">
+              Der Checker hat Inhalte gefunden, die ggf. nicht in einen
+              AVGS-Bericht gehören (z.B. Gesundheitsangaben, Diagnosen, harte
+              negative Prognose). Geh die <strong>Sensibel</strong>-Karten rechts
+              durch: <strong>Vorschlag übernehmen</strong>, um die Stelle zu
+              entschärfen — oder per <strong>Fehlalarm</strong> mit kurzer
+              Begründung wegklicken, wenn die KI danebenlag. Die Begründung sieht
+              der Bildungsträger.
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="min-w-0 text-xs text-zinc-500">
             <p>Finale Prüfung dauert ca. 6 Sekunden.</p>
@@ -717,15 +817,16 @@ export function CheckerForm({
             )}
             {result && !inputUnchangedSinceCheck && (
               <p className="mt-1 text-amber-700">
-                Text wurde nach der letzten Prüfung geändert — bitte erneut
-                prüfen, bevor du exportierst oder einreichst.
+                Text wurde nach der letzten Prüfung geändert. Einreichen ist
+                möglich — ein <span className="font-medium">Gegencheck</span> ist
+                optional.
               </p>
             )}
             {partiallyFilled && !result && !isProcessing && (
               <p className="mt-1 text-zinc-500">
                 Du kannst auch mit nur einem ausgefüllten Abschnitt prüfen.
-                Bei kurzen AVGS-Maßnahmen erscheint nach der Prüfung in der
-                Sidebar ein Override mit Begründung.
+                Fehlende Pflichtbausteine und Hinweise blockieren das
+                Einreichen nicht — nur sensible Inhalte erfordern eine Aktion.
               </p>
             )}
           </div>
@@ -743,13 +844,7 @@ export function CheckerForm({
               <button
                 type="button"
                 onClick={() => setSubmitMode("form")}
-                disabled={exportDisabled}
-                title={
-                  exportDisabled
-                    ? "Text wurde geändert — bitte erneut prüfen."
-                    : undefined
-                }
-                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
               >
                 An Bildungsträger einreichen →
               </button>
@@ -777,8 +872,9 @@ export function CheckerForm({
             onToggleAccepted={handleToggleAccepted}
             onApply={handleApplySuggestion}
             onLocate={handleLocateViolation}
-            mustHaveOverrideReason={mustHaveOverrideReason}
-            onMustHaveOverrideReasonChange={setMustHaveOverrideReason}
+            dismissReasons={dismissReasons}
+            onDismissReasonChange={handleDismissReasonChange}
+            newViolationIds={newViolationIds}
           />
         ) : (
           <LiveFeedback input={input} />

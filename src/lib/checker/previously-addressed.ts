@@ -1,6 +1,20 @@
 import type { CheckerResult, CheckerSection, Violation } from "./types";
 
 /**
+ * Inhaltsstabile ID einer Violation — `section::normalisiertes Zitat`. Anders
+ * als ein positionsbasierter Index (`azure_0`, `azure_1`, …) bleibt diese ID
+ * über Re-Checks hinweg gleich, solange Stelle + Zitat gleich sind. Dadurch
+ * überlebt der „erledigt"/„weggeklickt"-State (acceptedIds, dismissReasons)
+ * einen Re-Check, statt zurückgesetzt werden zu müssen.
+ */
+export function stableViolationId(
+  section: CheckerSection,
+  quote: string,
+): string {
+  return `${section}::${normalize(quote)}`;
+}
+
+/**
  * Fingerprint einer übernommenen Umformulierung — wir merken uns für die
  * Lebensdauer der Browser-Session, welche Suggestion-Texte schon mal als
  * Ersatz im Bericht gelandet sind. Pro Section getrennt, weil das LLM

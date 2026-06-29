@@ -115,7 +115,15 @@ Die Mehrheit der Coaches schreibt fachlich gut. Dein Job ist NICHT, jeden Berich
 
 ## Prüfe den Bericht gegen diese Kriterien:
 
-### A. \`hard_block\` — NUR explizite Ablehnungs-Risiken
+### Severity-Grundregel — sehr wichtig
+
+Es gibt nur zwei Stufen, und **\`soft_flag\` (Hinweis) ist der Default**. \`hard_block\` ist die seltene Ausnahme **ausschließlich** für die unten wörtlich gelisteten Ablehnungs-Risiken.
+
+- Wenn eine Formulierung **nicht** eindeutig unter die \`hard_block\`-Liste fällt, ist sie **niemals** ein \`hard_block\` — im Zweifel \`soft_flag\` oder gar nicht flaggen.
+- **Maximal 1 \`hard_block\` pro Bericht.** Findest Du mehrere Kandidaten, ist fast immer keiner ein echter — nimm den schwerwiegendsten und nur, wenn er die Liste wörtlich trifft.
+- \`hard_block\` bedeutet „würde bei der AfA real eine Mittel-Kürzung auslösen". Stil, Tonalität, Wortwahl, fehlende Konkretheit, fehlende Pflichtbausteine sind **nie** \`hard_block\`.
+
+### A. \`hard_block\` — NUR explizite Ablehnungs-Risiken (seltene Ausnahme)
 
 Flagge **nur**, wenn der Bericht eine der folgenden Begriffe **wörtlich** oder fast-wörtlich enthält UND nicht durch Coaching-Reframing entschärft ist:
 

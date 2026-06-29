@@ -15,11 +15,11 @@ type Props = {
   sonstiges: string;
   coachName: string;
   /**
-   * Wenn nicht-leer: der Coach hat im Sidebar/Editor explizit angegeben,
-   * dass nicht alle Pflicht-Bausteine in dieser Maßnahme abdeckbar sind
-   * + eine Begründung gegeben. Erlaubt der Server den Submit auch wenn
-   * `result.status === "needs_revision"` ausschließlich wegen fehlender
-   * mustHaves wäre.
+   * Zusammengeführte Fehlalarm-Begründung(en) für weggeklickte Sensibel-
+   * Stellen (hard_block). Nicht-leer = der Coach hat mind. eine sensible
+   * Stelle mit Begründung weggeklickt; öffnet den severity-basierten
+   * Server-Gate und wird im PDF/BT-Detail protokolliert. Spaltenname
+   * historisch („mustHave…").
    */
   mustHaveOverrideReason: string | null;
   onSubmitted: (berId: string) => void;
@@ -196,7 +196,7 @@ export function AdhocSubmitForm({
       {mustHaveOverrideReason && mustHaveOverrideReason.trim().length > 0 && (
         <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           <span className="font-medium">
-            Pflicht-Baustein-Override aktiv:
+            Fehlalarm-Begründung (sensible Stelle):
           </span>{" "}
           &bdquo;{mustHaveOverrideReason}&ldquo;. Wird im PDF und im
           Bildungsträger-Detail-View sichtbar.

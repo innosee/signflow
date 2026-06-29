@@ -7,11 +7,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { courseVisibleToCoach } from "@/lib/course-access";
+import { buildAblaufDraft } from "@/lib/checker/ablauf-draft";
 import {
   inputsEqual,
   readHardBlocks,
   readSnapshotInput,
 } from "@/lib/checker/snapshot";
+import { resolveMassnahmeTyp } from "@/lib/checker/types";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 
 export type BerActionState =
@@ -389,4 +391,61 @@ export async function submitBerAction(
   revalidatePath("/bildungstraeger");
 
   return { savedAt: now.toISOString(), berId };
+}
+
+export type AblaufDraftResult =
+  | { ok: true; text: string }
+  | { ok: false; error: string };
+
+/**
+ * Erzeugt einen deterministischen Entwurf für das BER-Feld „Ablauf, Inhalte
+ * des Coachings" aus den Termin-Themen des Kurses. Rein server-seitige
+ * String-Assemblierung — kein externer Verarbeiter, keine Anonymisierung
+ * nötig (die Daten verlassen die EU-Infra nicht). Coach-scoped via
+ * courseVisibleToCoach. Während Impersonation erlaubt (reiner Lese-/
+ * Entwurfsschritt, kein Schreibvorgang).
+ */
+export async function buildAblaufDraftAction(
+  courseId: string,
+): Promise<AblaufDraftResult> {
+  const session = await requireCoach();
+
+  const [course] = await db
+    .select({ massnahmeTyp: schema.courses.massnahmeTyp })
+    .from(schema.courses)
+    .where(
+      and(
+        eq(schema.courses.id, courseId),
+        courseVisibleToCoach(session.user.id),
+        isNull(schema.courses.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!course) {
+    return { ok: false, error: "Kurs nicht gefunden oder kein Zugriff." };
+  }
+
+  const rows = await db
+    .select({
+      topic: schema.sessions.topic,
+      isErstgespraech: schema.sessions.isErstgespraech,
+    })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, courseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .orderBy(schema.sessions.sessionDate);
+
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      error: "Für diesen Kurs gibt es noch keine Termine zum Vorbefüllen.",
+    };
+  }
+
+  const text = buildAblaufDraft(rows, resolveMassnahmeTyp(course.massnahmeTyp));
+  return { ok: true, text };
 }

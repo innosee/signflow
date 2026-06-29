@@ -21,11 +21,10 @@ export type AdhocBerInput = {
    */
   sonstiges: string;
   /**
-   * Begründung des Coaches, wenn nicht alle Pflicht-Bausteine in dieser
-   * Maßnahme abdeckbar sind. Wenn null/leer → strict-Pass nötig. Wenn
-   * gesetzt → fehlende mustHaves werden zu Soft-Flag-Override (kein Hard-
-   * Block-Bypass — wenn auch echte Verstöße vorhanden sind, blockt das
-   * weiterhin).
+   * Fehlalarm-Begründung des Coaches für eine als sensibel markierte Stelle
+   * (hard_block). Nur ein nicht überschriebener hard_block blockiert das
+   * Einreichen; mit Begründung (≥10 Zeichen) ist der Submit frei. Spaltenname
+   * historisch („mustHave…"), Semantik ist heute der Hard-Block-Override.
    */
   mustHaveOverrideReason: string | null;
   input: CheckerInput;
@@ -58,39 +57,24 @@ export async function submitAdhocBerAction(
     };
   }
 
-  // Submit-Gate:
-  //   * status === "pass"                                    → immer OK
-  //   * status === "needs_revision" UND nur fehlende mustHaves
-  //     UND mustHaveOverrideReason gesetzt                   → OK (Soft-Override)
-  //   * sonst → blockiert (echte Verstöße müssen abgearbeitet werden)
+  // Submit-Gate (identisch zum Kurs-Editor, Zwei-Kategorien-Modell):
+  //   * EINZIGE harte Hürde ist ein nicht überschriebener hard_block
+  //     (Art-9/Gesundheit, harte Ablehnungs-Prognose). Der Coach muss die
+  //     Stelle entfernen ODER einen Fehlalarm begründen (≥10 Zeichen).
+  //   * soft_flags + fehlende Pflichtbausteine sind rein beratend und
+  //     blockieren das Einreichen NIE.
   const overrideReason = (data.mustHaveOverrideReason ?? "").trim();
   const overrideActive = overrideReason.length > 0;
+  const hasHardBlock = data.result.violations.some(
+    (v) => v.severity === "hard_block",
+  );
 
-  if (data.result.status !== "pass") {
-    if (!overrideActive) {
-      return {
-        ok: false,
-        error:
-          "Nur bestandene Berichte können eingereicht werden. Bitte zuerst die Verstöße in der Sidebar abarbeiten.",
-      };
-    }
-    const hasHardBlock = data.result.violations.some(
-      (v) => v.severity === "hard_block",
-    );
-    if (hasHardBlock) {
-      return {
-        ok: false,
-        error:
-          "Es bestehen noch Hard-Block-Verstöße. Override gilt nur für fehlende Pflicht-Bausteine, nicht für inhaltliche Regelverstöße.",
-      };
-    }
-    const hasMissingMustHaves = data.result.mustHaves.some((m) => !m.covered);
-    if (!hasMissingMustHaves) {
-      return {
-        ok: false,
-        error: "Override aktiv, aber keine fehlenden Pflicht-Bausteine — bitte erneut prüfen.",
-      };
-    }
+  if (hasHardBlock && !overrideActive) {
+    return {
+      ok: false,
+      error:
+        "Der Bericht enthält eine als sensibel markierte Stelle (z.B. Gesundheitsangabe oder harte negative Prognose). Bitte entferne die Stelle — oder begründe unten einen Fehlalarm (mind. 10 Zeichen).",
+    };
   }
 
   if (overrideActive) {

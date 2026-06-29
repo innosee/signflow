@@ -11,6 +11,10 @@ import {
 import { LiveFeedback } from "@/components/checker/live-feedback";
 import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
+import {
+  activeHardBlocks,
+  resolveHardBlockOverrideReason,
+} from "@/lib/checker/gate";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import {
@@ -34,7 +38,11 @@ import {
 } from "@/lib/checker/types";
 import type { Abschlussbericht } from "@/db/schema";
 
-import { saveBerDraftAction, submitBerAction } from "./actions";
+import {
+  buildAblaufDraftAction,
+  saveBerDraftAction,
+  submitBerAction,
+} from "./actions";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const AUTOSAVE_DEBOUNCE_MS = 1200;
@@ -113,9 +121,16 @@ export function BerEditor({
   const [keineFehlzeiten, setKeineFehlzeiten] = useState(
     initialBer?.keineFehlzeiten ?? false,
   );
-  const [mustHaveOverrideReason, setMustHaveOverrideReason] = useState(
-    initialBer?.mustHaveOverrideReason ?? "",
+  // Pro Sensibel-Stelle (hard_block, per violation.id) die Fehlalarm-
+  // Begründung des Coaches. Wegklicken geht NUR mit Begründung (≥10 Zeichen) —
+  // der Bildungsträger prüft sie nach. Startet leer; bei Re-Edit eines
+  // eingereichten Berichts entscheidet der Coach nach erneutem Check neu.
+  const [dismissReasons, setDismissReasons] = useState<Record<string, string>>(
+    {},
   );
+  function handleDismissReasonChange(id: string, reason: string) {
+    setDismissReasons((prev) => ({ ...prev, [id]: reason }));
+  }
   const [status, setStatus] = useState<"draft" | "submitted">(
     initialBer?.status ?? "draft",
   );
@@ -138,6 +153,12 @@ export function BerEditor({
   const [appliedFingerprints, setAppliedFingerprints] = useState<Set<string>>(
     () => new Set(),
   );
+  // Violation-IDs des VORHERIGEN Checks — Basis für den „neu seit letzter
+  // Prüfung"-Diff. `null` = noch kein Check (erster Check badged nichts).
+  const [lastCheckIds, setLastCheckIds] = useState<Set<string> | null>(null);
+  const [newViolationIds, setNewViolationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   // Cache des letzten Checks: gleicher Input → kein erneuter Azure-Call.
   // Preseed aus dem persistierten Snapshot, wenn er v2 ist und der Input
   // zu den gespeicherten Textfeldern passt (beim ersten Mount).
@@ -147,9 +168,85 @@ export function BerEditor({
   const [result, setResult] = useState<CheckerResult | null>(() =>
     readSnapshotResult(initialBer?.checkSnapshot),
   );
+  // Review-State (erledigt/weggeklickt) über Reloads halten — der Editor
+  // stellt `result` aus dem DB-Snapshot wieder her, also soll auch der
+  // Abarbeitungs-Status erhalten bleiben. Scope: Kurs × Teilnehmer.
+  const reviewStateKey = `signflow:ber-review:${courseId}:${participantId}`;
+  const [reviewLoaded, setReviewLoaded] = useState(false);
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- einmaliges Sync aus
+       localStorage (External State) beim Mount */
+    try {
+      const raw = localStorage.getItem(reviewStateKey);
+      if (raw) {
+        const m = JSON.parse(raw) as Record<string, unknown>;
+        const strArray = (v: unknown): string[] =>
+          Array.isArray(v)
+            ? v.filter((x): x is string => typeof x === "string")
+            : [];
+        if (Array.isArray(m.acceptedIds))
+          setAcceptedIds(new Set(strArray(m.acceptedIds)));
+        if (Array.isArray(m.appliedFingerprints))
+          setAppliedFingerprints(new Set(strArray(m.appliedFingerprints)));
+        if (Array.isArray(m.lastCheckIds))
+          setLastCheckIds(new Set(strArray(m.lastCheckIds)));
+        if (m.dismissReasons && typeof m.dismissReasons === "object") {
+          const clean: Record<string, string> = {};
+          for (const [k, val] of Object.entries(
+            m.dismissReasons as Record<string, unknown>,
+          )) {
+            if (typeof val === "string") clean[k] = val;
+          }
+          setDismissReasons(clean);
+        }
+      }
+    } catch {
+      /* corrupted — ignore */
+    }
+    setReviewLoaded(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [reviewStateKey]);
+  useEffect(() => {
+    if (!reviewLoaded) return;
+    try {
+      localStorage.setItem(
+        reviewStateKey,
+        JSON.stringify({
+          acceptedIds: [...acceptedIds],
+          dismissReasons,
+          appliedFingerprints: [...appliedFingerprints],
+          lastCheckIds: lastCheckIds ? [...lastCheckIds] : null,
+        }),
+      );
+    } catch {
+      /* quota / blocked — in-memory only */
+    }
+  }, [
+    reviewLoaded,
+    acceptedIds,
+    dismissReasons,
+    appliedFingerprints,
+    lastCheckIds,
+    reviewStateKey,
+  ]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, startSaveTransition] = useTransition();
   const [isSubmitting, startSubmitTransition] = useTransition();
+  // „Aus Terminen vorbefüllen" — deterministischer Entwurf fürs ablauf-Feld
+  // aus sessions.topic (nur wenn das Feld leer ist).
+  const [isPrefilling, startPrefillTransition] = useTransition();
+  const [prefillError, setPrefillError] = useState<string | null>(null);
+  function handlePrefillAblauf() {
+    setPrefillError(null);
+    startPrefillTransition(async () => {
+      const res = await buildAblaufDraftAction(courseId);
+      if (!res.ok) {
+        setPrefillError(res.error);
+        return;
+      }
+      setInput((prev) => ({ ...prev, ablauf: res.text }));
+    });
+  }
   const textareaRefs = useRef<Record<CheckerSection, HTMLTextAreaElement | null>>({
     teilnahme: null,
     ablauf: null,
@@ -269,7 +366,9 @@ export function BerEditor({
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, state: "pending" })));
     setResult(null);
     setSubmitError(null);
-    setAcceptedIds(new Set());
+    // Merge statt Reset: acceptedIds + dismissReasons bleiben über Re-Checks
+    // erhalten (inhaltsstabile violation.id). Erledigte/weggeklickte Stellen
+    // tauchen nicht erneut als „offen" auf; neue Treffer werden „neu" markiert.
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -352,6 +451,16 @@ export function BerEditor({
         : "Bericht muss überarbeitet werden — siehe Sidebar rechts.",
     });
 
+    // „Neu seit letzter Prüfung": IDs, die im vorigen Check noch nicht
+    // vorkamen. Erster Check (lastCheckIds === null) badged nichts.
+    const currentIds = new Set(mapped.violations.map((v) => v.id));
+    setNewViolationIds(
+      lastCheckIds
+        ? new Set([...currentIds].filter((id) => !lastCheckIds.has(id)))
+        : new Set(),
+    );
+    setLastCheckIds(currentIds);
+
     setResult(mapped);
     // Input-Snapshot merken, damit ein erneutes „Prüfen" ohne Änderungen
     // keinen weiteren Azure-Call verursacht. Wichtig: Kopie, nicht Referenz,
@@ -363,19 +472,21 @@ export function BerEditor({
 
   function handleSubmitBer() {
     if (!canSubmit) return;
-    const overrideTrim = mustHaveOverrideReason.trim();
-    const overrideActive = overrideTrim.length >= 10;
-    // EINZIGE harte Hürde: Hard-Blocks (explizite Gesundheits-/Art-9-Daten,
-    // harte Ablehnungs-Prognose) dürfen nicht ungeprüft gespeichert werden —
-    // die DSGVO-Grundlage (Art. 6 lit. b) setzt voraus, dass solche Inhalte
-    // nicht im Bericht landen. Der Coach muss die Stelle entfernen ODER (bei
-    // Fehlalarm) bewusst begründen. Alles andere ist rein beratend.
-    if (hasHardBlock && !overrideActive) {
+    // EINZIGE harte Hürde: ein AKTIVER Hard-Block (explizite Gesundheits-/
+    // Art-9-Daten, harte Ablehnungs-Prognose). Der Coach löst ihn auf, indem
+    // er die Stelle entfernt ODER sie per Fehlalarm mit Begründung wegklickt.
+    // Alles andere ist rein beratend.
+    if (hasHardBlock) {
       setSubmitError(
-        "Der Bericht enthält als sensibel markierte Inhalte (z.B. Gesundheitsangaben oder eine harte negative Prognose). Bitte entferne die Stelle — oder begründe unten (mind. 10 Zeichen), warum es ein Fehlalarm ist. Erst dann ist das Einreichen möglich.",
+        "Der Bericht enthält eine noch offene, als sensibel markierte Stelle (z.B. Gesundheitsangabe oder harte negative Prognose). Übernimm den Vorschlag — oder klick sie per Fehlalarm-Button (mit kurzer Begründung) weg.",
       );
       return;
     }
+    // Begründung fürs Audit/Server-Gate: pro weggeklickter Sensibel-Stelle die
+    // Coach-Begründung, zusammengeführt. Leer, wenn kein Hard-Block vorlag.
+    const overrideTrim = result
+      ? (resolveHardBlockOverrideReason(result, dismissReasons) ?? "")
+      : "";
     // Sonstige offene Hinweise: nur sanfte Rückfrage, nie Block.
     const hasOpenHints =
       !!result &&
@@ -406,7 +517,7 @@ export function BerEditor({
     fd.append("fazit", input.fazit);
     fd.append("sonstiges", sonstiges);
     fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
-    if (overrideActive) {
+    if (overrideTrim.length > 0) {
       fd.append("mustHaveOverrideReason", overrideTrim);
     }
     fd.append("lastCheckPassed", "true");
@@ -464,9 +575,11 @@ export function BerEditor({
     input.fazit.trim().length > 0;
 
   // Hard-Block = die einzige Hürde fürs Einreichen (siehe handleSubmitBer).
+  // Nur AKTIVE Hard-Blocks zählen — per Fehlalarm-Begründung weggeklickte
+  // sind aufgelöst.
   const hasHardBlock =
-    !!result && result.violations.some((v) => v.severity === "hard_block");
-  const overrideActive = mustHaveOverrideReason.trim().length >= 10;
+    !!result &&
+    activeHardBlocks(result, dismissReasons, acceptedIds).length > 0;
 
   // 60-Sekunden-Buffer filtert Mikro-Autosaves direkt nach dem Submit raus
   // (z.B. wenn der Submit kurz nach einem Tipp kommt). Gleicher Wert wie
@@ -533,6 +646,29 @@ export function BerEditor({
               data-enable-grammarly="false"
               className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 selection:bg-amber-300 selection:text-zinc-900"
             />
+            {section.id === "ablauf" &&
+              input.ablauf.trim().length === 0 &&
+              status !== "submitted" && (
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={handlePrefillAblauf}
+                    disabled={isPrefilling}
+                    className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition enabled:hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isPrefilling
+                      ? "Erzeuge Entwurf …"
+                      : "Aus Terminen vorbefüllen"}
+                  </button>
+                  <p className="text-[11px] text-zinc-500">
+                    Übernimmt die Themen aller Termine als Entwurf (keine KI,
+                    nichts erfunden) — du editierst danach selbst.
+                  </p>
+                  {prefillError && (
+                    <p className="text-[11px] text-rose-700">{prefillError}</p>
+                  )}
+                </div>
+              )}
           </div>
         ))}
 
@@ -580,34 +716,18 @@ export function BerEditor({
         </label>
 
         {hasHardBlock && status !== "submitted" && (
-          <div className="space-y-2 rounded-xl border border-rose-300 bg-rose-50 p-5">
+          <div className="rounded-xl border border-rose-300 bg-rose-50 p-5">
             <p className="text-sm font-medium text-rose-900">
-              Sensible Inhalte markiert — Einreichen erfordert eine Aktion
+              Sensible Inhalte markiert — eine Aktion nötig
             </p>
-            <p className="text-xs text-rose-800">
-              Der Checker hat Inhalte gefunden, die nicht in einen AVGS-Bericht
-              gehören (z.B. Gesundheitsangaben, Diagnosen, harte negative
-              Prognose). <strong>Entferne die Stelle</strong> (siehe Sidebar) und
-              prüfe erneut — oder, falls es ein <strong>Fehlalarm</strong> ist,
-              begründe es kurz, dann kannst du trotzdem einreichen.
-            </p>
-            <textarea
-              rows={3}
-              value={mustHaveOverrideReason}
-              onChange={(e) => setMustHaveOverrideReason(e.target.value)}
-              maxLength={500}
-              placeholder="z.B. Fehlalarm — der Satz ist positiv formuliert und enthält keine Gesundheitsangabe."
-              spellCheck
-              lang="de"
-              data-gramm="false"
-              data-gramm_editor="false"
-              data-enable-grammarly="false"
-              className="block w-full resize-y rounded-md border border-rose-300 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"
-            />
-            <p className="text-[11px] text-rose-700">
-              {overrideActive
-                ? "✓ Begründung erfasst — Einreichen ist möglich (wird beim Bildungsträger protokolliert)."
-                : `Noch ${Math.max(0, 10 - mustHaveOverrideReason.trim().length)} Zeichen Begründung nötig.`}
+            <p className="mt-1 text-xs text-rose-800">
+              Der Checker hat Inhalte gefunden, die ggf. nicht in einen
+              AVGS-Bericht gehören (z.B. Gesundheitsangaben, Diagnosen, harte
+              negative Prognose). Geh die <strong>Sensibel</strong>-Karten rechts
+              durch: <strong>Vorschlag übernehmen</strong>, um die Stelle zu
+              entschärfen — oder per <strong>Fehlalarm</strong> mit kurzer
+              Begründung wegklicken, wenn die KI danebenlag. Die Begründung sieht
+              der Bildungsträger.
             </p>
           </div>
         )}
@@ -716,8 +836,9 @@ export function BerEditor({
             onToggleAccepted={handleToggleAccepted}
             onApply={handleApplySuggestion}
             onLocate={handleLocateViolation}
-            mustHaveOverrideReason={mustHaveOverrideReason}
-            onMustHaveOverrideReasonChange={setMustHaveOverrideReason}
+            dismissReasons={dismissReasons}
+            onDismissReasonChange={handleDismissReasonChange}
+            newViolationIds={newViolationIds}
           />
         ) : (
           <div className="space-y-4">

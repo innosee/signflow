@@ -1,5 +1,6 @@
 import { AzureOpenAI } from "openai";
 
+import { stableViolationId } from "./previously-addressed";
 import { buildCheckerSystemPrompt } from "./prompt";
 import {
   MUST_HAVES_BY_MASSNAHMETYP,
@@ -140,6 +141,11 @@ function parseAndValidate(
   );
 
   const violationsRaw = Array.isArray(obj.violations) ? obj.violations : [];
+  // Inhaltsstabile ID (section::normalize(quote)) statt Positionsindex, damit
+  // der Review-State über Re-Checks erhalten bleibt. Gleichzeitig Dedup: zwei
+  // identische (Section + Zitat) Treffer kollabieren zu einem — eindeutige
+  // React-Keys + keine doppelten Karten.
+  const seenIds = new Set<string>();
   const violations: Violation[] = violationsRaw
     .filter(
       (v): v is Record<string, unknown> =>
@@ -148,15 +154,26 @@ function parseAndValidate(
         VALID_CATEGORIES.has((v as { category: ViolationCategory }).category) &&
         VALID_SECTIONS.has((v as { section: string }).section),
     )
-    .map((v, idx) => ({
-      id: `azure_${idx}`,
-      category: v.category as ViolationCategory,
-      severity: v.severity === "soft_flag" ? "soft_flag" : "hard_block",
-      section: v.section as Violation["section"],
-      quote: typeof v.quote === "string" ? v.quote : "",
-      rule: typeof v.rule === "string" ? v.rule : "",
-      suggestion: typeof v.suggestion === "string" ? v.suggestion : "",
-    }));
+    .map((v) => {
+      const section = v.section as Violation["section"];
+      const quote = typeof v.quote === "string" ? v.quote : "";
+      return {
+        id: stableViolationId(section, quote),
+        category: v.category as ViolationCategory,
+        severity: (v.severity === "soft_flag" ? "soft_flag" : "hard_block") as
+          | "soft_flag"
+          | "hard_block",
+        section,
+        quote,
+        rule: typeof v.rule === "string" ? v.rule : "",
+        suggestion: typeof v.suggestion === "string" ? v.suggestion : "",
+      };
+    })
+    .filter((v) => {
+      if (seenIds.has(v.id)) return false;
+      seenIds.add(v.id);
+      return true;
+    });
 
   const tonalityFeedback =
     typeof obj.tonalityFeedback === "string" && obj.tonalityFeedback.trim().length > 0
