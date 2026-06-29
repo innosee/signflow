@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
 type NavLink = { href: string; label: string };
 
@@ -61,6 +64,63 @@ export function AppHeader({
   logoutAction,
   stopImpersonationAction,
 }: Props) {
+  // Mobile-Menü-State: unter `md` klappt Nav + Aktionen in ein Panel.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
+
+  // Nav-Links einmal bauen, in Desktop- (horizontal) und Mobile-Panel
+  // (gestapelt) wiederverwenden. customNav (Coach-Switcher) wird ebenfalls
+  // in beiden Positionen gerendert — eigenständige React-Instanzen.
+  const navItems =
+    navLinks?.map((l) => (
+      <Link
+        key={l.href}
+        href={l.href}
+        onClick={closeMenu}
+        className="text-zinc-700 underline-offset-4 hover:text-zinc-950 hover:underline"
+      >
+        {l.label}
+      </Link>
+    )) ?? null;
+
+  const hasNav = Boolean(customNav) || (navItems?.length ?? 0) > 0;
+
+  // Rechte Aktionsleiste (Einladungen/Tenant/Einstellungen/Abmelden) —
+  // identisch in Desktop-Zeile und Mobile-Panel.
+  const actions = (
+    <>
+      {invitationsCount > 0 && !impersonating && (
+        <Link
+          href="/konto/einladungen"
+          onClick={closeMenu}
+          className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+        >
+          Einladungen ({invitationsCount})
+        </Link>
+      )}
+      {tenantSwitcher && !impersonating && tenantSwitcher}
+      {settingsHref && !impersonating && (
+        <Link
+          href={settingsHref}
+          onClick={closeMenu}
+          className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm text-zinc-800 hover:bg-zinc-50"
+        >
+          Einstellungen
+        </Link>
+      )}
+      {!impersonating && (
+        <form action={logoutAction}>
+          <button
+            type="submit"
+            className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+          >
+            Abmelden
+          </button>
+        </form>
+      )}
+    </>
+  );
+
   return (
     <>
       {impersonating && (
@@ -84,66 +144,96 @@ export function AppHeader({
       )}
 
       <header className="border-b border-zinc-300 bg-white">
-        <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-6 px-6 py-3">
-          <div className="flex items-center gap-6">
-            <Link
-              href={brandHref}
-              className="flex items-baseline gap-1.5 text-base font-semibold tracking-tight"
-            >
-              <span>Signflow</span>
-              {brandSubText}
-            </Link>
-            {customNav ? (
-              customNav
-            ) : (
-              navLinks && (
-                <nav
-                  aria-label="Hauptnavigation"
-                  className="flex items-center gap-4 text-sm"
-                >
-                  {navLinks.map((l) => (
-                    <Link
-                      key={l.href}
-                      href={l.href}
-                      className="text-zinc-700 underline-offset-4 hover:text-zinc-950 hover:underline"
+        <div className="mx-auto w-full max-w-4xl px-6 py-3">
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-6">
+              <Link
+                href={brandHref}
+                onClick={closeMenu}
+                className="flex items-baseline gap-1.5 text-base font-semibold tracking-tight"
+              >
+                <span>Signflow</span>
+                {brandSubText}
+              </Link>
+              {/* Desktop-Nav: ab md sichtbar, mobil im Panel unten. */}
+              {hasNav && (
+                <div className="hidden md:flex md:items-center md:gap-6">
+                  {customNav ?? (
+                    <nav
+                      aria-label="Hauptnavigation"
+                      className="flex items-center gap-4 text-sm"
                     >
-                      {l.label}
-                    </Link>
-                  ))}
-                </nav>
-              )
-            )}
+                      {navItems}
+                    </nav>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Desktop-Aktionen */}
+            <div className="hidden items-center gap-3 md:flex">{actions}</div>
+
+            {/* Mobile-Toggle */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-expanded={menuOpen}
+              aria-controls="app-mobile-menu"
+              aria-label={menuOpen ? "Menü schließen" : "Menü öffnen"}
+              className="inline-flex items-center justify-center rounded-lg border border-zinc-300 p-2 text-zinc-700 hover:bg-zinc-50 md:hidden"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                {menuOpen ? (
+                  <>
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </>
+                ) : (
+                  <>
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </>
+                )}
+              </svg>
+            </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            {invitationsCount > 0 && !impersonating && (
-              <Link
-                href="/konto/einladungen"
-                className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
-              >
-                Einladungen ({invitationsCount})
-              </Link>
-            )}
-            {tenantSwitcher && !impersonating && tenantSwitcher}
-            {settingsHref && !impersonating && (
-              <Link
-                href={settingsHref}
-                className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm text-zinc-800 hover:bg-zinc-50"
-              >
-                Einstellungen
-              </Link>
-            )}
-            {!impersonating && (
-              <form action={logoutAction}>
-                <button
-                  type="submit"
-                  className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                >
-                  Abmelden
-                </button>
-              </form>
-            )}
-          </div>
+          {/* Mobile-Panel: Nav + Aktionen gestapelt, nur unter md. */}
+          {menuOpen && (
+            <div
+              id="app-mobile-menu"
+              className="mt-3 flex flex-col gap-4 border-t border-zinc-200 pt-4 md:hidden"
+            >
+              {hasNav &&
+                (customNav ? (
+                  // Klick auf einen Link im Coach-Switcher schließt das Panel
+                  // (Bubbling — die Switcher-Links haben kein eigenes onClick).
+                  <div onClick={closeMenu}>{customNav}</div>
+                ) : (
+                  <nav
+                    aria-label="Hauptnavigation"
+                    className="flex flex-col gap-3 text-sm"
+                  >
+                    {navItems}
+                  </nav>
+                ))}
+              <div className="flex flex-col items-start gap-3 border-t border-zinc-200 pt-3">
+                {actions}
+              </div>
+            </div>
+          )}
         </div>
         {accentStrip}
       </header>
