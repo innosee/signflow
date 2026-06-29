@@ -296,40 +296,27 @@ function ResolvedSection({
 }
 
 function KonkretheitCard({ probes }: { probes: ProbeResult[] }) {
-  // Zähler oben: nur die echt offenen Probes hervorheben — `not_relevant`
-  // und `yes` sind keine Aktionspunkte für den Coach.
+  // Nur AKTIONABLE Proben zeigen (`missing`). `yes`/`not_relevant` sind kein
+  // Handlungsbedarf — und wenn nichts offen ist, blendet sich der Block ganz
+  // aus, statt eine Wand aus „n/a" zu zeigen (z.B. bei Gründungs-Berichten,
+  // wo alle bewerbungs-orientierten Proben irrelevant sind).
   const missing = probes.filter((p) => p.answer === "missing");
+  if (missing.length === 0) return null;
   return (
-    <section className="rounded-xl border border-zinc-300 bg-white">
-      <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-        <h3 className="text-sm font-semibold text-zinc-900">Konkretheit</h3>
-        <span className="text-xs text-zinc-500">
-          {missing.length} offen
-        </span>
+    <section className="rounded-xl border-2 border-amber-200 bg-white">
+      <header className="flex items-center justify-between border-b border-amber-200 bg-amber-50/60 px-4 py-3">
+        <h3 className="text-sm font-semibold text-amber-900">Konkretheit</h3>
+        <span className="text-xs text-amber-700">{missing.length} offen</span>
       </header>
+      <p className="border-b border-amber-100 px-4 py-2 text-[11px] leading-relaxed text-amber-800">
+        Beratend: der Bericht beschreibt den Ablauf, nennt aber das konkrete
+        Ergebnis (wohin/als was) noch nicht.
+      </p>
       <ul className="divide-y divide-zinc-100 text-xs">
-        {probes.map((p) => (
+        {missing.map((p) => (
           <li key={p.topic} className="flex items-start gap-2 px-4 py-2.5">
-            <span
-              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-                p.answer === "yes"
-                  ? "bg-emerald-500 text-white"
-                  : p.answer === "missing"
-                    ? "border border-amber-400 bg-amber-50"
-                    : "border border-dashed border-zinc-300"
-              }`}
-            >
-              {p.answer === "yes" && <CheckIcon size={10} />}
-            </span>
-            <span
-              className={
-                p.answer === "missing"
-                  ? "text-amber-900"
-                  : p.answer === "yes"
-                    ? "text-zinc-700"
-                    : "text-zinc-500"
-              }
-            >
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-amber-400 bg-amber-50" />
+            <span className="text-amber-900">
               {PROBE_TOPIC_LABELS[p.topic]}
               {p.hint && (
                 <span className="block text-[11px] text-zinc-500">
