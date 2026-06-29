@@ -48,7 +48,6 @@ import {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const AUTOSAVE_DEBOUNCE_MS = 1200;
-const EXPORT_STORAGE_KEY = "signflow:checker-export";
 
 // Pipeline:
 //   1. Anonymisierung im IONOS-Proxy (Frankfurt) — ersetzt Namen/Orte/Daten
@@ -557,23 +556,6 @@ export function BerEditor({
     });
   }
 
-  function handleExportPdf() {
-    // Wenn der Bericht schon einmal gespeichert wurde (Autosave hat einen
-    // berId geliefert oder existiert von vorher), direkt zur autoritativen
-    // Print-Page mit allen TN-Daten. Andernfalls Fallback auf den
-    // sessionStorage-Preview.
-    if (submittedBerId) {
-      router.push(`/coach/abschlussberichte/${submittedBerId}/print`);
-      return;
-    }
-    try {
-      sessionStorage.setItem(EXPORT_STORAGE_KEY, JSON.stringify(input));
-    } catch {
-      /* ignore */
-    }
-    router.push("/coach/checker/export");
-  }
-
   async function handleDownloadPdf() {
     setSubmitError(null);
     setIsDownloading(true);
@@ -815,15 +797,6 @@ export function BerEditor({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {canSubmit && status !== "submitted" && (
-              <button
-                type="button"
-                onClick={handleExportPdf}
-                className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
-              >
-                Als Erango-PDF exportieren
-              </button>
-            )}
             {canSubmit && (
               <button
                 type="button"
