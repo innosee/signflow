@@ -1,10 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { AdhocSubmitForm } from "@/components/checker/adhoc-submit-form";
 import {
   CheckerProgress,
   type CheckerStep,
@@ -14,10 +11,6 @@ import { MassnahmetypPicker } from "@/components/checker/massnahmetyp-picker";
 import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
 import { AuthRequiredError } from "@/lib/checker/errors";
-import {
-  activeHardBlocks,
-  resolveHardBlockOverrideReason,
-} from "@/lib/checker/gate";
 import { withAdvisoryHints } from "@/lib/checker/hints";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import {
@@ -106,37 +99,19 @@ const EMPTY_INPUT: CheckerInput = {
   massnahmeTyp: DEFAULT_MASSNAHME_TYP,
 };
 
-export function CheckerForm({
-  userId,
-  coachName,
-}: {
-  userId: string;
-  coachName: string;
-}) {
-  const router = useRouter();
+export function CheckerForm({ userId }: { userId: string }) {
   const draftKey = draftStorageKey(userId);
   const resultKey = resultStorageKey(userId);
   const sonstigesKey = `signflow:checker-sonstiges:${userId}`;
   const [isProcessing, setIsProcessing] = useState(false);
-  // Submit-Flow zum Bildungsträger:
-  //   "idle"      → Standard-Anzeige, keine Form sichtbar
-  //   "form"      → AdhocSubmitForm wird zwischen Editor und Footer gerendert
-  //   "submitted" → BER ist persistiert, Erfolgs-Banner wird angezeigt
-  const [submitMode, setSubmitMode] = useState<"idle" | "form" | "submitted">(
-    "idle",
-  );
-  const [submittedBerId, setSubmittedBerId] = useState<string | null>(null);
   const [input, setInput] = useState<CheckerInput>(EMPTY_INPUT);
   // Optionales Sonstiges-Feld (AVGS-Inhalte / Freitext). Außerhalb von
   // CheckerInput, weil es NICHT durch den Checker läuft (kein PII-Pass,
   // keine Pflicht-Bausteine, keine Verstöße geprüft).
   const [sonstiges, setSonstiges] = useState("");
-  // Override-Begründung wenn Pflicht-Bausteine in der Maßnahme nicht
-  // abdeckbar sind (z.B. 5-UE-Bewerbungsoptimierung). Wird vom Sidebar-
-  // Toggle befüllt, fließt in den Submit-Payload.
-  // Pro Sensibel-Stelle (hard_block, per violation.id) die Fehlalarm-
-  // Begründung des Coaches. Wegklicken geht NUR mit Begründung (≥10 Zeichen) —
-  // der Bildungsträger prüft sie nach.
+  // „Passt schon"-Status (acceptedIds) hält erledigte Hinweise; im reinen
+  // Prüf-Tool gibt es keinen Einreichen-Gate. dismissReasons bleibt für die
+  // geteilte Sidebar erhalten (im Check-Modus ungenutzt).
   const [dismissReasons, setDismissReasons] = useState<Record<string, string>>(
     {},
   );
@@ -369,8 +344,6 @@ export function CheckerForm({
     setAppliedFingerprints(new Set());
     setLastCheckIds(null);
     setNewViolationIds(new Set());
-    setSubmitMode("idle");
-    setSubmittedBerId(null);
   }
 
   function updateStep(id: string, patch: Partial<CheckerStep>) {
@@ -419,10 +392,6 @@ export function CheckerForm({
     // Stellen tauchen nicht erneut als „offen" auf; nur echte neue Treffer
     // werden unten als „neu" markiert. Stale Keys (Stelle ist weg) schaden
     // nicht — sie matchen einfach keine aktuelle Violation mehr.
-    // Re-Check soll nicht den Erfolgs-Banner stehen lassen, sonst denkt
-    // der Coach er hätte den neuen Bericht schon eingereicht.
-    setSubmitMode("idle");
-    setSubmittedBerId(null);
 
     updateStep("anon", { state: "active" });
     let anonResult: Awaited<ReturnType<typeof anonymize>>;
@@ -613,31 +582,12 @@ export function CheckerForm({
       : "Bericht prüfen";
   // Export-Buttons bleiben sichtbar, sobald einmal erfolgreich geprüft —
   // auch wenn der Coach danach noch Text editiert. Bei verändertem Text
-  // werden sie disabled (siehe `inputUnchangedSinceCheck`), damit kein
-  // ungeprüfter Stand exportiert oder eingereicht wird.
-  // Zwei-Kategorien-Modell (identisch zum Kurs-Editor): einzige Hürde ist ein
-  // AKTIVER hard_block — also einer, den der Coach weder im Text entschärft
-  // noch mit Fehlalarm-Begründung weggeklickt hat. Soft-Flags + fehlende
-  // Pflichtbausteine blockieren nie.
-  const hasHardBlock =
-    !!result &&
-    activeHardBlocks(result, dismissReasons, acceptedIds).length > 0;
-  const effectivePass = !isProcessing && !!result && !hasHardBlock;
-  // Begründung, die beim Einreichen den (severity-basierten) Server-Gate
-  // öffnet + im BT-Detail protokolliert wird: pro weggeklickter Sensibel-
-  // Stelle die Coach-Begründung, zusammengeführt.
-  const submitOverrideReason = result
-    ? resolveHardBlockOverrideReason(result, dismissReasons)
-    : null;
+  // werden sie disabled (siehe `inputUnchangedSinceCheck`).
   const filledSectionCount = (Object.keys(input) as CheckerSection[]).filter(
     (k) => input[k].trim().length > 0,
   ).length;
   const partiallyFilled = filledSectionCount > 0 && filledSectionCount < 3;
-  const showExport = effectivePass && submitMode !== "form";
   const showResetButton = hasAnyContent(input) || !!result;
-  // Re-Check ist optional: Abarbeiten (Vorschläge übernehmen, Stellen
-  // wegklicken) sperrt Export/Einreichen NICHT mehr. Bei verändertem Text
-  // gibt es nur einen Hinweis, kein Block.
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
@@ -732,65 +682,13 @@ export function CheckerForm({
           </p>
         </div>
 
-        {submitMode === "form" && result && (
-          <AdhocSubmitForm
-            input={input}
-            result={result}
-            sonstiges={sonstiges}
-            mustHaveOverrideReason={submitOverrideReason}
-            coachName={coachName}
-            onSubmitted={(berId) => {
-              setSubmittedBerId(berId);
-              setSubmitMode("submitted");
-              // Direkt zur Print-Page springen — der Coach soll das
-              // ausgefüllte PDF sofort sehen + drucken/speichern können.
-              router.push(`/coach/abschlussberichte/${berId}/print`);
-            }}
-            onCancel={() => setSubmitMode("idle")}
-          />
-        )}
-
-        {submitMode === "submitted" && submittedBerId && (
-          <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-5 text-sm text-emerald-900">
-            <p className="font-semibold">✓ Bericht eingereicht.</p>
-            <p className="mt-1 text-xs text-emerald-800">
-              Der Bildungsträger findet den Bericht in seiner Übersicht. Du
-              kannst das PDF jederzeit über die Berichts-Übersicht im
-              Coach-Dashboard erneut öffnen.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Link
-                href={`/coach/abschlussberichte/${submittedBerId}/print`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg border border-emerald-400 bg-white px-4 py-2 text-xs font-medium text-emerald-800 transition hover:bg-emerald-50"
-              >
-                PDF anzeigen / herunterladen ↗
-              </Link>
-              <Link
-                href="/coach/checker"
-                className="text-xs text-emerald-800 underline-offset-2 hover:underline"
-              >
-                Zur Berichts-Übersicht
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {hasHardBlock && submitMode !== "submitted" && (
-          <div className="rounded-xl border border-rose-300 bg-rose-50 p-5">
-            <p className="text-sm font-medium text-rose-900">
-              Sensible Inhalte markiert — eine Aktion nötig
-            </p>
-            <p className="mt-1 text-xs text-rose-800">
-              Der Checker hat Inhalte gefunden, die ggf. nicht in einen
-              AVGS-Bericht gehören (z.B. Gesundheitsangaben, Diagnosen, harte
-              negative Prognose). Geh die <strong>Sensibel</strong>-Karten rechts
-              durch: <strong>Vorschlag übernehmen</strong>, um die Stelle zu
-              entschärfen — oder per <strong>Fehlalarm</strong> mit kurzer
-              Begründung wegklicken, wenn die KI danebenlag. Die Begründung sieht
-              der Bildungsträger.
-            </p>
+        {result && (
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 text-xs leading-relaxed text-zinc-600">
+            Dies ist ein <strong>Prüf-Tool</strong> — hier wird nichts
+            eingereicht. Den fertigen, kundengebundenen Bericht erstellst und
+            reichst du über{" "}
+            <strong>Berichts-Checker → Kunde</strong> ein (dort hängt er am
+            Kunden-Datensatz und lässt sich als PDF herunterladen).
           </div>
         )}
 
@@ -818,16 +716,13 @@ export function CheckerForm({
             )}
             {result && !inputUnchangedSinceCheck && (
               <p className="mt-1 text-amber-700">
-                Text wurde nach der letzten Prüfung geändert. Einreichen ist
-                möglich — ein <span className="font-medium">Gegencheck</span> ist
-                optional.
+                Text wurde nach der letzten Prüfung geändert — bei Bedarf erneut
+                prüfen.
               </p>
             )}
             {partiallyFilled && !result && !isProcessing && (
               <p className="mt-1 text-zinc-500">
                 Du kannst auch mit nur einem ausgefüllten Abschnitt prüfen.
-                Fehlende Pflichtbausteine und Hinweise blockieren das
-                Einreichen nicht — nur sensible Inhalte erfordern eine Aktion.
               </p>
             )}
           </div>
@@ -839,15 +734,6 @@ export function CheckerForm({
                 className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
               >
                 Neuer Bericht
-              </button>
-            )}
-            {showExport && (
-              <button
-                type="button"
-                onClick={() => setSubmitMode("form")}
-                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
-              >
-                An Bildungsträger einreichen →
               </button>
             )}
             <button
@@ -868,6 +754,7 @@ export function CheckerForm({
           </div>
         ) : result ? (
           <ReviewSidebar
+            mode="check"
             result={withAdvisoryHints(result, input)}
             acceptedIds={acceptedIds}
             onToggleAccepted={handleToggleAccepted}

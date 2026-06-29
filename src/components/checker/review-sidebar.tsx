@@ -37,6 +37,12 @@ type ReviewSidebarProps = {
   onDismissReasonChange: (id: string, reason: string) => void;
   /** Violation-IDs, die seit dem letzten Check neu hinzukamen → „Neu"-Badge. */
   newViolationIds?: ReadonlySet<string>;
+  /**
+   * "submit" (Kurs-Editor): Sensibel blockiert das Einreichen, Wegklicken nur
+   * mit Begründung. "check" (Schnell-Check, reines Prüf-Tool): kein Einreichen,
+   * kein Gate — Sensibel ist nur ein Hinweis, „Passt schon" reicht.
+   */
+  mode?: "submit" | "check";
 };
 
 export function ReviewSidebar({
@@ -48,6 +54,7 @@ export function ReviewSidebar({
   dismissReasons,
   onDismissReasonChange,
   newViolationIds,
+  mode = "submit",
 }: ReviewSidebarProps) {
   // „erledigt" = soft abgehakt/übernommen ODER hard übernommen (acceptedIds)
   // bzw. mit Begründung weggeklickt. Erledigte wandern in den Klappblock unten.
@@ -87,7 +94,7 @@ export function ReviewSidebar({
         </section>
       )}
 
-      <StatusPill blocked={blocked} hintCount={hintCount} />
+      <StatusPill blocked={blocked} hintCount={hintCount} mode={mode} />
 
       {total > 0 && (
         <ProgressLine
@@ -106,17 +113,28 @@ export function ReviewSidebar({
             <span className="text-xs text-rose-700">{openHard.length} offen</span>
           </header>
           <p className="border-b border-rose-100 px-4 py-2 text-[11px] leading-relaxed text-rose-800">
-            Mögliche Gesundheits-/Art-9-Angabe oder harte Ablehnungs-Prognose —
-            das Einzige, was das Einreichen blockiert. Übernimm den Vorschlag,
-            um die Stelle zu entschärfen — oder klick sie per{" "}
-            <strong>Fehlalarm</strong> weg (mit kurzer Begründung, die der
-            Bildungsträger sieht).
+            {mode === "check" ? (
+              <>
+                Mögliche Gesundheits-/Art-9-Angabe oder harte Ablehnungs-Prognose
+                — gehört nicht in den finalen Bericht. Übernimm den Vorschlag,
+                um die Stelle zu entschärfen.
+              </>
+            ) : (
+              <>
+                Mögliche Gesundheits-/Art-9-Angabe oder harte
+                Ablehnungs-Prognose — das Einzige, was das Einreichen blockiert.
+                Übernimm den Vorschlag, um die Stelle zu entschärfen — oder klick
+                sie per <strong>Fehlalarm</strong> weg (mit kurzer Begründung,
+                die der Bildungsträger sieht).
+              </>
+            )}
           </p>
           <ul className="divide-y divide-zinc-100">
             {openHard.map((v) => (
               <ViolationCard
                 key={v.id}
                 violation={v}
+                mode={mode}
                 isNew={isNew(v)}
                 accepted={acceptedIds.has(v.id)}
                 onToggleAccepted={() => onToggleAccepted(v.id)}
@@ -141,15 +159,15 @@ export function ReviewSidebar({
             <span className="text-xs text-amber-700">{openSoft.length} offen</span>
           </header>
           <p className="border-b border-amber-100 px-4 py-2 text-[11px] leading-relaxed text-amber-800">
-            Rein beratend — blockiert das Einreichen nicht. Übernimm den
-            Vorschlag, wenn er passt, oder markiere die Stelle mit{" "}
-            <strong>„Passt schon“</strong> als erledigt.
+            Rein beratend. Übernimm den Vorschlag, wenn er passt, oder markiere
+            die Stelle mit <strong>„Passt schon“</strong> als erledigt.
           </p>
           <ul className="divide-y divide-zinc-100">
             {openSoft.map((v) => (
               <ViolationCard
                 key={v.id}
                 violation={v}
+                mode={mode}
                 isNew={isNew(v)}
                 accepted={acceptedIds.has(v.id)}
                 onToggleAccepted={() => onToggleAccepted(v.id)}
@@ -352,20 +370,23 @@ function PositiveAspectsCard({ aspects }: { aspects: string[] }) {
 function StatusPill({
   blocked,
   hintCount,
+  mode,
 }: {
   blocked: boolean;
   hintCount: number;
+  mode: "submit" | "check";
 }) {
+  const isCheck = mode === "check";
   if (blocked) {
     return (
       <div className="rounded-xl border border-rose-300 bg-rose-50 p-4">
         <div className="text-sm font-semibold text-rose-900">
-          Sensible Stelle — bitte prüfen
+          Sensible Stelle gefunden
         </div>
         <p className="mt-1 text-xs leading-relaxed text-rose-800">
-          Eine als sensibel markierte Stelle muss entfernt oder als Fehlalarm
-          begründet werden, bevor du einreichen kannst. Alle anderen Punkte
-          sind reine Hinweise.
+          {isCheck
+            ? "Eine als sensibel markierte Stelle (z.B. Gesundheitsangabe) sollte nicht in den finalen Bericht. Alle anderen Punkte sind reine Hinweise."
+            : "Eine als sensibel markierte Stelle muss entfernt oder als Fehlalarm begründet werden, bevor du einreichen kannst. Alle anderen Punkte sind reine Hinweise."}
         </p>
       </div>
     );
@@ -373,7 +394,7 @@ function StatusPill({
   return (
     <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
       <div className="text-sm font-semibold text-emerald-900">
-        Einreichen möglich
+        {isCheck ? "Sprachlich sauber" : "Einreichen möglich"}
       </div>
       <p className="mt-1 text-xs leading-relaxed text-emerald-900">
         {hintCount > 0
@@ -443,6 +464,7 @@ function ViolationCard({
   dismissReason = "",
   onDismissReasonChange,
   isNew = false,
+  mode = "submit",
 }: {
   violation: Violation;
   accepted: boolean;
@@ -454,17 +476,20 @@ function ViolationCard({
   onDismissReasonChange?: (reason: string) => void;
   /** Seit dem letzten Re-Check neu aufgetaucht → „Neu"-Badge. */
   isNew?: boolean;
+  mode?: "submit" | "check";
 }) {
   const [status, setStatus] = useState<CardStatus>("idle");
   const isSoft = violation.severity === "soft_flag";
   // Deterministischer inhaltlicher Hinweis (zu dünn/floskelhaft/Baustein fehlt):
   // kein Zitat, keine Auto-Übernahme — nur Empfehlung + „Passt schon".
   const isStructural = !!violation.structural;
+  const isCheck = mode === "check";
   const dismissed =
     !isSoft && dismissReason.trim().length >= HARD_BLOCK_REASON_MIN;
   const [showReason, setShowReason] = useState(dismissReason.length > 0);
-  // „erledigt" = soft abgehakt ODER hard mit ausreichender Begründung.
-  const resolved = isSoft ? accepted : dismissed;
+  // „erledigt": soft/structural → abgehakt. Hard → im Submit-Modus per
+  // Begründung weggeklickt, im Check-Modus (kein Gate) per „Passt schon".
+  const resolved = isSoft ? accepted : isCheck ? accepted : dismissed;
 
   function handleApplyClick() {
     const outcome = onApply();
@@ -578,7 +603,20 @@ function ViolationCard({
                   Passt schon
                 </button>
               )}
-              {!isSoft && !showReason && (
+              {/* Check-Modus (Schnell-Check): kein Gate → Hard-Block per
+                  „Passt schon" abhaken. Submit-Modus (Editor): Fehlalarm nur
+                  mit Begründung. */}
+              {!isSoft && isCheck && (
+                <button
+                  type="button"
+                  onClick={onToggleAccepted}
+                  className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-50"
+                  title="Im finalen Bericht beachten — hier nur ein Hinweis."
+                >
+                  Passt schon
+                </button>
+              )}
+              {!isSoft && !isCheck && !showReason && (
                 <button
                   type="button"
                   onClick={() => setShowReason(true)}
@@ -591,7 +629,7 @@ function ViolationCard({
             </div>
           )}
 
-          {!isSoft && showReason && !dismissed && (
+          {!isSoft && !isCheck && showReason && !dismissed && (
             <div className="mt-3 space-y-1.5">
               <textarea
                 rows={2}

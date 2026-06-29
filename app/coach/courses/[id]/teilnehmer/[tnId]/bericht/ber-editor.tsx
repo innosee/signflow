@@ -231,6 +231,7 @@ export function BerEditor({
     reviewStateKey,
   ]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isSaving, startSaveTransition] = useTransition();
   const [isSubmitting, startSubmitTransition] = useTransition();
   // „Aus Terminen vorbefüllen" — deterministischer Entwurf fürs ablauf-Feld
@@ -566,6 +567,45 @@ export function BerEditor({
     router.push("/coach/checker/export");
   }
 
+  async function handleDownloadPdf() {
+    setSubmitError(null);
+    setIsDownloading(true);
+    try {
+      let id = submittedBerId;
+      // Aktuellen Stand sichern, damit das PDF ihn widerspiegelt. In
+      // Impersonation ist Schreiben geblockt → dann nur der vorhandene Stand.
+      if (!impersonating) {
+        const fd = new FormData();
+        fd.append("courseId", courseId);
+        fd.append("participantId", participantId);
+        fd.append("teilnahme", input.teilnahme);
+        fd.append("ablauf", input.ablauf);
+        fd.append("fazit", input.fazit);
+        fd.append("sonstiges", sonstiges);
+        fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
+        const res = await saveBerDraftAction(undefined, fd);
+        if (res?.berId) {
+          id = res.berId;
+          setSubmittedBerId(res.berId);
+        }
+        if (res?.savedAt) setSavedAt(new Date(res.savedAt));
+      }
+      if (!id) {
+        setSubmitError(
+          "Bitte zuerst Inhalt eingeben (wird gespeichert) — dann ist der PDF-Download möglich.",
+        );
+        return;
+      }
+      window.open(
+        `/api/coach/abschlussberichte/${id}/pdf`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   // Mindestens ein Abschnitt muss Inhalt haben — sonst gibt es nichts zu
   // prüfen. Drei-Felder-Pflicht würde Coaches mit kurzen AVGS-Maßnahmen
   // (z.B. 5 UE „Bewerbungsunterlagen optimieren") blockieren: ohne Check
@@ -775,6 +815,17 @@ export function BerEditor({
                 className="rounded-lg border border-emerald-400 bg-white px-5 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
               >
                 Als Erango-PDF exportieren
+              </button>
+            )}
+            {canSubmit && (
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={isDownloading || (impersonating && !submittedBerId)}
+                title="Aktuellen Stand als A4-PDF erzeugen und herunterladen."
+                className="rounded-lg border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-800 transition enabled:hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDownloading ? "Erstelle PDF …" : "PDF herunterladen"}
               </button>
             )}
             {status === "submitted" ? (
