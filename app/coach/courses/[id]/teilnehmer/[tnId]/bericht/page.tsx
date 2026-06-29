@@ -34,6 +34,7 @@ export default async function BerEditorPage({ params }: Props) {
         startDate: schema.courses.startDate,
         endDate: schema.courses.endDate,
         anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+        massnahmeTyp: schema.courses.massnahmeTyp,
       },
       participant: {
         id: schema.participants.id,
@@ -102,6 +103,7 @@ export default async function BerEditorPage({ params }: Props) {
         key={`${courseId}:${participantId}`}
         courseId={courseId}
         participantId={participantId}
+        massnahmeTyp={row.course.massnahmeTyp}
         coachName={session.user.name}
         participantName={row.participant.name}
         kundenNr={row.participant.kundenNr}

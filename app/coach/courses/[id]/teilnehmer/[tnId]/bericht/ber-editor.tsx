@@ -35,6 +35,7 @@ import {
   type CheckerInput,
   type CheckerResult,
   type CheckerSection,
+  type MassnahmeTyp,
   type Violation,
 } from "@/lib/checker/types";
 import type { Abschlussbericht } from "@/db/schema";
@@ -87,6 +88,8 @@ const INITIAL_STEPS: CheckerStep[] = [
 type Props = {
   courseId: string;
   participantId: string;
+  /** Maßnahmetyp des Kunden (courses.massnahmeTyp) — steuert die Prüfung. */
+  massnahmeTyp: MassnahmeTyp;
   coachName: string;
   participantName: string;
   kundenNr: string;
@@ -101,6 +104,7 @@ type Props = {
 export function BerEditor({
   courseId,
   participantId,
+  massnahmeTyp,
   coachName,
   participantName,
   kundenNr,
@@ -113,10 +117,13 @@ export function BerEditor({
 }: Props) {
   const router = useRouter();
 
+  // Maßnahmetyp kommt autoritativ aus dem Kunden-Datensatz (kein Picker nötig)
+  // → der Checker prüft die richtigen Pflichtbausteine/Konkretheits-Proben.
   const [input, setInput] = useState<CheckerInput>({
     teilnahme: initialBer?.teilnahme ?? "",
     ablauf: initialBer?.ablauf ?? "",
     fazit: initialBer?.fazit ?? "",
+    massnahmeTyp,
   });
   const [sonstiges, setSonstiges] = useState(initialBer?.sonstiges ?? "");
   const [keineFehlzeiten, setKeineFehlzeiten] = useState(
