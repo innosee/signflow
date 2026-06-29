@@ -64,6 +64,14 @@ describe("activeHardBlocks", () => {
     ]);
     expect(activeHardBlocks(r, {}, new Set(["a", "b"]))).toEqual([]);
   });
+
+  it("ein previouslyAddressed-Treffer (KI-Wiederholung) blockiert nicht", () => {
+    const r = result([
+      violation({ id: "a", previouslyAddressed: true }),
+      violation({ id: "b" }),
+    ]);
+    expect(activeHardBlocks(r, {}).map((v) => v.id)).toEqual(["b"]);
+  });
 });
 
 describe("resolveHardBlockOverrideReason", () => {

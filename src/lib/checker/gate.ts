@@ -41,7 +41,13 @@ export function activeHardBlocks(
   appliedIds: ReadonlySet<string> = new Set(),
 ): Violation[] {
   return hardBlocks(result).filter(
-    (v) => !isHardBlockDismissed(v.id, dismissReasons) && !appliedIds.has(v.id),
+    (v) =>
+      !isHardBlockDismissed(v.id, dismissReasons) &&
+      !appliedIds.has(v.id) &&
+      // Das Modell flaggt nicht-deterministisch gern seine EIGENE schon
+      // übernommene Umformulierung erneut. Solche Treffer blockieren nicht —
+      // der Coach hat den Vorschlag ja bereits umgesetzt.
+      !v.previouslyAddressed,
   );
 }
 

@@ -52,9 +52,12 @@ export function ReviewSidebar({
   // „erledigt" = soft abgehakt/übernommen ODER hard übernommen (acceptedIds)
   // bzw. mit Begründung weggeklickt. Erledigte wandern in den Klappblock unten.
   const isResolved = (v: Violation) =>
-    v.severity === "soft_flag"
+    // KI hat ihre eigene schon übernommene Umformulierung erneut markiert →
+    // gilt als erledigt (kein Handlungsbedarf, blockiert nicht).
+    v.previouslyAddressed ||
+    (v.severity === "soft_flag"
       ? acceptedIds.has(v.id)
-      : acceptedIds.has(v.id) || isHardBlockDismissed(v.id, dismissReasons);
+      : acceptedIds.has(v.id) || isHardBlockDismissed(v.id, dismissReasons));
   const isNew = (v: Violation) => !!newViolationIds?.has(v.id);
 
   const openHard = result.violations.filter(
@@ -132,14 +135,15 @@ export function ReviewSidebar({
       <MustHaveCard mustHaves={result.mustHaves} />
 
       {openSoft.length > 0 && (
-        <section className="rounded-xl border border-zinc-300 bg-white">
-          <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-            <h3 className="text-sm font-semibold text-zinc-900">Hinweise</h3>
-            <span className="text-xs text-zinc-500">{openSoft.length} offen</span>
+        <section className="rounded-xl border-2 border-amber-200 bg-white">
+          <header className="flex items-center justify-between border-b border-amber-200 bg-amber-50/60 px-4 py-3">
+            <h3 className="text-sm font-semibold text-amber-900">Hinweise</h3>
+            <span className="text-xs text-amber-700">{openSoft.length} offen</span>
           </header>
-          <p className="border-b border-zinc-100 px-4 py-2 text-[11px] leading-relaxed text-zinc-500">
+          <p className="border-b border-amber-100 px-4 py-2 text-[11px] leading-relaxed text-amber-800">
             Rein beratend — blockiert das Einreichen nicht. Übernimm den
-            Vorschlag, wenn er passt, oder hak die Karte ab.
+            Vorschlag, wenn er passt, oder markiere die Stelle mit{" "}
+            <strong>„Passt schon“</strong> als erledigt.
           </p>
           <ul className="divide-y divide-zinc-100">
             {openSoft.map((v) => (
@@ -251,11 +255,16 @@ function ResolvedSection({
         <ul className="divide-y divide-zinc-100 border-t border-zinc-200">
           {resolved.map((v) => {
             // applied (acceptedIds) = Vorschlag übernommen / Soft abgehakt;
-            // sonst hard_block mit Fehlalarm-Begründung weggeklickt.
+            // dismissed = Fehlalarm mit Begründung; previouslyAddressed-only =
+            // KI-Wiederholung der eigenen Umformulierung (auto-erledigt).
             const applied = acceptedIds.has(v.id);
+            const dismissed =
+              !applied && (dismissReasons[v.id] ?? "").trim().length >= 10;
             const how = applied
               ? "Vorschlag übernommen / abgehakt"
-              : `Fehlalarm: ${(dismissReasons[v.id] ?? "").trim()}`;
+              : dismissed
+                ? `Fehlalarm: ${(dismissReasons[v.id] ?? "").trim()}`
+                : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
             return (
               <li key={v.id} className="px-4 py-2.5 text-xs">
                 <div className="flex items-start justify-between gap-2">
@@ -265,15 +274,17 @@ function ResolvedSection({
                     </p>
                     <p className="mt-0.5 text-[11px] text-zinc-600">{how}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      applied ? onUndoAccepted(v.id) : onUndoDismiss(v.id)
-                    }
-                    className="shrink-0 text-[11px] text-zinc-500 underline-offset-2 hover:underline"
-                  >
-                    rückgängig
-                  </button>
+                  {(applied || dismissed) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        applied ? onUndoAccepted(v.id) : onUndoDismiss(v.id)
+                      }
+                      className="shrink-0 text-[11px] text-zinc-500 underline-offset-2 hover:underline"
+                    >
+                      rückgängig
+                    </button>
+                  )}
                 </div>
               </li>
             );
@@ -478,21 +489,12 @@ function ViolationCard({
   return (
     <li className={`p-4 transition-opacity ${resolved ? "opacity-60" : ""}`}>
       <div className="flex items-start gap-3">
-        {isSoft && (
-          <input
-            type="checkbox"
-            checked={accepted}
-            onChange={onToggleAccepted}
-            aria-label="Als erledigt markieren"
-            className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-zinc-400 text-emerald-600 focus:ring-emerald-500"
-          />
-        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide">
             <span
               className={`rounded-full px-1.5 py-0.5 ${
                 isSoft
-                  ? "bg-zinc-100 text-zinc-700"
+                  ? "bg-amber-100 text-amber-900"
                   : "bg-rose-100 text-rose-900"
               }`}
             >
@@ -519,7 +521,7 @@ function ViolationCard({
           <blockquote
             className={`mt-2 rounded-md border-l-4 px-3 py-2 text-xs italic ${
               isSoft
-                ? "border-zinc-300 bg-zinc-50 text-zinc-700"
+                ? "border-amber-300 bg-amber-50/60 text-zinc-800"
                 : "border-rose-300 bg-rose-50/60 text-zinc-800"
             }`}
           >
@@ -555,6 +557,16 @@ function ViolationCard({
               >
                 Im Text markieren
               </button>
+              {isSoft && (
+                <button
+                  type="button"
+                  onClick={onToggleAccepted}
+                  className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-50"
+                  title="Hinweis erledigt — z.B. manuell anders gelöst oder bewusst so gelassen."
+                >
+                  Passt schon
+                </button>
+              )}
               {!isSoft && !showReason && (
                 <button
                   type="button"

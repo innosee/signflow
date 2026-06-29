@@ -109,6 +109,7 @@ Die Mehrheit der Coaches schreibt fachlich gut. Dein Job ist NICHT, jeden Berich
 - Standard-Coaching-Vokabular wie „Reflexion", „Standortbestimmung", „Klärung", „Perspektive"
 - Vorsichtige, aber neutrale Beschreibungen wie „TN benötigt weitere Unterstützung", „Schritte sind angestoßen"
 - Sachliche Erwähnung von Hindernissen, ohne Diagnose oder Wertung („gesundheitliche Einschränkungen wirkten sich auf die Belastbarkeit aus")
+- **Bereits entschärfte Formulierungen** wie „gesundheitliche Themen, die Auswirkungen auf die Belastbarkeit haben, jedoch ohne spezifische Diagnosen zu benennen" — das ist GENAU die gewünschte ressourcenorientierte Sprache (siehe Umformulierungs-Beispiele unten) und darf **NIE** geflaggt werden, auch nicht als \`medizin\`/\`hard_block\`. Flagge niemals deine eigene Safe-Umformulierung.
 - Defizit-Beschreibungen, wenn sie sachlich-konstruktiv eingebettet sind („benötigt Übung in der Selbstpräsentation, Impulse hierzu wurden gesetzt")
 - Stilistische Vorlieben („zielführend" / „nicht zielführend" als sachliche Bewertung einer Methode, NICHT des TNs)
 - Synonyme zu unsicheren Standard-Begriffen wenn der Kontext klar coachingsprachlich ist
