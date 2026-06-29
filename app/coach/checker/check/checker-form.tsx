@@ -18,6 +18,7 @@ import {
   activeHardBlocks,
   resolveHardBlockOverrideReason,
 } from "@/lib/checker/gate";
+import { withAdvisoryHints } from "@/lib/checker/hints";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import {
   fingerprintApplied,
@@ -867,7 +868,7 @@ export function CheckerForm({
           </div>
         ) : result ? (
           <ReviewSidebar
-            result={result}
+            result={withAdvisoryHints(result, input)}
             acceptedIds={acceptedIds}
             onToggleAccepted={handleToggleAccepted}
             onApply={handleApplySuggestion}

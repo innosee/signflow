@@ -265,13 +265,13 @@ function ResolvedSection({
               : dismissed
                 ? `Fehlalarm: ${(dismissReasons[v.id] ?? "").trim()}`
                 : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
+            // Strukturelle Hinweise haben kein Zitat → Regel-Text als Titel.
+            const title = v.structural ? v.rule : `„${v.quote}“`;
             return (
               <li key={v.id} className="px-4 py-2.5 text-xs">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate italic text-zinc-500">
-                      &bdquo;{v.quote}&ldquo;
-                    </p>
+                    <p className="truncate italic text-zinc-500">{title}</p>
                     <p className="mt-0.5 text-[11px] text-zinc-600">{how}</p>
                   </div>
                   {(applied || dismissed) && (
@@ -470,6 +470,9 @@ function ViolationCard({
 }) {
   const [status, setStatus] = useState<CardStatus>("idle");
   const isSoft = violation.severity === "soft_flag";
+  // Deterministischer inhaltlicher Hinweis (zu dünn/floskelhaft/Baustein fehlt):
+  // kein Zitat, keine Auto-Übernahme — nur Empfehlung + „Passt schon".
+  const isStructural = !!violation.structural;
   const dismissed =
     !isSoft && dismissReason.trim().length >= HARD_BLOCK_REASON_MIN;
   const [showReason, setShowReason] = useState(dismissReason.length > 0);
@@ -493,22 +496,26 @@ function ViolationCard({
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide">
             <span
               className={`rounded-full px-1.5 py-0.5 ${
-                isSoft
+                isStructural || isSoft
                   ? "bg-amber-100 text-amber-900"
                   : "bg-rose-100 text-rose-900"
               }`}
             >
-              {VIOLATION_CATEGORY_LABELS[violation.category]}
+              {isStructural
+                ? violation.rule
+                : VIOLATION_CATEGORY_LABELS[violation.category]}
             </span>
-            <span className="text-zinc-500">
-              {SECTION_LABELS[violation.section]}
-            </span>
+            {!isStructural && (
+              <span className="text-zinc-500">
+                {SECTION_LABELS[violation.section]}
+              </span>
+            )}
             {isNew && (
               <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-sky-800">
                 Neu
               </span>
             )}
-            {violation.previouslyAddressed && (
+            {!isStructural && violation.previouslyAddressed && (
               <span
                 className="rounded-full bg-zinc-200 px-1.5 py-0.5 text-zinc-700"
                 title="Sitzt auf einer bereits übernommenen Umformulierung — kann meist ignoriert werden."
@@ -518,30 +525,47 @@ function ViolationCard({
             )}
           </div>
 
-          <blockquote
-            className={`mt-2 rounded-md border-l-4 px-3 py-2 text-xs italic ${
-              isSoft
-                ? "border-amber-300 bg-amber-50/60 text-zinc-800"
-                : "border-rose-300 bg-rose-50/60 text-zinc-800"
-            }`}
-          >
-            &bdquo;{violation.quote}&ldquo;
-          </blockquote>
+          {!isStructural && (
+            <blockquote
+              className={`mt-2 rounded-md border-l-4 px-3 py-2 text-xs italic ${
+                isSoft
+                  ? "border-amber-300 bg-amber-50/60 text-zinc-800"
+                  : "border-rose-300 bg-rose-50/60 text-zinc-800"
+              }`}
+            >
+              &bdquo;{violation.quote}&ldquo;
+            </blockquote>
+          )}
 
           <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
             <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-900">
-              Vorschlag
+              {isStructural ? "Empfehlung" : "Vorschlag"}
             </div>
             <p className="mt-0.5 text-xs text-zinc-800">
               {violation.suggestion}
             </p>
           </div>
 
-          <p className="mt-1.5 text-[11px] text-zinc-500">
-            Regel: {violation.rule}
-          </p>
+          {!isStructural && (
+            <p className="mt-1.5 text-[11px] text-zinc-500">
+              Regel: {violation.rule}
+            </p>
+          )}
 
-          {!resolved && (
+          {!resolved && isStructural && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={onToggleAccepted}
+                className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-50"
+                title="Hinweis erledigt — ergänzt, anders gelöst oder bewusst so gelassen."
+              >
+                Passt schon
+              </button>
+            </div>
+          )}
+
+          {!resolved && !isStructural && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"

@@ -250,6 +250,14 @@ export type Violation = {
    * kommt nicht von Azure. Visuell als „schon übernommen"-Badge gerendert.
    */
   previouslyAddressed?: boolean;
+  /**
+   * True für deterministisch erzeugte „inhaltliche Hinweise" (zu dünner/
+   * floskelhafter Abschnitt, fehlender Pflichtbaustein) — NICHT vom Modell,
+   * sondern client-seitig aus Input + Result abgeleitet (siehe
+   * `buildAdvisoryHints`). Kein Zitat/keine Auto-Übernahme: die Card zeigt
+   * nur die Empfehlung + „Passt schon". `rule` dient als Badge-Text.
+   */
+  structural?: boolean;
 };
 
 /**
