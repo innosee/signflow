@@ -115,6 +115,10 @@ export async function anonymize(input: CheckerInput): Promise<AnonResult> {
       teilnahme: data.anonymized.teilnahme,
       ablauf: data.anonymized.ablauf,
       fazit: data.anonymized.fazit,
+      // Maßnahmetyp ist kein PII — der Proxy gibt ihn nicht zurück, also vom
+      // Original übernehmen. SONST fällt der Check immer auf EKC-Default zurück
+      // (steuert Pflichtbausteine/Konkretheit + Mismatch-Erkennung).
+      massnahmeTyp: input.massnahmeTyp,
     },
     entities: data.entities,
     bypassed: false,

@@ -105,12 +105,15 @@ function formatDateTime(iso: string | null): string {
   if (Number.isNaN(date.getTime())) return "";
   // Deutsches Kurzformat, Sekunden weglassen — Beweiskraft kommt aus dem
   // Zeitstempel in der DB, nicht aus der Darstellungsgenauigkeit.
+  // WICHTIG: timeZone explizit auf Europe/Berlin — sonst rendert der Server
+  // (Vercel = UTC) die Signatur-Uhrzeit 1–2 h zu früh.
   return date.toLocaleString("de-DE", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/Berlin",
   });
 }
 
