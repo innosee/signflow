@@ -558,6 +558,10 @@ export function BerEditor({
 
   async function handleDownloadPdf() {
     setSubmitError(null);
+    // WICHTIG: Tab SYNCHRON im Klick-Kontext öffnen — sonst blockt der Popup-
+    // Blocker das window.open, das nach dem await (Speichern) käme. Die echte
+    // URL setzen wir, sobald die berId steht.
+    const win = window.open("", "_blank");
     setIsDownloading(true);
     try {
       let id = submittedBerId;
@@ -580,16 +584,20 @@ export function BerEditor({
         if (res?.savedAt) setSavedAt(new Date(res.savedAt));
       }
       if (!id) {
+        win?.close();
         setSubmitError(
           "Bitte zuerst Inhalt eingeben (wird gespeichert) — dann ist der PDF-Download möglich.",
         );
         return;
       }
-      window.open(
-        `/api/coach/abschlussberichte/${id}/pdf`,
-        "_blank",
-        "noopener,noreferrer",
-      );
+      const url = `/api/coach/abschlussberichte/${id}/pdf`;
+      if (win) {
+        win.location.href = url;
+      } else {
+        // Popup doch geblockt → im selben Tab öffnen (Browser lädt das PDF als
+        // Datei herunter, die Editor-Seite bleibt erhalten).
+        window.location.href = url;
+      }
     } finally {
       setIsDownloading(false);
     }
