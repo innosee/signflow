@@ -23,6 +23,7 @@ export function LandingHero() {
           <div className="flex flex-wrap items-center gap-3">
             <a
               href="#waitlist"
+              data-track="hero-waitlist-cta"
               className="inline-flex items-center gap-2 rounded-lg bg-black px-5 py-3 text-sm font-medium text-white hover:bg-zinc-800"
             >
               Warteliste beitreten

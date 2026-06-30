@@ -23,6 +23,16 @@ export function LandingWaitlist() {
     }
   }, [state]);
 
+  // Conversion-Event erst bei erfolgreichem Eintrag — nicht bei jedem
+  // Klick auf den Submit-Button (der auch bei Validierungsfehlern feuert).
+  // Guarded: window.track existiert nur, wenn das Analytics-Script geladen
+  // ist (auf localhost/Preview absichtlich nicht).
+  useEffect(() => {
+    if (state?.ok) {
+      window.track?.("waitlist-signup");
+    }
+  }, [state]);
+
   return (
     <section
       id="waitlist"

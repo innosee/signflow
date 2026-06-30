@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import Script from "next/script";
 
 import { LandingCheckerTeaser } from "@/components/landing/checker-teaser";
 import { LandingFaq } from "@/components/landing/faq";
@@ -49,9 +48,6 @@ export default async function Home() {
         <LandingWaitlist />
       </main>
       <LandingFooter />
-      {/* Analytics nur auf der öffentlichen Landing — bewusst NICHT im
-          eingeloggten App-Layout, das AfA-/personenbezogene Daten zeigt. */}
-      <Script defer data-site="signflow.coach" src="https://signflow.coach/script.js" />
     </div>
   );
 }

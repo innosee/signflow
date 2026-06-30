@@ -41,6 +41,7 @@ export function LandingNav() {
           </Link>
           <Link
             href="/register"
+            data-track="nav-register-cta"
             className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
           >
             Registrieren
