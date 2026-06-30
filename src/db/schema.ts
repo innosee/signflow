@@ -192,6 +192,14 @@ export const users = pgTable(
     banned: boolean("banned").notNull().default(false),
     banReason: text("ban_reason"),
     banExpires: timestamp("ban_expires", { withTimezone: true }),
+    /**
+     * Letzter Zeitpunkt, zu dem der User die „Neu"-Changelog-Seite gesehen
+     * hat. `null` = noch nie geöffnet → alle veröffentlichten Einträge gelten
+     * als ungelesen. Steuert das blaue Badge im AppHeader.
+     */
+    changelogLastSeenAt: timestamp("changelog_last_seen_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -207,6 +215,35 @@ export const users = pgTable(
     uniqueIndex("users_email_active_uq")
       .on(t.email)
       .where(sql`${t.deletedAt} IS NULL`),
+  ],
+);
+
+/**
+ * Produkt-Changelog („Neu"-Seite). Globale News, vom Operator (innosee)
+ * verfasst — bewusst NICHT tenant- oder user-gebunden, sondern für alle
+ * eingeloggten User sichtbar. Plaintext-Body (mit Zeilenumbrüchen, React
+ * escaped beim Rendern). Soft-Delete für versehentliche Einträge.
+ */
+export const changelogEntries = pgTable(
+  "changelog_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("changelog_entries_published_idx").on(t.publishedAt.desc()),
   ],
 );
 

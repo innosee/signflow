@@ -9,6 +9,7 @@ import {
   getPendingInvitations,
   getTenantSwitcherData,
 } from "@/lib/memberships";
+import { getUnreadChangelogCount } from "@/lib/changelog";
 
 import { logoutAction } from "../login/actions";
 import { stopImpersonating } from "./actions";
@@ -26,6 +27,7 @@ export default async function BildungstraegerLayout({
     getTenantId(session),
   );
   const pendingInvitations = await getPendingInvitations(session.user.id);
+  const changelogUnreadCount = await getUnreadChangelogCount(session.user.id);
 
   return (
     <>
@@ -52,6 +54,7 @@ export default async function BildungstraegerLayout({
             />
           }
           invitationsCount={pendingInvitations.length}
+          changelogUnreadCount={changelogUnreadCount}
           userName={session.user.name}
           userEmail={session.user.email}
           settingsHref="/bildungstraeger/settings"
