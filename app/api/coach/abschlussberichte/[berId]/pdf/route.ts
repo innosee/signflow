@@ -45,6 +45,15 @@ export async function GET(
       schema.participants,
       eq(schema.participants.id, schema.abschlussberichte.participantId),
     )
+    // courses MUSS gejoint sein, weil `courseVisibleToCoach` korreliert auf
+    // `schema.courses` (.coachId/.id) zugreift. Ohne diesen Join wirft Postgres
+    // „missing FROM-clause entry for table courses" → die Query schlägt fehl,
+    // BEVOR der renderPdf-try/catch greift → „PDF herunterladen" lieferte 500.
+    // Ad-hoc-Berichte (courseId null) → kein Kurs-Match, nur der Autor-Zweig.
+    .leftJoin(
+      schema.courses,
+      eq(schema.courses.id, schema.abschlussberichte.courseId),
+    )
     .where(
       and(
         eq(schema.abschlussberichte.id, berId),
