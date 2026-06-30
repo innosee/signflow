@@ -41,6 +41,11 @@ type Props = {
    * Hinweis-Link auf /konto/einladungen wird im Header gezeigt.
    */
   invitationsCount?: number;
+  /**
+   * Anzahl ungelesener Changelog-Einträge. >0 → blaue Bubble am „Neu"-Link.
+   * Der „Neu"-Link selbst ist immer sichtbar (auch bei 0).
+   */
+  changelogUnreadCount?: number;
   userName: string;
   userEmail: string;
   /** Optionaler Link zur Einstellungs-Seite (Profil/Passwort/Branding/Billing). */
@@ -58,6 +63,7 @@ export function AppHeader({
   accentStrip,
   tenantSwitcher,
   invitationsCount = 0,
+  changelogUnreadCount = 0,
   userName,
   settingsHref,
   impersonating,
@@ -89,6 +95,21 @@ export function AppHeader({
   // identisch in Desktop-Zeile und Mobile-Panel.
   const actions = (
     <>
+      <Link
+        href="/neu"
+        onClick={closeMenu}
+        className="relative inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+      >
+        Neu
+        {changelogUnreadCount > 0 && (
+          <span
+            aria-label={`${changelogUnreadCount} ungelesen`}
+            className="inline-flex min-w-5 items-center justify-center rounded-full bg-sky-500 px-1.5 py-0.5 text-xs font-semibold leading-none text-white"
+          >
+            {changelogUnreadCount}
+          </span>
+        )}
+      </Link>
       {invitationsCount > 0 && !impersonating && (
         <Link
           href="/konto/einladungen"
