@@ -1,0 +1,72 @@
+name: Backup Prod-DB → IONOS
+
+# 2×/Woche verschlüsselter Logical-Dump der Prod-DB auf die IONOS-VM.
+# Konzept: docs/backups.md. Läuft erst, wenn die Secrets gesetzt sind —
+# ohne Secrets bricht der erste Step sauber ab (kein roter Lauf, keine Mails).
+#
+# Cron ist UTC. 01:00 UTC ≈ 03:00 Europe/Berlin (Sommerzeit CEST); im Winter
+# 02:00 CET — bewusst nachts, Last egal.
+on:
+  schedule:
+    - cron: "0 1 * * 1,4" # Montag + Donnerstag
+  workflow_dispatch: {} # manueller Test-Trigger
+
+# Nie zwei Backups gleichzeitig.
+concurrency:
+  group: prod-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    # PG-17-Client (pg_dump) passend zur Neon-Server-Version.
+    container:
+      image: postgres:17
+    steps:
+      - name: Secrets-Check (sonst sauber überspringen)
+        id: gate
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_GPG_PUBLIC_KEY: ${{ secrets.BACKUP_GPG_PUBLIC_KEY }}
+          IONOS_SSH_KEY: ${{ secrets.IONOS_SSH_KEY }}
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ] || [ -z "$BACKUP_GPG_PUBLIC_KEY" ] || [ -z "$IONOS_SSH_KEY" ]; then
+            echo "Backup-Secrets noch nicht gesetzt — übersprungen."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Tooling (gpg, ssh)
+        if: steps.gate.outputs.skip != 'true'
+        run: apt-get update && apt-get install -y --no-install-recommends gnupg openssh-client
+
+      - name: SSH-Key + known_hosts
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          IONOS_SSH_KEY: ${{ secrets.IONOS_SSH_KEY }}
+          IONOS_SSH_HOST: ${{ vars.IONOS_SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$IONOS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$IONOS_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: GPG-Public-Key importieren
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          BACKUP_GPG_PUBLIC_KEY: ${{ secrets.BACKUP_GPG_PUBLIC_KEY }}
+        run: printf '%s\n' "$BACKUP_GPG_PUBLIC_KEY" | gpg --import
+
+      - name: Dump + verschlüsseln + Upload
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_GPG_RECIPIENT: ${{ vars.BACKUP_GPG_RECIPIENT }}
+          BACKUP_TARGET: ssh
+          IONOS_SSH_DEST: ${{ vars.IONOS_SSH_DEST }}
+          IONOS_SSH_DIR: ${{ vars.IONOS_SSH_DIR }}
+          BACKUP_RETENTION: ${{ vars.BACKUP_RETENTION }}
+        run: bash scripts/backup-prod-to-ionos.sh
