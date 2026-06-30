@@ -1,0 +1,38 @@
+name: Keepalive Staging-DB
+
+# Hält den Neon-`staging`-Branch aktiv: Neon archiviert inaktive Nicht-Default-
+# Branches nach ~14 Tagen ohne Zugriff (auf JEDEM Plan, auch Launch). Ein
+# Mini-Ping alle 3 Tage resettet die Inaktivitäts-Uhr → wird nie archiviert.
+# Doppelt nützlich als Staging-Healthcheck. Secret: STAGING_DATABASE_URL.
+on:
+  schedule:
+    - cron: "0 4 */3 * *" # alle ~3 Tage, 04:00 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: staging-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Secret-Check (sonst überspringen)
+        id: gate
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          if [ -z "$STAGING_DATABASE_URL" ]; then
+            echo "STAGING_DATABASE_URL nicht gesetzt — übersprungen."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: psql-Client
+        if: steps.gate.outputs.skip != 'true'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Ping (SELECT 1)
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: psql "$STAGING_DATABASE_URL" -tAc 'select 1' && echo "✓ Staging aktiv gehalten"
