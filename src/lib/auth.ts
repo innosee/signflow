@@ -62,6 +62,14 @@ export const auth = betterAuth({
     enabled: true,
     disableSignUp: true,
     minPasswordLength: 8,
+    // Reset-/Onboarding-Links: Better-Auth-Default ist nur 1 h — viel zu kurz
+    // für „Passwort festlegen"-Mails. Neue Bildungsträger/Coaches klicken den
+    // Link oft erst Stunden später → Token abgelaufen → Onboarding scheitert
+    // (User-Report Angela M., 2026-06-30). 24 h, analog zu den Teilnehmer-
+    // Magic-Links. Bei abgelaufenem Token leitet Better-Auth auf
+    // `/reset-password?error=INVALID_TOKEN` — die Seite bietet dann einen
+    // „neuen Link anfordern"-Weg an.
+    resetPasswordTokenExpiresIn: 60 * 60 * 24,
     sendResetPassword: async ({ user, url }) => {
       await sendResetPasswordEmail({
         to: user.email,
