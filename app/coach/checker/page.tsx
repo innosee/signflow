@@ -4,6 +4,7 @@ import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { courseVisibleToCoach } from "@/lib/course-access";
 import { requireCoach } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -256,7 +257,7 @@ function AdhocSection({ rows }: { rows: AdhocRow[] }) {
             </div>
             <div className="text-xs text-zinc-500">
               {r.submittedAt
-                ? `eingereicht am ${r.submittedAt.toLocaleDateString("de-DE")}`
+                ? `eingereicht am ${formatDateDE(r.submittedAt)}`
                 : ""}
             </div>
             <Link
@@ -346,9 +347,9 @@ function BerListSection({
               </div>
               <div className="text-xs text-zinc-500">
                 {r.status === "submitted" && r.submittedAt
-                  ? `eingereicht am ${r.submittedAt.toLocaleDateString("de-DE")}`
+                  ? `eingereicht am ${formatDateDE(r.submittedAt)}`
                   : r.status === "draft" && r.updatedAt
-                    ? `zuletzt gespeichert ${r.updatedAt.toLocaleDateString("de-DE")}`
+                    ? `zuletzt gespeichert ${formatDateDE(r.updatedAt)}`
                     : "noch nicht begonnen"}
               </div>
               {r.status === "submitted" && r.berId && (

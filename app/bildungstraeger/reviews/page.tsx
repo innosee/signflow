@@ -3,6 +3,7 @@ import { and, desc, eq, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +82,7 @@ export default async function BildungstraegerReviewsPage() {
               `AVGS ${r.avgsNummer}`,
               `Coach: ${r.coachName}`,
               r.requestedAt
-                ? `Eingereicht ${new Date(r.requestedAt).toLocaleDateString("de-DE")}`
+                ? `Eingereicht ${formatDateDE(r.requestedAt)}`
                 : null,
             ]}
           />
@@ -109,7 +110,7 @@ export default async function BildungstraegerReviewsPage() {
                 `Kunde: ${r.customerName}`,
                 `Coach: ${r.coachName}`,
                 r.decidedAt
-                  ? `Entschieden ${new Date(r.decidedAt).toLocaleDateString("de-DE")}`
+                  ? `Entschieden ${formatDateDE(r.decidedAt)}`
                   : null,
               ]}
             />

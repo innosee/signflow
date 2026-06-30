@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
 import { courseVisibleToCoach } from "@/lib/course-access";
 import { getTenantId, requireCoach } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 import { resolveAssetUrl } from "@/lib/storage";
 
 import { PrintButton } from "./print-button";
@@ -105,20 +106,21 @@ export default async function CoachBerPrintPage({ params }: Props) {
   const zeitraum =
     ber.tnZeitraum ||
     (row.courseStart && row.courseEnd
-      ? `${new Date(row.courseStart).toLocaleDateString("de-DE")} — ${new Date(row.courseEnd).toLocaleDateString("de-DE")}`
+      ? `${formatDateDE(row.courseStart)} — ${formatDateDE(row.courseEnd)}`
       : "");
   const coachName = row.coachName || ber.coachNameSnapshot || "";
 
   // Schnell-Check (kein Kurs) → keine Coach-Signatur, leeres Ort/Datum.
-  // Kurs-gebundener BER → Signatur + Ort/Datum aus durchfuehrungsort + submittedAt.
+  // Kurs-gebundener BER → Signatur + Ort/Datum aus durchfuehrungsort.
+  // Datum: eingereicht → submittedAt; Entwurf-Download → heute (sonst bliebe
+  // die „Ort, Datum"-Zeile leer). Ort wird vorangestellt, wenn vorhanden.
   const isAdhoc = ber.courseId === null;
-  const submittedAtDisplay = ber.submittedAt
-    ? new Date(ber.submittedAt).toLocaleDateString("de-DE")
+  const datumDisplay = isAdhoc
+    ? ""
+    : formatDateDE(ber.submittedAt ?? new Date());
+  const ortDatum = !isAdhoc
+    ? [row.courseOrt, datumDisplay].filter(Boolean).join(", ")
     : "";
-  const ortDatum =
-    !isAdhoc && row.courseOrt && submittedAtDisplay
-      ? `${row.courseOrt}, ${submittedAtDisplay}`
-      : "";
 
   return (
     <div className="coach-print-wrapper">

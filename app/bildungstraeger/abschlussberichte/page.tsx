@@ -3,6 +3,7 @@ import { and, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -162,7 +163,7 @@ export default async function BildungstraegerAbschlussberichteListPage({
                 </div>
                 <div className="text-xs text-zinc-500">
                   {it.submittedAt
-                    ? `eingereicht ${it.submittedAt.toLocaleDateString("de-DE")}`
+                    ? `eingereicht ${formatDateDE(it.submittedAt)}`
                     : ""}
                 </div>
                 <div className="flex items-center gap-2">

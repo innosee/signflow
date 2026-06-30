@@ -5,6 +5,7 @@ import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 import { resolveAssetUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -93,7 +94,7 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
   const zeitraum =
     row.tnZeitraum ||
     (row.courseStart && row.courseEnd
-      ? `${new Date(row.courseStart).toLocaleDateString("de-DE")} — ${new Date(row.courseEnd).toLocaleDateString("de-DE")}`
+      ? `${formatDateDE(row.courseStart)} — ${formatDateDE(row.courseEnd)}`
       : "");
   const coachName = row.coachName || row.coachNameSnapshot || "";
 
@@ -101,9 +102,7 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
   // Schnell-Check-Submissions sind Ad-hoc ohne Kurs-Kontext, da wäre der
   // Ort frei erfunden — der Coach trägt ihn handschriftlich nach.
   const isAdhoc = row.courseId === null;
-  const submittedAtDisplay = row.submittedAt
-    ? new Date(row.submittedAt).toLocaleDateString("de-DE")
-    : "";
+  const submittedAtDisplay = formatDateDE(row.submittedAt);
   const ortDatum =
     !isAdhoc && row.courseOrt && submittedAtDisplay
       ? `${row.courseOrt}, ${submittedAtDisplay}`

@@ -15,6 +15,7 @@ import {
 } from "@/lib/checker/snapshot";
 import { resolveMassnahmeTyp } from "@/lib/checker/types";
 import { isImpersonating, requireCoach } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 
 export type BerActionState =
   | { error?: string; savedAt?: string; berId?: string }
@@ -296,7 +297,7 @@ export async function submitBerAction(
   const tnNachnameSnapshot = spaceIdx < 0 ? "" : tnName.slice(spaceIdx + 1);
   const tnZeitraumSnapshot =
     snapshotData?.courseStart && snapshotData?.courseEnd
-      ? `${new Date(snapshotData.courseStart).toLocaleDateString("de-DE")} — ${new Date(snapshotData.courseEnd).toLocaleDateString("de-DE")}`
+      ? `${formatDateDE(snapshotData.courseStart)} — ${formatDateDE(snapshotData.courseEnd)}`
       : "";
 
   const now = new Date();

@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { AFA_SUBMISSION_ENABLED } from "@/lib/feature-flags";
+import { formatDateDE } from "@/lib/format-date";
 
 import { SubmitAfaButton } from "./submit-button";
 
@@ -116,7 +117,7 @@ export default async function BildungstraegerSubmissionsPage() {
               r.bedarfstraegerName,
               `Coach: ${r.coachName}`,
               r.sealedAt
-                ? `Abgeschlossen ${new Date(r.sealedAt).toLocaleDateString("de-DE")}`
+                ? `Abgeschlossen ${formatDateDE(r.sealedAt)}`
                 : null,
             ]}
             pdfUrl={`/api/bildungstraeger/courses/${r.courseId}/anw-pdf`}
@@ -147,7 +148,7 @@ export default async function BildungstraegerSubmissionsPage() {
               r.bedarfstraegerName,
               `Coach: ${r.coachName}`,
               r.submittedToAfaAt
-                ? `Übermittelt ${new Date(r.submittedToAfaAt).toLocaleDateString("de-DE")}`
+                ? `Übermittelt ${formatDateDE(r.submittedToAfaAt)}`
                 : null,
             ]}
             pdfUrl={`/api/bildungstraeger/courses/${r.courseId}/anw-pdf`}

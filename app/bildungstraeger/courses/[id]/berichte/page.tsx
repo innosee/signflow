@@ -4,6 +4,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -133,7 +134,7 @@ export default async function BildungstraegerCourseBerListPage({ params }: Props
                   </div>
                   <div className="text-xs text-zinc-500">
                     {isSubmitted && submittedAt
-                      ? `eingereicht am ${submittedAt.toLocaleDateString("de-DE")}`
+                      ? `eingereicht am ${formatDateDE(submittedAt)}`
                       : isDraft
                         ? "Entwurf in Arbeit"
                         : "noch nicht begonnen"}

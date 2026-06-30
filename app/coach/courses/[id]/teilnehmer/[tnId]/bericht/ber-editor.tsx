@@ -38,6 +38,7 @@ import {
   type MassnahmeTyp,
   type Violation,
 } from "@/lib/checker/types";
+import { formatDateDE } from "@/lib/format-date";
 import type { Abschlussbericht } from "@/db/schema";
 
 import {
@@ -961,8 +962,7 @@ function StatusBanner({
       </p>
       {submittedAt && (
         <p className="mt-0.5 text-xs text-emerald-800">
-          Eingereicht am{" "}
-          {submittedAt.toLocaleDateString("de-DE")} um{" "}
+          Eingereicht am {formatDateDE(submittedAt)} um{" "}
           {submittedAt.toLocaleTimeString("de-DE", {
             hour: "2-digit",
             minute: "2-digit",

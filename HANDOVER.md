@@ -12,6 +12,40 @@ Launch-kritische Fixes + Verifikation. Aktuell Testphase ohne echte Daten
 
 ## Letzte Sessions — alles gemergt in `main` + auf Prod (Vercel auto-deploy)
 
+### 2026-06-29/30 — Checker-Überarbeitung + Abschluss-Flow gestrafft + Bug-Fixes
+> Großer Block direkt-auf-`main`-deployt (Vercel auto). Prod = Testphase ohne echte Daten.
+> Verifizier-Befehle: `npm run typecheck && npm run lint && npx vitest run && npm run build`.
+> Deploy-Status: `gh api repos/innosee/signflow/commits/<sha>/status --jq '.statuses[]|select(.context=="Vercel").state'`.
+
+**BER-Checker (Abschlussbericht-Checker) — Zwei-Kategorien-Modell + UX-Umbau** ([[project_checker_two_category_severity]]):
+- Nur **Sensibel/hard_block** (Art-9/Gesundheit, harte Prognose) blockt das Einreichen; alles andere ist **reiner Hinweis**. Wegklicken eines Sensibel-Flags **nur mit Pflicht-Begründung** (pro Zitat, BT sieht sie). Gate adhoc+Editor identisch ([gate.ts](src/lib/checker/gate.ts)).
+- **Re-Check-UX**: stabile `violation.id` (`section::normalize(quote)`), Merge statt Reset, „Neu seit letzter Prüfung"-Badge, Erledigt-Klappblock, Fortschrittsleiste, optionaler Re-Check; Reload-Persistenz des Review-States (localStorage). KI-Wiederholungs-Schleife (`previouslyAddressed`) blockt nicht mehr.
+- **Soft-Hinweise** = gleichwertige Cards (Bernstein), „Passt schon" statt Checkbox.
+- **Inhaltliche Hinweise** (deterministisch, [hints.ts](src/lib/checker/hints.ts)): zu dünne/floskelhafte Abschnitte + fehlende Pflichtbausteine als Cards.
+- **Konkretheit**-Block erscheint nur bei aktionablen (`missing`) Proben.
+- **Schnell-Check ist jetzt reines Prüf-Tool** (kein Einreichen mehr; adhoc-Submit-Pfad gelöscht). Berichte hängen nur über den **Kurs-Editor** am Kunden ([[project_ber_coupling_and_pdf]]).
+- **„PDF herunterladen"** im Kurs-Editor (echter Download, coach-Route `/api/coach/abschlussberichte/[berId]/pdf`). Alter „Als Erango-PDF exportieren" entfernt. Popup-Blocker-Fix: Tab synchron im Klick öffnen.
+- **Maßnahmetyp-Bug** (2-teilig): (1) Editor reicht `courses.massnahmeTyp` durch (kein Picker); (2) **`anonymize()` droppte `massnahmeTyp`** → Check fiel in Prod immer auf EKC zurück — jetzt durchgereicht. EGC/ESCA-Kunden werden korrekt geprüft.
+- **„Aus Terminen vorbefüllen"** fürs ablauf-Feld (deterministisch aus `sessions.topic`) ([[project_ablauf_prefill]]).
+
+**Abschluss-Flow auf 4 Coach-Schritte gestrafft** ([[project_abschluss_flow_4_steps]] — macht CLAUDE.md-Workflow Schritt 8+10 veraltet):
+- Raus: „Preview an Teilnehmer senden" (TN gibt in-flow frei, Sign-Seite zeigt das schon bei `approvalGate=ready`) und „Nachweis abschließen" (Coach-Seal).
+- **BT-Prüfungs-Freigabe = Abschluss**: `approveCourseReview` erzeugt das `final_documents` (Bridge, einfache Signatur, kein FES) → Kurs erscheint in der AfA-Übermittlung. Stale-Schutz: Übermittlungs-Liste filtert auf `reviewStatus='approved'`.
+- `sealCourse`+FES bleiben im Code für später (Button kommt nur per BT-Checkbox „FES erforderlich", wenn FES live).
+
+**Stundennachweis-Fixes:**
+- Signatur-/Audit-Zeitstempel jetzt **Europe/Berlin** (vorher UTC = 1–2 h zu früh auf dem rechtlichen Dokument).
+- **„Ort, Datum"-Zeile über der Coach-Unterschrift** (Ort = `course.durchfuehrungsort`).
+
+**Offen / als Nächstes:**
+- [ ] **Live gegentesten** (Prod, Testdaten): kompletter Coach→BT→AfA-Pfad (neuer 4-Schritte-Flow); „PDF herunterladen" (Popup-Fix — falls Tab mit Fehler statt PDF aufgeht → Puppeteer-Route prüfen); EGC-Kunde re-checken → Gründungs-Pflichtbausteine statt EKC.
+- [ ] **„Ort" auf dem ANW bestätigen**: aktuell `Durchführungsort`. User wollte ggf. „Stadt vom Coach" — falls andere Quelle gewünscht, umstellen (kein Coach-Stadt-Feld im Schema).
+- [ ] **Coach-Anleitung Modul B** (PDF/Doku) ist veraltet: beschreibt noch „aus Schnell-Check einreichen" — gibt's nicht mehr.
+- [ ] **Kosmetik-Sweep**: BT-/Print-/Mail-Flächen sagen teils noch „Verstöße" statt „Hinweise/Sensibel" (Daten unverändert).
+- [ ] **EGC/ESCA-eigene Konkretheits-Proben** (z.B. Tragfähigkeit/Finanzierung/Gewerbe) — fachlich vom User mitzudefinieren.
+- [ ] **FES**: noch gemockt; Seal-Button kommt erst per BT-Checkbox + FES live (User gibt Bescheid).
+- [ ] **DATENSCHUTZ-TODO.md** (Repo-Root, untracked): AVV-Checkliste + Drittlandtransfer + DSFA + DSGVO-Erklärung vor echtem Go-Live.
+
 ### 2026-06-28 (PRs #112–#116) — BT-Kunden-Cockpit + AfA-Marker + CI grün
 > Hinweis: bewusst während des Freeze gebaut, vom User explizit gewünscht
 > („BT-Dashboard nicht launch-kritisch für morgen").

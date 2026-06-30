@@ -6,6 +6,7 @@ import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 import { resolveAssetUrl } from "@/lib/storage";
 import { readSoftFlags } from "@/lib/checker/snapshot";
 import {
@@ -188,9 +189,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
             {ber.status === "submitted" ? (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
                 ✓ eingereicht
-                {submittedAt
-                  ? ` am ${submittedAt.toLocaleDateString("de-DE")}`
-                  : ""}
+                {submittedAt ? ` am ${formatDateDE(submittedAt)}` : ""}
               </span>
             ) : (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">
@@ -307,7 +306,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
             // Ort = `courses.durchfuehrungsort`, Datum = `submitted_at`.
             ortDatum:
               !isAdhoc && course?.durchfuehrungsort && submittedAt
-                ? `${course.durchfuehrungsort}, ${submittedAt.toLocaleDateString("de-DE")}`
+                ? `${course.durchfuehrungsort}, ${formatDateDE(submittedAt)}`
                 : "",
             coachSignatureUrl: isAdhoc ? null : coachSignatureUrl,
             keineFehlzeiten: ber.keineFehlzeiten,
