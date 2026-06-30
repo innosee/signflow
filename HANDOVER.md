@@ -1,14 +1,73 @@
-# HANDOVER — Signflow (Stand 2026-06-29, Launch-Tag)
+# HANDOVER — Signflow (Stand 2026-06-30)
 
-> Für eine **neue Claude-Session**. Lies zuerst `CLAUDE.md` + `AGENTS.md`. Die
-> Auto-Memory unter `~/.claude/projects/.../memory/` lädt die referenzierten
-> `[[…]]`-Einträge automatisch. Dieses Dokument ist der „Start here"-Überblick.
-> **Scratch-Dokument** (untracked, nicht committet).
+> Für eine **neue Claude-Session**. Lies zuerst `CLAUDE.md` + `AGENTS.md` +
+> **`DEVELOPMENT.md`** (Release-Manifest). Die Auto-Memory unter
+> `~/.claude/projects/.../memory/` lädt die referenzierten `[[…]]`-Einträge
+> automatisch. Dieses Dokument ist der „Start here"-Überblick.
 
-## ⚠️ Launch Montag 2026-06-29 — aktuell Feature-Freeze-Fenster
-Echter Go-Live ist Montag. Ab jetzt **keine neuen Features** mehr, nur noch
-Launch-kritische Fixes + Verifikation. Aktuell Testphase ohne echte Daten
-([[project_launch_and_envs]], [[project_prod_testenv_reset]]).
+## 🚀 LIVE mit 100+ echten Usern — ab jetzt STRIKTER Prozess
+Go-Live war 2026-06-29. Seit 2026-06-30 sind **100+ echte User mit echten
+AfA-Daten** auf Prod. **Ab jetzt verbindlich [DEVELOPMENT.md](DEVELOPMENT.md):**
+Feature-Branch → **Staging** verifizieren → PR nach `main` → Prod. **Nie** direkt
+auf `main` (pre-push-Hook blockt das), **nie** Prod-DB-Schreiben/Migration ohne
+frisches Backup + explizites OK ([[project_dev_discipline]],
+[[project_staging_degraded]], [[project_backups_live]]).
+
+> **Hinweis:** Die früheren Sessions unten wurden teils noch direkt auf `main`
+> deployt (Testphase). Das gilt **nicht mehr** — siehe DEVELOPMENT.md.
+
+## 2026-06-30 (Nachmittag) — Senior-Dev-Prozess scharfgeschaltet + Features
+
+> Erstmals **alles über Branch → Staging → PR** (nicht direkt main). Migrationen
+> erst auf Staging, dann Prod (Backup vorher).
+
+**🔴 OFFENE SICHERHEITS-AKTION (nicht vergessen!):** Der **gpg-Private-Key** der
+Backups liegt noch als Klartext-Datei **`~/signflow-backup-PRIVATE.asc`** auf dem
+Mac. **Offline sichern (Passwortmanager/USB) und dann `rm`.** Ohne ihn ist KEIN
+Backup-Restore möglich; bleibt er liegen, ist die Verschlüsselung wertlos.
+Fingerprint `73C8 4F44 … 6F7B E047`.
+
+### Prozess & Infra (PR #117/#118/#119, gemergt)
+- **Release-Manifest [DEVELOPMENT.md](DEVELOPMENT.md)** (vor jedem Push lesen,
+  Pointer in AGENTS.md) + **pre-push-Hook** `.githooks/pre-push` (blockt
+  Direkt-Push auf `main`; aktivieren: `git config core.hooksPath .githooks`).
+- **Backups LIVE & verifiziert** ([[project_backups_live]], `docs/backups.md`):
+  GitHub-Actions-Cron Mo+Do → `pg_dump` via read-only Neon-Rolle `backup_ro` →
+  gpg → scp auf IONOS-VM `/home/signflow/backups` (Retention 16). End-to-end
+  getestet (Decrypt = gültiges PGDMP). Secrets/Vars in GitHub gesetzt.
+- **Staging repariert + dauerhaft** ([[project_staging_degraded]]): alter Neon-
+  staging-Branch war wegen Inaktivität **archiviert** (Neon-Org = **Launch/paid**,
+  kein Free-Problem). Neuer schema-only Branch `br-long-pond-alx2tzly`, Vercel
+  `DATABASE_URL` (preview/staging) gesetzt, git `staging` = `main`, geseedet, live.
+  **Keepalive-Cron** `.github/workflows/keepalive-staging.yml` (alle 3 Tage
+  `SELECT 1`) gegen Re-Archivierung.
+
+### Features (alle über den neuen Prozess auf Prod)
+- **Erstgespräch vor Gutscheinausstellung erlaubt** (Feedback Karen P.): harter
+  „davor"-Block weg (obere Grenze bleibt), weicher Hinweis im Termin-Formular
+  ([app/coach/courses/[id]/actions.ts](app/coach/courses/%5Bid%5D/actions.ts)).
+- **Bedarfsträger bearbeitbar**: Edit-Route + `updateBedarfstraeger` (tenant-scoped)
+  + „Bearbeiten"-Link; geteilte Anlegen/Bearbeiten-Form.
+- **mini-analytics** (cookieless, kein Consent) site-weit via `next/script` +
+  **Conversion-Events** `cta_signup` / `signup_completed` / `course_create_started`
+  / `course_published` / `contact_clicked` / `search` (Helper
+  `src/lib/analytics.ts`). Dashboard: mini-analytics-innosee-team.vercel.app/dashboard.
+- **Changelog „Neu" Phase 1** (PR #120, erster Staging-first-Durchlauf): `/neu`
+  (alle eingeloggten User), AppHeader „Neu" + blaue Bubble (ungelesen-Count),
+  Operator-Editor `/operator/changelog` (`OPERATOR_ONBOARD_SECRET`-gated). Schema
+  `changelog_entries` + `users.changelog_last_seen_at` (Migration
+  `scripts/apply-changelog-migration.mjs` auf Staging UND Prod angewendet).
+  **Erster Eintrag ist live.**
+
+### Noch offen / als Nächstes
+- 🔴 **gpg-Private-Key offline sichern** (siehe oben) — höchste Priorität.
+- **GitHub Branch-Protection auf `main`** serverseitig aktivieren (zusätzlich zum Hook).
+- Backups: **monatlicher Restore-Test** (echtes `pg_restore` auf Wegwerf-Branch).
+- Optional: Staging-DB-Passwort rotieren (einmal im Output exponiert); verwaiste
+  Neon-Branches `dev` + `pre-collapse` löschen.
+- **Changelog Phase 2** (geplant, NICHT gebaut): E-Mail-Opt-in für News
+  (vorausgefüllte Form, Consent-Logging, Versand via Resend, Opt-in sichtbar im
+  BT-Backend).
 
 ## Letzte Sessions — alles gemergt in `main` + auf Prod (Vercel auto-deploy)
 
