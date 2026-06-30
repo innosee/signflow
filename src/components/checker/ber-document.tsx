@@ -192,20 +192,30 @@ export function BerDocument({
 
       <footer className="ber-footer">
         <div className="ber-signfield">
+          {/* Über der Linie: Ort + Datum (wie handschriftlich) — spiegelt die
+              Signatur in der Coach-Spalte. Das Label steht darunter. */}
+          <div className="ber-signabove">
+            {meta?.ortDatum ? (
+              <span className="ber-signabove-text">{meta.ortDatum}</span>
+            ) : null}
+          </div>
           <div className="ber-signlabel">Ort, Datum</div>
-          <div className="ber-signvalue">{meta?.ortDatum ?? ""}</div>
         </div>
         <div className="ber-signfield">
-          {meta?.coachSignatureUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={meta.coachSignatureUrl}
-              alt="Unterschrift Coach"
-              className="ber-coach-signature"
-            />
-          ) : null}
+          <div className="ber-signabove">
+            {meta?.coachSignatureUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={meta.coachSignatureUrl}
+                alt="Unterschrift Coach"
+                className="ber-coach-signature"
+              />
+            ) : null}
+          </div>
           <div className="ber-signlabel">Name Coach</div>
-          <div className="ber-signvalue">{meta?.coachName ?? ""}</div>
+          {meta?.coachName ? (
+            <div className="ber-signvalue">{meta.coachName}</div>
+          ) : null}
         </div>
       </footer>
 
@@ -355,27 +365,35 @@ const berCss = `
   margin-top: 20mm;
   font-size: 9pt;
   color: #27272a;
+  break-inside: avoid;
 }
 .ber-signfield {
   flex: 1;
-  border-top: 1px solid #18181b;
-  padding-top: 2mm;
-  position: relative;
+  break-inside: avoid;
+}
+/* Bereich über der Linie — nimmt Ort/Datum bzw. die Signatur auf. Die Linie
+   ist die untere Kante dieses Bereichs; Inhalt sitzt unten bündig darüber. */
+.ber-signabove {
+  min-height: 18mm;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 2mm;
+  border-bottom: 1px solid #18181b;
+}
+.ber-signabove-text {
+  font-size: 10pt;
 }
 .ber-signlabel {
   font-weight: 600;
   font-size: 8.5pt;
-  margin-bottom: 1mm;
+  margin-top: 1mm;
 }
 .ber-signvalue {
   font-size: 10pt;
   min-height: 6mm;
 }
 .ber-coach-signature {
-  position: absolute;
-  bottom: calc(100% - 2mm);
-  left: 0;
-  max-height: 18mm;
+  max-height: 16mm;
   max-width: 70mm;
   width: auto;
   height: auto;

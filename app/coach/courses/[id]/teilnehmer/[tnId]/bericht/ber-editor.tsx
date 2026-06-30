@@ -559,10 +559,6 @@ export function BerEditor({
 
   async function handleDownloadPdf() {
     setSubmitError(null);
-    // WICHTIG: Tab SYNCHRON im Klick-Kontext öffnen — sonst blockt der Popup-
-    // Blocker das window.open, das nach dem await (Speichern) käme. Die echte
-    // URL setzen wir, sobald die berId steht.
-    const win = window.open("", "_blank");
     setIsDownloading(true);
     try {
       let id = submittedBerId;
@@ -585,20 +581,35 @@ export function BerEditor({
         if (res?.savedAt) setSavedAt(new Date(res.savedAt));
       }
       if (!id) {
-        win?.close();
         setSubmitError(
           "Bitte zuerst Inhalt eingeben (wird gespeichert) — dann ist der PDF-Download möglich.",
         );
         return;
       }
-      const url = `/api/coach/abschlussberichte/${id}/pdf`;
-      if (win) {
-        win.location.href = url;
-      } else {
-        // Popup doch geblockt → im selben Tab öffnen (Browser lädt das PDF als
-        // Datei herunter, die Editor-Seite bleibt erhalten).
-        window.location.href = url;
+      // PDF per fetch holen und als Blob herunterladen — KEIN window.open
+      // (das hinterließ einen leeren about:blank-Tab) und kein Navigieren der
+      // Editor-Seite. Fehler werden inline gezeigt statt wegzunavigieren.
+      const res = await fetch(`/api/coach/abschlussberichte/${id}/pdf`);
+      if (!res.ok) {
+        setSubmitError(
+          "PDF konnte nicht erstellt werden. Bitte erneut versuchen.",
+        );
+        return;
       }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const filename =
+        cd.match(/filename="?([^"]+)"?/)?.[1] ?? "Abschlussbericht.pdf";
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      setSubmitError("PDF-Download fehlgeschlagen. Bitte erneut versuchen.");
     } finally {
       setIsDownloading(false);
     }
