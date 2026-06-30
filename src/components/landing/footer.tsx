@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { legal } from "@/lib/legal";
+
 export function LandingFooter() {
   const year = new Date().getFullYear();
   return (
@@ -32,7 +34,7 @@ export function LandingFooter() {
           <Link href="/login">Anmelden</Link>
           <Link href="/#waitlist">Warteliste</Link>
           <a
-            href="mailto:info@innosee.de"
+            href={`mailto:${legal.company.email}`}
             data-track="contact_clicked"
             data-track-source="footer"
           >
@@ -44,7 +46,7 @@ export function LandingFooter() {
           <Link href="/impressum">Impressum</Link>
           <Link href="/datenschutz">Datenschutz</Link>
           <Link href="/cookies">Cookie-Hinweis</Link>
-          <a href="mailto:info@innosee.de">AVV anfragen</a>
+          <a href={`mailto:${legal.company.email}`}>AVV anfragen</a>
         </FooterGroup>
       </div>
 

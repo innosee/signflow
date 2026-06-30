@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { legal } from "@/lib/legal";
+
+const { company, supervisoryAuthority } = legal;
+
 export const metadata: Metadata = {
   title: "Datenschutzerklärung — Signflow",
   description:
@@ -31,20 +35,20 @@ export default function DatenschutzPage() {
           Plattformfunktionen ist:
         </p>
         <p>
-          innosee GmbH
+          {company.name}
           <br />
-          Bahnhofstraße 1
+          {company.street}
           <br />
-          78351 Bodman-Ludwigshafen
+          {company.zipCity}
           <br />
-          Deutschland
+          {company.country}
           <br />
           E-Mail:{" "}
           <a
-            href="mailto:info@innosee.de"
+            href={`mailto:${company.email}`}
             className="text-zinc-900 underline underline-offset-4 hover:text-zinc-700"
           >
-            info@innosee.de
+            {company.email}
           </a>
         </p>
         <p>
@@ -111,9 +115,11 @@ export default function DatenschutzPage() {
               per SMS zur Authentifizierung der Teilnehmer:innen für die Signatur
             </li>
             <li>
-              Versiegelung des Gesamtdokuments mit einer fortgeschrittenen
-              elektronischen Signatur (FES) und Übermittlung an die Agentur für
-              Arbeit
+              Elektronische Signatur der Nachweise (einfache elektronische
+              Signatur: Canvas-Unterschrift mit Zeitstempel, IP-Adresse und
+              Audit-Protokoll) und Übermittlung an die Agentur für Arbeit. Eine
+              zusätzliche fortgeschrittene Versiegelung (FES) ist in Vorbereitung
+              und derzeit nicht aktiv.
             </li>
           </ul>
         </Subsection>
@@ -147,19 +153,21 @@ export default function DatenschutzPage() {
             </li>
           </ul>
         </Subsection>
-        <Subsection title="4.4 FES-Zertifikat (Aussteller)">
+        <Subsection title="4.4 FES-Versiegelung (in Vorbereitung)">
           <p>
-            Für die fortgeschrittene elektronische Versiegelung wird ein
-            qualifiziertes Zertifikat eines eIDAS-akkreditierten
-            Vertrauensdiensteanbieters genutzt (
+            Derzeit werden die Nachweise mit einer einfachen elektronischen
+            Signatur abgesichert; eine fortgeschrittene elektronische
+            Versiegelung (FES) ist <strong>geplant, aber noch nicht aktiv</strong>.
+            Sobald sie live geschaltet wird, wird ein Zertifikat eines
+            eIDAS-akkreditierten Vertrauensdiensteanbieters genutzt (
             <Placeholder>
               geplanter Anbieter: D-Trust GmbH, Berlin — Bundesdruckerei-Gruppe;
               vor Live-Schaltung bestätigen
             </Placeholder>
-            ). Der Anbieter erhält weder die zu siegelnden Dokumente noch
-            Inhalte daraus; das Siegel wird server-seitig in der
-            Infrastruktur der innosee GmbH auf das fertige PDF angewendet.
-            Im Rahmen der Zertifikats-Ausstellung werden lediglich
+            ). Auch dann erhält der Anbieter weder die zu siegelnden Dokumente
+            noch Inhalte daraus; das Siegel wird server-seitig in der
+            Infrastruktur der {company.name} auf das fertige PDF angewendet. Im
+            Rahmen der Zertifikats-Ausstellung werden lediglich
             Unternehmensstammdaten (Handelsregister, Geschäftsführer-
             Identifizierung) an den Aussteller übermittelt.
           </p>
@@ -234,41 +242,14 @@ export default function DatenschutzPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 text-zinc-700">
-              <ProcessorRow
-                name="Vercel Inc."
-                purpose="Hosting der Anwendung"
-                region="EU (Frankfurt), Unternehmenssitz USA — SCCs"
-              />
-              <ProcessorRow
-                name="Neon Inc."
-                purpose="Datenbank (Kurse, Sitzungen, Audit-Log)"
-                region="EU (AWS Frankfurt), Unternehmenssitz USA — SCCs"
-              />
-              <ProcessorRow
-                name="Cloudflare, Inc."
-                purpose="Objekt-Storage (R2) für Unterschriftsbilder, Logos und gesiegelte PDFs; privater Bucket, Zugriff nur über kurzlebige signierte URLs"
-                region="EU-Jurisdiction (Frankfurt/Amsterdam), Unternehmenssitz USA — SCCs"
-              />
-              <ProcessorRow
-                name="Resend Inc."
-                purpose="Versand transaktionaler E-Mails (Magic Links, Einladungen)"
-                region="EU, Unternehmenssitz USA — SCCs"
-              />
-              <ProcessorRow
-                name="Sieben Communications GmbH (seven.io / sms77)"
-                purpose="Versand von Magic-Link-SMS an Teilnehmer:innen, sofern für diesen Zustellweg eine Mobilnummer hinterlegt und der Channel vom Coach gewählt wurde. Auftragsverarbeitungsvertrag nach Art. 28 DSGVO geschlossen; Verarbeitung ausschließlich in einem ISO 27001 zertifizierten Rechenzentrum in Deutschland"
-                region="Deutschland (Köln)"
-              />
-              <ProcessorRow
-                name="IONOS SE"
-                purpose="Compute-VM und AI Model Hub für die Anonymisierung (nur Checker)"
-                region="Deutschland"
-              />
-              <ProcessorRow
-                name="Microsoft Ireland Operations Ltd. (Azure OpenAI)"
-                purpose="Regelprüfung auf anonymisiertem Text (Abschlussbericht-Checker) sowie KI-gestützte Compliance-Prüfung der stichwortartigen Coach-Einträge in der Anwesenheitsliste (ANW-Check)"
-                region="EU (Sweden Central oder Germany West Central) — SCCs"
-              />
+              {legal.subprocessors.map((p) => (
+                <ProcessorRow
+                  key={p.name}
+                  name={p.name}
+                  purpose={p.purpose}
+                  region={p.region}
+                />
+              ))}
             </tbody>
           </table>
         </div>
@@ -337,20 +318,19 @@ export default function DatenschutzPage() {
           Aufsichtsbehörde am Sitz des Verantwortlichen:
         </p>
         <p>
-          Der Landesbeauftragte für den Datenschutz und die Informationsfreiheit
-          Baden-Württemberg
+          {supervisoryAuthority.name}
           <br />
-          Lautenschlagerstraße 20
+          {supervisoryAuthority.street}
           <br />
-          70173 Stuttgart
+          {supervisoryAuthority.zipCity}
           <br />
           <a
-            href="https://www.baden-wuerttemberg.datenschutz.de"
+            href={supervisoryAuthority.url}
             className="text-zinc-900 underline underline-offset-4 hover:text-zinc-700"
             target="_blank"
             rel="noreferrer"
           >
-            baden-wuerttemberg.datenschutz.de
+            {supervisoryAuthority.url.replace(/^https?:\/\//, "")}
           </a>
         </p>
       </Section>
@@ -386,7 +366,7 @@ export default function DatenschutzPage() {
           unter dieser Adresse abrufbare Fassung.
         </p>
         <p className="text-xs text-zinc-500">
-          Stand: 5. Juni 2026 (Entwurf)
+          Stand: {legal.lastUpdated} (Entwurf)
         </p>
       </Section>
     </article>

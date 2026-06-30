@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 
+import { legal } from "@/lib/legal";
+
 export const metadata: Metadata = {
   title: "Impressum — Signflow",
   description: "Anbieterkennzeichnung nach § 5 TMG und § 18 MStV.",
 };
+
+const { company } = legal;
 
 export default function ImpressumPage() {
   return (
@@ -20,33 +24,37 @@ export default function ImpressumPage() {
         </p>
       </header>
 
-      <PlaceholderNotice />
-
       <Section title="Anbieter">
         <p>
-          innosee GmbH
+          {company.name}
           <br />
-          Bahnhofstraße 1
+          {company.street}
           <br />
-          78351 Bodman-Ludwigshafen
+          {company.zipCity}
           <br />
-          Deutschland
+          {company.country}
         </p>
       </Section>
 
       <Section title="Vertretungsberechtigte Person">
-        <p>Geschäftsführung: Benjamin Dennis Konopka</p>
+        <p>Geschäftsführung: {company.represented}</p>
       </Section>
 
       <Section title="Kontakt">
         <p>
           E-Mail:{" "}
           <a
-            href="mailto:info@innosee.de"
+            href={`mailto:${company.email}`}
             className="text-zinc-900 underline underline-offset-4 hover:text-zinc-700"
           >
-            info@innosee.de
+            {company.email}
           </a>
+          {company.phone ? (
+            <>
+              <br />
+              Telefon: {company.phone}
+            </>
+          ) : null}
         </p>
       </Section>
 
@@ -54,22 +62,19 @@ export default function ImpressumPage() {
         <p>
           Eintragung im Handelsregister.
           <br />
-          Registergericht: Amtsgericht Freiburg im Breisgau
+          Registergericht: {company.register.court}
           <br />
-          Registernummer: HRB 731688
+          Registernummer: {company.register.number}
         </p>
       </Section>
 
       <Section title="Umsatzsteuer-Identifikationsnummer">
-        <p>
-          Umsatzsteuer-ID nach § 27 a UStG:{" "}
-          <Placeholder>DE…</Placeholder>
-        </p>
+        <p>Umsatzsteuer-ID nach § 27 a UStG: {company.vatId}</p>
       </Section>
 
       <Section title="Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV">
         <p>
-          Benjamin Dennis Konopka
+          {company.represented}
           <br />
           Anschrift wie oben.
         </p>
@@ -133,23 +138,5 @@ function Section({
         {children}
       </div>
     </section>
-  );
-}
-
-function Placeholder({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-xs text-amber-900">
-      {children}
-    </span>
-  );
-}
-
-function PlaceholderNotice() {
-  return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-      <strong className="font-semibold">Offen:</strong> Umsatzsteuer-ID vor
-      Go-Live ergänzen. Alle übrigen Angaben entsprechen dem Handelsregistereintrag
-      der innosee GmbH (HRB 731688, AG Freiburg).
-    </div>
   );
 }
