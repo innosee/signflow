@@ -31,7 +31,13 @@ export function LandingFooter() {
         <FooterGroup title="Konto">
           <Link href="/login">Anmelden</Link>
           <Link href="/#waitlist">Warteliste</Link>
-          <a href="mailto:info@innosee.de">Kontakt</a>
+          <a
+            href="mailto:info@innosee.de"
+            data-track="contact_clicked"
+            data-track-source="footer"
+          >
+            Kontakt
+          </a>
         </FooterGroup>
 
         <FooterGroup title="Rechtliches">

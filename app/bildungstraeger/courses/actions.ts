@@ -199,7 +199,11 @@ export async function createCourse(
   // angelegt; ein Mail-Fehler darf die Anlage nicht zurückrollen).
   await notifyAssignedCoaches(newCourseId, coachIds, customerName, title);
 
-  redirect("/bildungstraeger/courses");
+  // ?created=<id> signalisiert der Liste den frischen Abschluss → dort feuert
+  // ein Client-Tracker das course_published-Event (window.track) und entfernt
+  // den Param wieder. Die Server-Action redirectet, kann also nicht selbst
+  // client-seitig tracken.
+  redirect(`/bildungstraeger/courses?created=${newCourseId}`);
 }
 
 /**

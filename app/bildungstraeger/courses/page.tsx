@@ -19,6 +19,7 @@ import {
   KundenCockpitList,
   type CockpitRow,
 } from "./kunden-cockpit-list";
+import { TrackCoursePublished } from "./track-course-published";
 
 export const dynamic = "force-dynamic";
 
@@ -155,6 +156,7 @@ export default async function BildungstraegerCoursesPage() {
           )}
           <Link
             href="/bildungstraeger/courses/new"
+            data-track="course_create_started"
             className="rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800"
           >
             + Neuer Kunde
@@ -163,6 +165,7 @@ export default async function BildungstraegerCoursesPage() {
       </div>
 
       <KundenCockpitList rows={rows} />
+      <TrackCoursePublished />
     </div>
   );
 }

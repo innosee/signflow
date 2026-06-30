@@ -139,6 +139,9 @@ export function LandingPricing() {
 
               <a
                 href="#waitlist"
+                data-track="cta_signup"
+                data-track-source="pricing"
+                data-track-plan={t.name}
                 className={`mt-8 inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium ${
                   t.highlighted
                     ? "bg-white text-zinc-950 hover:bg-zinc-100"

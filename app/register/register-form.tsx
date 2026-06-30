@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 
 import { TurnstileWidget } from "@/components/turnstile-widget";
+import { track } from "@/lib/analytics";
 
 import { registerBildungstraeger, type RegisterState } from "./actions";
 
@@ -12,6 +13,13 @@ export function RegisterForm() {
     registerBildungstraeger,
     undefined,
   );
+
+  // Conversion-Event: erst bei erfolgreichem Account-Anlegen (state.ok),
+  // nicht bei jedem Submit/Fehler. Die Server-Action redirectet nicht, sondern
+  // setzt ok=true → der Erfolgs-State ist hier zuverlässig greifbar.
+  useEffect(() => {
+    if (state?.ok) track("signup_completed", { source: "registration" });
+  }, [state]);
 
   // Controlled inputs: React 19 setzt ein `<form action>` nach jedem
   // Action-Durchlauf zurück — auch bei reinem Fehler-State. Uncontrolled

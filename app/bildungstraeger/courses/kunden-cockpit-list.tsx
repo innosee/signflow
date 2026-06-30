@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import { ANW_TONE_BADGE, type AnwTone } from "@/lib/anw-status";
+import { track } from "@/lib/analytics";
 
 import { archiveCourse, unarchiveCourse } from "./actions";
 import { DeleteCourseButton } from "./delete-course-button";
@@ -40,6 +41,18 @@ export type CockpitRow = {
 export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
   const [query, setQuery] = useState("");
 
+  // Such-Event entkoppelt vom Tippen: erst ~600 ms nach der letzten Eingabe
+  // feuern (sonst ein Event pro Tastendruck → Analytics-Kontingent). Nur ab
+  // 2 Zeichen. q landet automatisch in der Query-Spalte des Dashboards.
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearch = (value: string) => {
+    setQuery(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const q = value.trim();
+    if (q.length < 2) return;
+    searchTimer.current = setTimeout(() => track("search", { q }), 600);
+  };
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
@@ -66,7 +79,7 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
         <input
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
           placeholder="Suche nach Kunde, Kunden-Nr., Coach, Status …"
           className="block w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
