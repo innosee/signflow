@@ -51,10 +51,14 @@ case "$BACKUP_TARGET" in
   ssh)
     : "${IONOS_SSH_DEST:?IONOS_SSH_DEST fehlt}"
     : "${IONOS_SSH_DIR:?IONOS_SSH_DIR fehlt}"
-    ssh "$IONOS_SSH_DEST" "mkdir -p '$IONOS_SSH_DIR'"
-    scp "$enc" "${IONOS_SSH_DEST}:${IONOS_SSH_DIR}/"
+    # accept-new = TOFU: nimmt den Hostkey beim ersten Mal an und pinnt ihn
+    # danach. Macht den Upload unabhängig von einem vorgelagerten ssh-keyscan
+    # (sonst "Host key verification failed" auf frischen CI-Runnern).
+    SSH_OPTS="-o StrictHostKeyChecking=accept-new"
+    ssh $SSH_OPTS "$IONOS_SSH_DEST" "mkdir -p '$IONOS_SSH_DIR'"
+    scp $SSH_OPTS "$enc" "${IONOS_SSH_DEST}:${IONOS_SSH_DIR}/"
     # Rotation: nur die jüngsten $RETENTION *.gpg behalten.
-    ssh "$IONOS_SSH_DEST" \
+    ssh $SSH_OPTS "$IONOS_SSH_DEST" \
       "ls -1t '${IONOS_SSH_DIR}'/signflow-*.dump.gpg 2>/dev/null | tail -n +$((RETENTION+1)) | xargs -r rm -f"
     ;;
   s3)
