@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# Release-Guardrail (DEVELOPMENT.md): kein direkter Push auf main.
+# Aktivieren (einmalig pro Klon): git config core.hooksPath .githooks
+#
+protected="refs/heads/main"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "$protected" ]; then
+    echo ""
+    echo "  ✋ Direkter Push auf main ist blockiert — siehe DEVELOPMENT.md."
+    echo ""
+    echo "     main = signflow.coach = 100+ echte User."
+    echo "     Weg: feat/* → Staging verifizieren → PR nach main."
+    echo ""
+    echo "     Pre-Push-Checkliste: DEVELOPMENT.md §4"
+    echo "     Notfall-Override (nur Hotfix): git push --no-verify"
+    echo ""
+    exit 1
+  fi
+done
+
+exit 0

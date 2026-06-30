@@ -128,3 +128,18 @@ ein **ad-hoc** Dump.
 - **DB:** additive Migrationen sind vorwärtskompatibel (alter Code ignoriert neue
   Spalten) → meist reicht Code-Rollback. Für zerstörerische Änderungen: Restore aus
   dem letzten Dump auf einen Neon-Branch, Daten zurückspielen.
+
+---
+
+## 9. Lokale Guardrail (pre-push-Hook)
+
+Ein Hook in `.githooks/pre-push` blockt direkten Push auf `main`. **Einmalig pro
+Klon aktivieren:**
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Notfall-Override (nur echter Hotfix): `git push --no-verify`. Der Hook ist eine
+Erinnerung, kein Ersatz für GitHub-Branch-Protection — `main` sollte zusätzlich
+serverseitig gegen Direkt-Push geschützt werden (Settings → Branches).

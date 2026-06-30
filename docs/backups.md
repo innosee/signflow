@@ -46,8 +46,15 @@ von Neon und legt ihn lokal ab.
 - **Contra:** VM-Cron + Monitoring selbst pflegen; stiller Ausfall, wenn die VM hängt;
   `pg_dump`-Version auf der VM muss zur Neon-PG-Version (17) passen.
 
-**Empfehlung:** Option A (GitHub Actions), Ziel **IONOS Object Storage** falls
-vorhanden, sonst `scp` auf die VM. Beides ist mit demselben Workflow machbar.
+**ENTSCHIEDEN (2026-06-30):** Option **A — GitHub Actions**, Ziel **IONOS-VM-Filesystem**
+(`/home/signflow/backups`, scp). Begründung: Die VM hat **kein** `pg_dump`/`aws`/`rclone`,
+aber `gpg` und 6,2 GB frei — also dumpt+verschlüsselt der **Runner** (Container
+`postgres:17`), die VM **empfängt** nur. Kein zusätzliches IONOS-Produkt nötig.
+Workflow: [`.github/workflows/backup.yml`](../.github/workflows/backup.yml).
+Später auf Object Storage umschwenkbar (Skript kann `BACKUP_TARGET=s3`).
+
+> ⚠️ VM-Disk im Auge behalten (aktuell 67 % belegt). Dumps sind klein
+> (DB ~35 MB logisch), aber Retention + Wachstum beobachten.
 
 ---
 
@@ -81,10 +88,30 @@ Ergebnis (ok/fehler) kurz in `docs/backups.md` oder einem Ops-Log vermerken.
 
 ---
 
-## Offene Entscheidungen (vor Scharfschalten)
+## Scharfschalten — Setup-Checkliste
 
-- [ ] Mechanismus: **A (GitHub Actions)** oder **B (VM-Cron)**?
-- [ ] IONOS-Ziel: **Object Storage (S3)** oder **VM-Filesystem** `/home/signflow/backups`?
-- [ ] gpg-Schlüsselpaar erzeugen (Public-Key fürs Verschlüsseln in Secrets/VM,
-      Private-Key **offline** sicher verwahren — ohne ihn ist kein Restore möglich).
-- [ ] Read-only Neon-Rolle für die Backup-Verbindung anlegen (least privilege).
+Der Workflow ist im Repo, läuft aber erst, wenn diese Secrets/Vars in GitHub
+gesetzt sind (Settings → Secrets and variables → Actions). Ohne sie überspringt
+der erste Step sauber.
+
+**Secrets:**
+- [ ] `BACKUP_DATABASE_URL` — Neon Prod-Connection-String, idealerweise **read-only**
+      Rolle (least privilege).
+- [ ] `BACKUP_GPG_PUBLIC_KEY` — armored Public-Key fürs Verschlüsseln.
+- [ ] `IONOS_SSH_KEY` — Private-Key (ed25519) für scp auf die VM.
+
+**Variables (vars):**
+- [ ] `IONOS_SSH_HOST` = `anon.signflow.coach`
+- [ ] `IONOS_SSH_DEST` = `signflow@anon.signflow.coach`
+- [ ] `IONOS_SSH_DIR`  = `/home/signflow/backups`
+- [ ] `BACKUP_GPG_RECIPIENT` = Key-ID/E-Mail des Backup-Keys
+- [ ] `BACKUP_RETENTION` = `16`
+
+**Einmalig vorab:**
+- [ ] gpg-Schlüsselpaar erzeugen. Public-Key → Secret. **Private-Key offline**
+      sicher verwahren — ohne ihn ist KEIN Restore möglich.
+- [ ] SSH-Public-Key des Backup-Keys in `~/.ssh/authorized_keys` der VM eintragen.
+- [ ] Read-only Neon-Rolle anlegen.
+- [ ] `workflow_dispatch` einmal manuell triggern → prüfen, dass eine `.dump.gpg`
+      in `/home/signflow/backups` landet.
+- [ ] Restore-Test (siehe oben) terminieren.
