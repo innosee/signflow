@@ -43,16 +43,13 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: apt-get update && apt-get install -y --no-install-recommends gnupg openssh-client
 
-      - name: SSH-Key + known_hosts
+      - name: SSH-Key an festen Pfad schreiben
         if: steps.gate.outputs.skip != 'true'
         env:
           IONOS_SSH_KEY: ${{ secrets.IONOS_SSH_KEY }}
-          IONOS_SSH_HOST: ${{ vars.IONOS_SSH_HOST }}
         run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$IONOS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$IONOS_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s\n' "$IONOS_SSH_KEY" > "$RUNNER_TEMP/ionos_key"
+          chmod 600 "$RUNNER_TEMP/ionos_key"
 
       - name: GPG-Public-Key importieren
         if: steps.gate.outputs.skip != 'true'
@@ -68,5 +65,6 @@ jobs:
           BACKUP_TARGET: ssh
           IONOS_SSH_DEST: ${{ vars.IONOS_SSH_DEST }}
           IONOS_SSH_DIR: ${{ vars.IONOS_SSH_DIR }}
+          IONOS_SSH_KEY_FILE: ${{ runner.temp }}/ionos_key
           BACKUP_RETENTION: ${{ vars.BACKUP_RETENTION }}
         run: bash scripts/backup-prod-to-ionos.sh

@@ -55,6 +55,8 @@ case "$BACKUP_TARGET" in
     # danach. Macht den Upload unabhängig von einem vorgelagerten ssh-keyscan
     # (sonst "Host key verification failed" auf frischen CI-Runnern).
     SSH_OPTS="-o StrictHostKeyChecking=accept-new"
+    # Key explizit (HOME/Default-Key-Mehrdeutigkeit im CI-Container vermeiden).
+    [ -n "${IONOS_SSH_KEY_FILE:-}" ] && SSH_OPTS="$SSH_OPTS -o IdentitiesOnly=yes -i $IONOS_SSH_KEY_FILE"
     ssh $SSH_OPTS "$IONOS_SSH_DEST" "mkdir -p '$IONOS_SSH_DIR'"
     scp $SSH_OPTS "$enc" "${IONOS_SSH_DEST}:${IONOS_SSH_DIR}/"
     # Rotation: nur die jüngsten $RETENTION *.gpg behalten.
