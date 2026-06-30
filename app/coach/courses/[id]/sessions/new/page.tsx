@@ -27,6 +27,7 @@ export default async function NewSessionPage({ params }: Props) {
       title: schema.courses.title,
       bundesland: schema.courses.bundesland,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      avgsGueltigVon: schema.courses.avgsGueltigVon,
     })
     .from(schema.courses)
     .where(
@@ -94,6 +95,7 @@ export default async function NewSessionPage({ params }: Props) {
         existingUeDates={existingUeDates}
         bewilligteUe={course.anzahlBewilligteUe}
         bereitsVerplanteUe={bereitsVerplanteUe}
+        avgsGueltigVon={course.avgsGueltigVon}
       />
     </div>
   );

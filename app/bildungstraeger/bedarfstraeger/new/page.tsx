@@ -1,6 +1,7 @@
 import { requireBildungstraeger } from "@/lib/dal";
 
-import { BedarfstraegerForm } from "./form";
+import { createBedarfstraeger } from "../actions";
+import { BedarfstraegerForm } from "../form";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,11 @@ export default async function NewBedarfstraegerPage() {
           Rechnungsmodul).
         </p>
       </header>
-      <BedarfstraegerForm />
+      <BedarfstraegerForm
+        action={createBedarfstraeger}
+        submitLabel="Anlegen"
+        pendingLabel="Wird angelegt…"
+      />
     </div>
   );
 }

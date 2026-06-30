@@ -342,15 +342,11 @@ async function validateCrossSessionRules(params: {
       };
     }
     // Erstgespräch (0 UE) findet VOR der Startdatum-Vereinbarung statt → die
-    // „≥ Startdatum"-Regel gilt nicht. Es muss aber innerhalb der
-    // AVGS-Gutschein-Gültigkeit liegen (rechtlich bindende AfA-Frist).
-    if (course?.avgsVon && sd < course.avgsVon) {
-      return {
-        ok: false,
-        error:
-          "Das Erstgespräch muss innerhalb der AVGS-Gutschein-Gültigkeit liegen (Datum liegt davor).",
-      };
-    }
+    // „≥ Startdatum"-Regel gilt nicht. Auch der Gutschein-BEGINN ist keine
+    // harte Grenze: manche Agenturen (z.B. Landsberg) geben das Erstgespräch
+    // ausdrücklich VOR der Gutscheinausstellung vor (User-Feedback Karen P.,
+    // 2026-06-30). Das Formular zeigt dafür einen weichen Hinweis. Die obere
+    // Grenze bleibt hart — nach Gutschein-Ablauf ist ein Erstgespräch sinnlos.
     if (course?.avgsBis && sd > course.avgsBis) {
       return {
         ok: false,

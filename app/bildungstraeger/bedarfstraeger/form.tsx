@@ -2,24 +2,55 @@
 
 import { useActionState } from "react";
 
-import {
-  createBedarfstraeger,
-  type BedarfstraegerFormState,
-} from "../actions";
+import type { BedarfstraegerFormState } from "./actions";
 
-export function BedarfstraegerForm() {
-  const [state, action, pending] = useActionState<
+type BedarfstraegerType = "JC" | "AA";
+
+export type BedarfstraegerInitial = {
+  name: string;
+  type: BedarfstraegerType;
+  adresse: string | null;
+  kontaktPerson: string | null;
+  email: string | null;
+};
+
+/**
+ * Gemeinsames Formular für Anlegen und Bearbeiten. Beide Server-Actions teilen
+ * die Signatur `(prev, formData) => state`; beim Bearbeiten trägt ein verstecktes
+ * `id`-Feld den Datensatz (die Action scoped zusätzlich auf den Tenant).
+ */
+export function BedarfstraegerForm({
+  action,
+  initial,
+  bedarfstraegerId,
+  submitLabel,
+  pendingLabel,
+}: {
+  action: (
+    prev: BedarfstraegerFormState,
+    formData: FormData,
+  ) => Promise<BedarfstraegerFormState>;
+  initial?: BedarfstraegerInitial;
+  bedarfstraegerId?: string;
+  submitLabel: string;
+  pendingLabel: string;
+}) {
+  const [state, formAction, pending] = useActionState<
     BedarfstraegerFormState,
     FormData
-  >(createBedarfstraeger, undefined);
+  >(action, undefined);
 
   return (
-    <form action={action} className="space-y-6">
+    <form action={formAction} className="space-y-6">
+      {bedarfstraegerId && (
+        <input type="hidden" name="id" value={bedarfstraegerId} />
+      )}
       <section className="rounded-xl border border-zinc-300 bg-white p-6 space-y-4">
         <Field
           name="name"
           label="Name"
           placeholder="z.B. Jobcenter Singen"
+          defaultValue={initial?.name}
           required
         />
 
@@ -29,11 +60,22 @@ export function BedarfstraegerForm() {
           </legend>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="type" value="JC" required />
+              <input
+                type="radio"
+                name="type"
+                value="JC"
+                defaultChecked={initial?.type === "JC"}
+                required
+              />
               Jobcenter (JC)
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="type" value="AA" />
+              <input
+                type="radio"
+                name="type"
+                value="AA"
+                defaultChecked={initial?.type === "AA"}
+              />
               Arbeitsagentur (AA)
             </label>
           </div>
@@ -43,17 +85,20 @@ export function BedarfstraegerForm() {
           name="adresse"
           label="Adresse"
           placeholder="Straße, PLZ, Ort (optional)"
+          defaultValue={initial?.adresse ?? undefined}
         />
         <Field
           name="kontaktPerson"
           label="Ansprechperson"
           placeholder="Name (optional)"
+          defaultValue={initial?.kontaktPerson ?? undefined}
         />
         <Field
           name="email"
           label="E-Mail"
           type="email"
           placeholder="kontakt@jobcenter.de (optional)"
+          defaultValue={initial?.email ?? undefined}
         />
       </section>
 
@@ -69,7 +114,7 @@ export function BedarfstraegerForm() {
           disabled={pending}
           className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-60"
         >
-          {pending ? "Wird angelegt…" : "Anlegen"}
+          {pending ? pendingLabel : submitLabel}
         </button>
         <a
           href="/bildungstraeger/bedarfstraeger"

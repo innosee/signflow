@@ -29,6 +29,7 @@ export default async function EditSessionPage({ params }: Props) {
       title: schema.courses.title,
       bundesland: schema.courses.bundesland,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      avgsGueltigVon: schema.courses.avgsGueltigVon,
     })
     .from(schema.courses)
     .where(
@@ -109,6 +110,7 @@ export default async function EditSessionPage({ params }: Props) {
         bundesland={course.bundesland}
         bewilligteUe={course.anzahlBewilligteUe}
         bereitsVerplanteUe={bereitsVerplanteUe}
+        avgsGueltigVon={course.avgsGueltigVon}
         session={{
           id: sess.id,
           sessionDate: sess.sessionDate,

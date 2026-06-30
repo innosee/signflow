@@ -27,6 +27,7 @@ export function SessionEditForm({
   session,
   bewilligteUe,
   bereitsVerplanteUe = 0,
+  avgsGueltigVon,
 }: {
   courseId: string;
   courseTitle: string;
@@ -36,6 +37,8 @@ export function SessionEditForm({
   bewilligteUe: number;
   /** Bereits verplante reguläre UE OHNE diesen Termin (wird ja gerade geändert). */
   bereitsVerplanteUe?: number;
+  /** AVGS-Gutschein-Beginn (YYYY-MM-DD) — für den weichen Erstgespräch-Hinweis. */
+  avgsGueltigVon: string;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     updateSession,
@@ -47,6 +50,13 @@ export function SessionEditForm({
 
   // Weiche Feiertags-Warnung, identisch zur Neu-Anlage (nur Hinweis, kein Block).
   const feiertag = getFeiertag(sessionDate, bundesland);
+
+  // Weicher Hinweis: Erstgespräch vor Gutschein-Beginn (kein Block — siehe
+  // Neu-Anlage). Reiner String-Vergleich (beide YYYY-MM-DD).
+  const erstgespraechVorGutschein =
+    isErstgespraech &&
+    /^\d{4}-\d{2}-\d{2}$/.test(sessionDate) &&
+    sessionDate < avgsGueltigVon;
 
   // UE-Budget-Hinweis (live) — harte Grenze zieht die Server-Action. Die UE
   // dieses Termins zählt NICHT zu bereitsVerplanteUe (excludeSessionId in der
@@ -149,6 +159,17 @@ export function SessionEditForm({
             ⚠️ Der {formatGermanDate(sessionDate)} ist ein Feiertag
             <span className="font-medium"> ({feiertag})</span> — findet hier
             wirklich ein Coaching statt? Speichern bleibt möglich.
+          </p>
+        )}
+
+        {erstgespraechVorGutschein && (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            ℹ️ Das Erstgespräch liegt vor Beginn der AVGS-Gutschein-Gültigkeit
+            (ab {formatGermanDate(avgsGueltigVon)}) — das ist bei manchen
+            Agenturen so vorgegeben. Speichern bleibt möglich.
           </p>
         )}
 

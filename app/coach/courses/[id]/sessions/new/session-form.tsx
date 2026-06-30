@@ -17,6 +17,7 @@ export function SessionForm({
   existingUeDates = [],
   bewilligteUe,
   bereitsVerplanteUe = 0,
+  avgsGueltigVon,
 }: {
   courseId: string;
   courseTitle: string;
@@ -29,6 +30,8 @@ export function SessionForm({
   bewilligteUe: number;
   /** Bereits verplante reguläre UE (ohne diesen Termin). */
   bereitsVerplanteUe?: number;
+  /** AVGS-Gutschein-Beginn (YYYY-MM-DD) — für den weichen Erstgespräch-Hinweis. */
+  avgsGueltigVon: string;
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
@@ -55,6 +58,14 @@ export function SessionForm({
   // Gate in der Server-Action). `null`-Bundesland (Bestandskunde) → keine
   // Warnung.
   const feiertag = getFeiertag(sessionDate, bundesland);
+
+  // Weicher Hinweis: Erstgespräch vor Gutschein-Beginn. Kein Block — manche
+  // Agenturen verlangen das Erstgespräch ausdrücklich vor der Gutschein-
+  // ausstellung (User-Feedback). Reiner String-Vergleich (beide YYYY-MM-DD).
+  const erstgespraechVorGutschein =
+    isErstgespraech &&
+    /^\d{4}-\d{2}-\d{2}$/.test(sessionDate) &&
+    sessionDate < avgsGueltigVon;
 
   // Weiche „2 Termine/Woche"-Warnung: liegt in der ISO-Woche des gewählten
   // Datums noch kein weiterer regulärer UE-Termin, hätte die Woche mit diesem
@@ -162,6 +173,17 @@ export function SessionForm({
             ⚠️ Der {formatGermanDate(sessionDate)} ist ein Feiertag
             <span className="font-medium"> ({feiertag})</span> — findet hier
             wirklich ein Coaching statt? Anlegen bleibt möglich.
+          </p>
+        )}
+
+        {erstgespraechVorGutschein && (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            ℹ️ Das Erstgespräch liegt vor Beginn der AVGS-Gutschein-Gültigkeit
+            (ab {formatGermanDate(avgsGueltigVon)}) — das ist bei manchen
+            Agenturen so vorgegeben. Anlegen bleibt möglich.
           </p>
         )}
 

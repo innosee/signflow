@@ -62,21 +62,29 @@ export default async function BedarfstraegerListPage() {
         ) : (
           <ul className="divide-y divide-zinc-200">
             {rows.map((b) => (
-              <li key={b.id} className="px-6 py-4">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{b.name}</span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
-                    {TYPE_LABEL[b.type]}
-                  </span>
+              <li key={b.id} className="px-6 py-4 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{b.name}</span>
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+                      {TYPE_LABEL[b.type]}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-500 flex flex-wrap gap-x-4 gap-y-0.5">
+                    {b.adresse && <span>{b.adresse}</span>}
+                    {b.kontaktPerson && <span>{b.kontaktPerson}</span>}
+                    {b.email && <span>{b.email}</span>}
+                    {!b.adresse && !b.kontaktPerson && !b.email && (
+                      <span className="italic">Keine Zusatzdaten</span>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-zinc-500 flex flex-wrap gap-x-4 gap-y-0.5">
-                  {b.adresse && <span>{b.adresse}</span>}
-                  {b.kontaktPerson && <span>{b.kontaktPerson}</span>}
-                  {b.email && <span>{b.email}</span>}
-                  {!b.adresse && !b.kontaktPerson && !b.email && (
-                    <span className="italic">Keine Zusatzdaten</span>
-                  )}
-                </div>
+                <Link
+                  href={`/bildungstraeger/bedarfstraeger/${b.id}/edit`}
+                  className="shrink-0 text-sm text-zinc-600 underline-offset-2 hover:text-zinc-900 hover:underline"
+                >
+                  Bearbeiten
+                </Link>
               </li>
             ))}
           </ul>
