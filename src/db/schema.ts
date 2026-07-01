@@ -474,6 +474,15 @@ export const courses = pgTable("courses", {
    * Termin muss ≤ diesem Datum liegen. Bis zur Bewilligung null (gestuft).
    */
   endDate: date("end_date"),
+  /**
+   * Explizites Bewilligungs-Flag (gesetzt = "Bewilligt"). Vom BT manuell per
+   * Häkchen/Button gesetzt — ENTKOPPELT vom `endDate`. Früher wurde "Bewilligt"
+   * aus `endDate IS NOT NULL` abgeleitet; das zwang den BT, das Enddatum bis zur
+   * Bewilligung leer zu lassen. Jetzt kann das Enddatum jederzeit erfasst werden,
+   * ohne den Status auf "Bewilligt" zu ziehen. Migration backfillt Bestandskunden
+   * mit gesetztem Enddatum, damit nichts zurückspringt.
+   */
+  bewilligtAt: timestamp("bewilligt_at", { withTimezone: true }),
   status: courseStatus("status").notNull().default("active"),
   /**
    * Ergänzende Angaben / Begründungen für den AfA-Footer. Werden auf jedem

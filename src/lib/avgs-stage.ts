@@ -1,14 +1,15 @@
 /**
- * Abgeleiteter AVGS-Erfassungs-Status eines Kurses (gestufte Datums-Erfassung).
+ * Abgeleiteter AVGS-Erfassungs-Status eines Kurses.
  *
- * Die drei Datums-Konzepte entstehen zeitlich nacheinander:
  *  1. AVGS-Gutschein-Gültigkeit — bei Anlage bekannt (immer gesetzt, Pflicht).
  *  2. Startdatum — nach dem Erstgespräch vereinbart (`courses.startDate`).
- *  3. Bewilligungsende — kommt mit der Bewilligung der AA/JC (`courses.endDate`).
+ *  3. Bewilligung — vom BT explizit bestätigt (`courses.bewilligtAt`), NICHT mehr
+ *     aus dem Enddatum abgeleitet. So kann das Enddatum jederzeit erfasst werden,
+ *     ohne den Status auf "Bewilligt" zu ziehen.
  *
  * Bewusst DB-frei + ohne `src/db`-Import → unit-testbar (wie `course-form.ts`).
- * Kein eigenes Enum/Spalte in der DB: der Stage wird aus den vorhandenen
- * Feldern berechnet und kann so nie mit ihnen auseinanderlaufen.
+ * `bewilligtAt` gewinnt: hat der BT bewilligt, zeigen wir "Bewilligt" auch wenn
+ * das Startdatum noch fehlt (der BT hat die Bewilligung ja aktiv bestätigt).
  */
 
 export type AvgsStage =
@@ -18,11 +19,11 @@ export type AvgsStage =
 
 export function avgsStage(c: {
   startDate: string | null;
-  endDate: string | null;
+  bewilligtAt: Date | string | null;
 }): AvgsStage {
+  if (c.bewilligtAt) return "bewilligt";
   if (!c.startDate) return "startdatum_ausstehend";
-  if (!c.endDate) return "bewilligung_ausstehend";
-  return "bewilligt";
+  return "bewilligung_ausstehend";
 }
 
 export const AVGS_STAGE_LABEL: Record<AvgsStage, string> = {

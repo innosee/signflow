@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ANW_TONE_BADGE, type AnwTone } from "@/lib/anw-status";
 import { track } from "@/lib/analytics";
 
-import { archiveCourse, unarchiveCourse } from "./actions";
+import { archiveCourse, setCourseBewilligt, unarchiveCourse } from "./actions";
 import { DeleteCourseButton } from "./delete-course-button";
 
 const BER_BADGE: Record<CockpitRow["berStatus"], { label: string; cls: string }> =
@@ -26,6 +26,7 @@ export type CockpitRow = {
   status: string;
   statusLabel: string;
   isArchived: boolean;
+  bewilligt: boolean;
   avgsStageLabel: string | null;
   avgsStageBadge: string | null;
   // ANW / Stundennachweis
@@ -233,6 +234,30 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
 
                   {/* Verwaltung des Kunden */}
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {/* Schnell-Umschalter für den Bewilligungsstatus. */}
+                    <form action={setCourseBewilligt}>
+                      <input type="hidden" name="courseId" value={c.id} />
+                      <input
+                        type="hidden"
+                        name="next"
+                        value={c.bewilligt ? "0" : "1"}
+                      />
+                      <button
+                        type="submit"
+                        title={
+                          c.bewilligt
+                            ? "Bewilligung zurücknehmen (Status wieder „ausstehend“)"
+                            : "Als bewilligt markieren"
+                        }
+                        className={
+                          c.bewilligt
+                            ? "rounded-lg border border-green-500 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-100"
+                            : "rounded-lg border border-green-500 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-50"
+                        }
+                      >
+                        {c.bewilligt ? "✓ Bewilligt" : "Bewilligt setzen"}
+                      </button>
+                    </form>
                     <Link
                       href={`/bildungstraeger/courses/${c.id}/berichte`}
                       className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"

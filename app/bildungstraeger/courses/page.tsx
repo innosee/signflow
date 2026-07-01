@@ -41,6 +41,7 @@ export default async function BildungstraegerCoursesPage() {
       reviewStatus: schema.courses.reviewStatus,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
+      bewilligtAt: schema.courses.bewilligtAt,
       participantName: schema.participants.name,
       kundenNr: schema.participants.kundenNr,
       coachName: schema.users.name,
@@ -88,7 +89,7 @@ export default async function BildungstraegerCoursesPage() {
 
   const rows: CockpitRow[] = customers.map((c) => {
     const isArchived = c.status === "archived";
-    const stage = avgsStage(c);
+    const stage = avgsStage({ startDate: c.startDate, bewilligtAt: c.bewilligtAt });
     const anw = anwStatus({
       abgeschlossenAt: c.abgeschlossenAt,
       anwCheckPassedAt: c.anwCheckPassedAt,
@@ -110,6 +111,7 @@ export default async function BildungstraegerCoursesPage() {
           ? "Abgeschlossen"
           : "Aktiv",
       isArchived,
+      bewilligt: Boolean(c.bewilligtAt),
       avgsStageLabel: isArchived ? null : AVGS_STAGE_LABEL[stage],
       avgsStageBadge: isArchived ? null : AVGS_STAGE_BADGE[stage],
       anwLabel: ANW_STATUS_LABEL[anw],

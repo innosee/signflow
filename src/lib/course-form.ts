@@ -35,6 +35,8 @@ export type ParsedCourseForm = {
   startDate: string | null;
   /** Bewilligungsende; kommt mit der Bewilligung, bis dahin null. */
   endDate: string | null;
+  /** Explizites Bewilligungs-Häkchen (Status "Bewilligt"), entkoppelt vom endDate. */
+  bewilligt: boolean;
   customerName: string;
   customerEmail: string;
   customerKundenNr: string;
@@ -70,6 +72,9 @@ export function parseCourseForm(
   const avgsGueltigBis = String(formData.get("avgsGueltigBis") ?? "").trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
+  // Checkbox: gesetzt → "on" (oder "true"); nicht angehakt → nicht im FormData.
+  const bewilligtRaw = String(formData.get("bewilligt") ?? "").trim();
+  const bewilligt = bewilligtRaw === "on" || bewilligtRaw === "true";
 
   // Kunde (genau einer, 1:1).
   const customerName = String(formData.get("p_name") ?? "").trim();
@@ -167,6 +172,7 @@ export function parseCourseForm(
       avgsGueltigBis,
       startDate: startDate || null,
       endDate: endDate || null,
+      bewilligt,
       customerName,
       customerEmail,
       customerKundenNr,
