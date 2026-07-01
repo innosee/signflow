@@ -99,6 +99,7 @@ export async function createCourse(
     avgsGueltigBis,
     startDate,
     endDate,
+    bewilligt,
     customerName,
     customerEmail,
     customerKundenNr,
@@ -177,6 +178,7 @@ export async function createCourse(
           avgsGueltigBis,
           startDate,
           endDate,
+          bewilligtAt: bewilligt ? new Date() : null,
         })
         .returning({ id: schema.courses.id });
       if (!course) throw new Error("COURSE_INSERT_FAILED");
@@ -358,6 +360,7 @@ export async function updateCourse(
       id: schema.courses.id,
       participantId: schema.courses.participantId,
       participantEmail: schema.participants.email,
+      bewilligtAt: schema.courses.bewilligtAt,
     })
     .from(schema.courses)
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
@@ -391,6 +394,7 @@ export async function updateCourse(
     avgsGueltigBis,
     startDate,
     endDate,
+    bewilligt,
     customerName,
     customerEmail,
     customerKundenNr,
@@ -483,6 +487,9 @@ export async function updateCourse(
           avgsGueltigBis,
           startDate,
           endDate,
+          // Häkchen im Formular: gesetzt → bewilligt (bestehenden Zeitstempel
+          // erhalten, sonst jetzt); entfernt → zurück auf null.
+          bewilligtAt: bewilligt ? (course.bewilligtAt ?? new Date()) : null,
         })
         .where(eq(schema.courses.id, courseId));
 
@@ -602,6 +609,35 @@ export async function unarchiveCourse(formData: FormData): Promise<void> {
       .update(schema.courses)
       .set({ status: "active" })
       .where(eq(schema.courses.id, courseId));
+  }
+  revalidatePath("/bildungstraeger/courses");
+  redirect("/bildungstraeger/courses");
+}
+
+/**
+ * Bewilligungsstatus umschalten (Schnell-Button im Cockpit). `next="1"` setzt
+ * `bewilligt_at` (Status "Bewilligt"), sonst zurück auf null. Entkoppelt vom
+ * Enddatum — der BT bestätigt die Bewilligung explizit. Umschaltbar, jede
+ * Änderung wird auditiert.
+ */
+export async function setCourseBewilligt(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const next = String(formData.get("next") ?? "") === "1";
+  if (courseId && (await requireOwnedCourse(courseId, tenantId))) {
+    await db
+      .update(schema.courses)
+      .set({ bewilligtAt: next ? new Date() : null })
+      .where(eq(schema.courses.id, courseId));
+    await logAudit({
+      actorType: "bildungstraeger",
+      actorId: session.user.id,
+      action: next ? "course.bewilligt.set" : "course.bewilligt.unset",
+      resourceType: "course",
+      resourceId: courseId,
+    });
   }
   revalidatePath("/bildungstraeger/courses");
   redirect("/bildungstraeger/courses");

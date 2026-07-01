@@ -27,6 +27,7 @@ type CourseFormValues = {
   avgsGueltigBis: string;
   startDate: string;
   endDate: string;
+  bewilligt: boolean;
   p_name: string;
   p_email: string;
   p_kundennr: string;
@@ -44,6 +45,7 @@ const EMPTY: CourseFormValues = {
   avgsGueltigBis: "",
   startDate: "",
   endDate: "",
+  bewilligt: false,
   p_name: "",
   p_email: "",
   p_kundennr: "",
@@ -233,9 +235,26 @@ export function CourseForm({
             type="date"
             value={head.endDate}
             onChange={setField("endDate")}
-            hint="Kommt mit der Bewilligung der AA/JC zurück. Der letzte Termin muss ≤ diesem Datum sein."
+            hint="Kommt mit der Bewilligung der AA/JC zurück. Der letzte Termin muss ≤ diesem Datum sein. Setzt NICHT automatisch den Status „Bewilligt“ — dafür das Häkchen unten."
           />
         </div>
+
+        <label className="flex items-start gap-2 text-sm text-zinc-800">
+          <input
+            type="checkbox"
+            name="bewilligt"
+            checked={head.bewilligt}
+            onChange={(e) =>
+              setHead((h) => ({ ...h, bewilligt: e.target.checked }))
+            }
+            className="mt-0.5 h-4 w-4 accent-zinc-900"
+          />
+          <span>
+            <span className="font-medium">Bewilligung liegt vor</span> — setzt
+            den Status auf „Bewilligt“. Unabhängig vom Enddatum: das Enddatum
+            kann bereits eingetragen werden, ohne dass der Status springt.
+          </span>
+        </label>
       </section>
 
       <section className="rounded-xl border border-zinc-300 bg-white p-6 space-y-4">
