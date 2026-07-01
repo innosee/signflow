@@ -459,6 +459,75 @@ export async function deleteCoach(formData: FormData): Promise<void> {
   revalidatePath("/bildungstraeger");
 }
 
+/**
+ * Einladung an einen Coach mit noch offener Einladung (`emailVerified=false`)
+ * erneut versenden — schickt einen frischen 24-Stunden-Passwort-Reset-Link
+ * (Better Auth), ohne den Account zu löschen oder Kurse zu berühren. Löst das
+ * bisherige „löschen + neu einladen"-Workaround ab, wenn der 24h-Link abläuft.
+ *
+ * Nur ausstehende Coaches: ein bereits aktiver Coach (Passwort gesetzt) darf
+ * nicht per BT-Klick einen Reset-Link erhalten. Während Impersonation hart
+ * blockiert (Firmen-Aktion, nicht unter Coach-Identität).
+ */
+export async function resendCoachInvite(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    redirect("/bildungstraeger?imp_error=invalid");
+  }
+  const tenantId = getTenantId(session);
+
+  const coachId = String(formData.get("coachId") ?? "").trim();
+  if (!coachId) {
+    redirect("/bildungstraeger?imp_error=invalid");
+  }
+
+  const [target] = await db
+    .select({
+      id: schema.users.id,
+      email: schema.users.email,
+      emailVerified: schema.users.emailVerified,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, coachId),
+        eq(schema.users.tenantId, tenantId),
+        eq(schema.users.role, "coach"),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!target) {
+    redirect("/bildungstraeger?imp_error=unknown");
+  }
+  if (target.emailVerified) {
+    redirect("/bildungstraeger?imp_error=already_active");
+  }
+
+  const h = await headers();
+  try {
+    await auth.api.requestPasswordReset({
+      body: { email: target.email, redirectTo: "/reset-password" },
+      headers: h,
+    });
+  } catch (err) {
+    if (err instanceof APIError) {
+      redirect("/bildungstraeger?imp_error=resend_failed");
+    }
+    throw err;
+  }
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: "coach.invite.resend",
+    resourceType: "user",
+    resourceId: coachId,
+  });
+
+  redirect("/bildungstraeger?coach_notice=resent");
+}
+
 export type SubmitAfaState =
   | { error?: string; submitted?: boolean }
   | undefined;
