@@ -26,6 +26,7 @@ import {
   getPendingInvitations,
 } from "@/lib/memberships";
 import { sendCoachInvitationToAccept } from "@/lib/email";
+import { looksLikeEmail } from "@/lib/course-form";
 
 export type InviteFormState =
   | { error?: string; success?: string }
@@ -457,6 +458,82 @@ export async function deleteCoach(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/bildungstraeger");
+}
+
+export type UpdateCoachState = { ok?: true; error?: string } | undefined;
+
+/**
+ * Coach-Stammdaten (Name + E-Mail) korrigieren. Die E-Mail ist die Login-
+ * Identität (Better Auth): das Passwort liegt in `auth_account` gekeyed auf
+ * `user_id`, der Login läuft über `users.email` — es genügt also, `users.email`
+ * zu ändern. Uniqueness (partieller Index WHERE deleted_at IS NULL) wird
+ * abgefangen. Während Impersonation hart blockiert. Gibt State zurück →
+ * Inline-Feedback in der Zeile.
+ *
+ * Hinweis: Bei einem Coach mit noch offener Einladung zeigt der bereits
+ * verschickte Link auf die ALTE Adresse — nach einer E-Mail-Korrektur „Einladung
+ * erneut senden" nutzen (geht dann an die neue Adresse).
+ */
+export async function updateCoach(
+  _prev: UpdateCoachState,
+  formData: FormData,
+): Promise<UpdateCoachState> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    return { error: "Während Impersonation nicht möglich." };
+  }
+  const tenantId = getTenantId(session);
+
+  const coachId = String(formData.get("coachId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!coachId) return { error: "Ungültiger Coach." };
+  if (!name) return { error: "Name darf nicht leer sein." };
+  if (!looksLikeEmail(email)) {
+    return { error: "Bitte eine gültige E-Mail-Adresse angeben." };
+  }
+
+  const [target] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, coachId),
+        eq(schema.users.tenantId, tenantId),
+        eq(schema.users.role, "coach"),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!target) return { error: "Coach nicht gefunden." };
+
+  try {
+    await db
+      .update(schema.users)
+      .set({ name, email })
+      .where(eq(schema.users.id, coachId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/unique|duplicate/i.test(message)) {
+      return {
+        error: "Diese E-Mail-Adresse ist im Tenant bereits vergeben.",
+      };
+    }
+    return { error: `Änderung fehlgeschlagen (${message}).` };
+  }
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: "coach.update",
+    resourceType: "user",
+    resourceId: coachId,
+  });
+
+  revalidatePath("/bildungstraeger");
+  return { ok: true };
 }
 
 /**
