@@ -39,9 +39,9 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         uses: actions/checkout@v4
 
-      - name: Tooling (gpg, ssh)
+      - name: Tooling (gpg, ssh, curl, jq)
         if: steps.gate.outputs.skip != 'true'
-        run: apt-get update && apt-get install -y --no-install-recommends gnupg openssh-client
+        run: apt-get update && apt-get install -y --no-install-recommends gnupg openssh-client curl jq ca-certificates
 
       - name: SSH-Key an festen Pfad schreiben
         if: steps.gate.outputs.skip != 'true'
@@ -58,6 +58,7 @@ jobs:
         run: printf '%s\n' "$BACKUP_GPG_PUBLIC_KEY" | gpg --import
 
       - name: Dump + verschlüsseln + Upload
+        id: backup
         if: steps.gate.outputs.skip != 'true'
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
@@ -67,4 +68,44 @@ jobs:
           IONOS_SSH_DIR: ${{ vars.IONOS_SSH_DIR }}
           IONOS_SSH_KEY_FILE: ${{ runner.temp }}/ionos_key
           BACKUP_RETENTION: ${{ vars.BACKUP_RETENTION }}
-        run: bash scripts/backup-prod-to-ionos.sh
+        run: |
+          out="$(bash scripts/backup-prod-to-ionos.sh)"
+          echo "$out"
+          # Letzte Zeile = „✓ Backup abgelegt: …" → als Step-Output für die Mail.
+          echo "summary=$(echo "$out" | tail -1)" >> "$GITHUB_OUTPUT"
+
+      # Benachrichtigung an den Betreiber bei JEDEM Lauf (Erfolg + Fehler) via
+      # Resend — gleiche Quelle wie die App-Mails. RESEND_API_KEY als Secret,
+      # Absender/Empfänger als Vars. jq baut den JSON-Body sauber escaped.
+      - name: Erfolgs-Mail
+        if: success() && steps.gate.outputs.skip != 'true'
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          NOTIFY: ${{ vars.BACKUP_NOTIFY_EMAIL }}
+          SUMMARY: ${{ steps.backup.outputs.summary }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          html="<p>✅ Prod-Backup erfolgreich abgelegt (IONOS-VM, verschlüsselt).</p><p><code>${SUMMARY}</code></p><p><a href=\"${RUN_URL}\">Run-Log</a></p>"
+          body="$(jq -n --arg from "$EMAIL_FROM" --arg to "$NOTIFY" --arg subj "✅ Signflow-Backup OK" --arg html "$html" '{from:$from,to:[$to],subject:$subj,html:$html}')"
+          curl -sS -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body" -o /dev/null -w "Resend HTTP: %{http_code}\n"
+
+      - name: Fehler-Mail
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          NOTIFY: ${{ vars.BACKUP_NOTIFY_EMAIL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$NOTIFY" ]; then echo "keine Mail-Config — skip"; exit 0; fi
+          command -v jq >/dev/null 2>&1 || apt-get install -y --no-install-recommends jq curl ca-certificates
+          html="<p>🔴 <strong>Prod-Backup FEHLGESCHLAGEN.</strong> Bitte prüfen.</p><p><a href=\"${RUN_URL}\">Run-Log ansehen</a></p>"
+          body="$(jq -n --arg from "$EMAIL_FROM" --arg to "$NOTIFY" --arg subj "🔴 Signflow-Backup FEHLGESCHLAGEN" --arg html "$html" '{from:$from,to:[$to],subject:$subj,html:$html}')"
+          curl -sS -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body" -o /dev/null -w "Resend HTTP: %{http_code}\n"
