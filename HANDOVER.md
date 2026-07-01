@@ -58,6 +58,22 @@ Fingerprint `73C8 4F44 … 6F7B E047`.
   `changelog_entries` + `users.changelog_last_seen_at` (Migration
   `scripts/apply-changelog-migration.mjs` auf Staging UND Prod angewendet).
   **Erster Eintrag ist live.**
+- **Passwort-Reset/Onboarding-Link-Fix** (PR #122): Better-Auth-Default-Expiry
+  war nur **1 h** → Onboarding-Links abgelaufen bevor Kund:innen klickten
+  (Prod-Bug, „kein Token übergeben", User Angela M.). Fix:
+  `resetPasswordTokenExpiresIn = 24h` + `/reset-password` zeigt bei fehlendem/
+  abgelaufenem Token klare „Link abgelaufen → neuen anfordern"-Seite. Siehe
+  [[project_auth_decisions]].
+
+### Kosten/Pläne — Einschätzung (2026-07-01, noch keine harte Entscheidung)
+Reale Prod-Mengen: 96 User (94 Coaches, 2 BT), 16 Kurse/16 TN, ~31 Magic-Links/Woche.
+- **Vercel:** Pro ist **Pflicht** (Hobby = nicht-kommerziell); ihr seid auf einem
+  Team → passt. ~$20–40/Mo. **Wildcard = Puppeteer-PDF-Compute** (skaliert mit
+  Abschlüssen) → Function-Usage beobachten.
+- **Resend:** **Pro ($20/Mo) empfohlen** — Free-Cap **100 Mails/Tag** ist das
+  Onboarding-Risiko (Batch-Einladungen droppen sonst still). Volumen sonst klein.
+- **Realistisch gesamt ~€70–110/Mo** (Vercel Pro + Resend Pro + Neon Launch +
+  Azure + IONOS), + ~€60 wenn FES live. CLAUDE.md-Schätzung (~€30–50) war zu optimistisch.
 
 ### Noch offen / als Nächstes
 - 🔴 **gpg-Private-Key offline sichern** (siehe oben) — höchste Priorität.
@@ -65,6 +81,11 @@ Fingerprint `73C8 4F44 … 6F7B E047`.
 - Backups: **monatlicher Restore-Test** (echtes `pg_restore` auf Wegwerf-Branch).
 - Optional: Staging-DB-Passwort rotieren (einmal im Output exponiert); verwaiste
   Neon-Branches `dev` + `pre-collapse` löschen.
+- **Resend auf Pro** aktivieren (siehe Kosten oben) — vor der nächsten Onboarding-Welle.
+- **seven.io/SMS bleibt dark** — bewusst NICHT gebraucht/ausgebaut (Entscheidung
+  2026-07-01, [[project_participant_delivery_channels]]). Für DSGVO-Beratung:
+  seven.io-Sub-Verarbeiter-Eintrag in `legal.ts`/Impressum/Datenschutz streichen
+  bzw. als „inaktiv" markieren. Aktive Kanäle: E-Mail + QR.
 - **Changelog Phase 2** (geplant, NICHT gebaut): E-Mail-Opt-in für News
   (vorausgefüllte Form, Consent-Logging, Versand via Resend, Opt-in sichtbar im
   BT-Backend).
