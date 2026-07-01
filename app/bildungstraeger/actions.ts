@@ -468,18 +468,26 @@ export async function deleteCoach(formData: FormData): Promise<void> {
  * Nur ausstehende Coaches: ein bereits aktiver Coach (Passwort gesetzt) darf
  * nicht per BT-Klick einen Reset-Link erhalten. Während Impersonation hart
  * blockiert (Firmen-Aktion, nicht unter Coach-Identität).
+ *
+ * Gibt einen State zurück (statt Redirect) → der Button zeigt pro Zeile inline
+ * „Sende… / ✓ gesendet / Fehler". Das alte Redirect-mit-`coach_notice` erzeugte
+ * ein globales, klebriges Banner: es blieb dauerhaft stehen und beim zweiten
+ * Coach änderte sich die URL nicht → wirkte, als passiere nichts.
  */
-export async function resendCoachInvite(formData: FormData): Promise<void> {
+export type ResendInviteState = { ok?: true; error?: string } | undefined;
+
+export async function resendCoachInvite(
+  _prev: ResendInviteState,
+  formData: FormData,
+): Promise<ResendInviteState> {
   const session = await requireBildungstraeger();
   if (isImpersonating(session)) {
-    redirect("/bildungstraeger?imp_error=invalid");
+    return { error: "Während Impersonation nicht möglich." };
   }
   const tenantId = getTenantId(session);
 
   const coachId = String(formData.get("coachId") ?? "").trim();
-  if (!coachId) {
-    redirect("/bildungstraeger?imp_error=invalid");
-  }
+  if (!coachId) return { error: "Ungültiger Coach." };
 
   const [target] = await db
     .select({
@@ -497,11 +505,9 @@ export async function resendCoachInvite(formData: FormData): Promise<void> {
       ),
     )
     .limit(1);
-  if (!target) {
-    redirect("/bildungstraeger?imp_error=unknown");
-  }
+  if (!target) return { error: "Coach nicht gefunden." };
   if (target.emailVerified) {
-    redirect("/bildungstraeger?imp_error=already_active");
+    return { error: "Coach ist bereits aktiv — keine neue Einladung nötig." };
   }
 
   const h = await headers();
@@ -512,7 +518,9 @@ export async function resendCoachInvite(formData: FormData): Promise<void> {
     });
   } catch (err) {
     if (err instanceof APIError) {
-      redirect("/bildungstraeger?imp_error=resend_failed");
+      return {
+        error: "Konnte nicht erneut senden. Bitte später erneut versuchen.",
+      };
     }
     throw err;
   }
@@ -525,7 +533,7 @@ export async function resendCoachInvite(formData: FormData): Promise<void> {
     resourceId: coachId,
   });
 
-  redirect("/bildungstraeger?coach_notice=resent");
+  return { ok: true };
 }
 
 export type SubmitAfaState =

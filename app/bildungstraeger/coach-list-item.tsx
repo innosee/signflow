@@ -1,5 +1,7 @@
 "use client";
 
+import { useActionState } from "react";
+
 import { deleteCoach, impersonateCoach, resendCoachInvite } from "./actions";
 
 export type CoachRow = {
@@ -23,6 +25,12 @@ export function CoachListItem({
    */
   canImpersonate: boolean;
 }) {
+  // Pro Zeile eigener Action-State → Inline-Feedback am Button („Sende… /
+  // ✓ gesendet / Fehler"), unabhängig von den anderen Coaches.
+  const [resendState, resendAction, resendPending] = useActionState(
+    resendCoachInvite,
+    undefined,
+  );
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
       <div className="min-w-0">
@@ -47,15 +55,33 @@ export function CoachListItem({
       </div>
       <div className="flex items-center gap-2">
         {!coach.emailVerified && (
-          <form action={resendCoachInvite}>
+          <form action={resendAction} className="flex items-center gap-2">
             <input type="hidden" name="coachId" value={coach.id} />
             <button
               type="submit"
-              className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+              disabled={resendPending}
               title="Neuen Anmelde-Link (24 h gültig) an den Coach senden"
+              className={
+                resendState?.ok
+                  ? "rounded-lg border border-green-500 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 enabled:hover:bg-green-100 disabled:opacity-60"
+                  : "rounded-lg border border-zinc-500 px-3 py-1.5 text-sm enabled:hover:bg-zinc-50 disabled:opacity-60"
+              }
             >
-              Einladung erneut senden
+              {resendPending
+                ? "Sende …"
+                : resendState?.ok
+                  ? "✓ Link gesendet"
+                  : "Einladung erneut senden"}
             </button>
+            {resendState?.error && (
+              <span
+                role="status"
+                aria-live="polite"
+                className="text-xs text-red-700"
+              >
+                {resendState.error}
+              </span>
+            )}
           </form>
         )}
         {canImpersonate && (
