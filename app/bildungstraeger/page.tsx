@@ -8,7 +8,7 @@ import {
   requireBildungstraeger,
 } from "@/lib/dal";
 
-import { CoachListItem } from "./coach-list-item";
+import { CoachSearchList } from "./coach-search-list";
 import { InviteCoachForm } from "./invite-form";
 
 export const dynamic = "force-dynamic";
@@ -225,22 +225,7 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-300 bg-white">
-        <div className="border-b border-zinc-300 px-6 py-4">
-          <h2 className="text-lg font-semibold">Coaches ({coaches.length})</h2>
-        </div>
-        {coaches.length === 0 ? (
-          <p className="px-6 py-8 text-center text-sm text-zinc-500">
-            Noch keine Coaches. Lade den ersten oben ein.
-          </p>
-        ) : (
-          <ul className="divide-y divide-black/5">
-            {coaches.map((c) => (
-              <CoachListItem key={c.id} coach={c} canImpersonate={isOwner} />
-            ))}
-          </ul>
-        )}
-      </section>
+      <CoachSearchList coaches={coaches} canImpersonate={isOwner} />
     </div>
   );
 }
