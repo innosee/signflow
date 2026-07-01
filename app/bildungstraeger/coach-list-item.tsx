@@ -1,8 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
 
-import { deleteCoach, impersonateCoach, resendCoachInvite } from "./actions";
+import {
+  deleteCoach,
+  impersonateCoach,
+  resendCoachInvite,
+  updateCoach,
+} from "./actions";
 
 export type CoachRow = {
   id: string;
@@ -31,6 +36,95 @@ export function CoachListItem({
     resendCoachInvite,
     undefined,
   );
+
+  const [editing, setEditing] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isUpdating, startUpdate] = useTransition();
+  // Speichern über eine Transition: bei Erfolg das Formular schließen (event-
+  // getrieben, kein setState-in-Effect), sonst Fehler inline zeigen. Die
+  // revalidierten Werte kommen per Server-Refresh in die Anzeige.
+  const handleUpdate = (formData: FormData) => {
+    startUpdate(async () => {
+      const res = await updateCoach(undefined, formData);
+      if (res?.ok) {
+        setUpdateError(null);
+        setEditing(false);
+      } else {
+        setUpdateError(res?.error ?? "Änderung fehlgeschlagen.");
+      }
+    });
+  };
+
+  if (editing) {
+    return (
+      <li className="px-6 py-4">
+        <form action={handleUpdate} className="flex flex-col gap-3">
+          <input type="hidden" name="coachId" value={coach.id} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">
+              <span className="mb-1 block text-xs font-medium text-zinc-600">
+                Name
+              </span>
+              <input
+                name="name"
+                defaultValue={coach.name}
+                required
+                autoFocus
+                className="w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-xs font-medium text-zinc-600">
+                E-Mail
+              </span>
+              <input
+                name="email"
+                type="email"
+                defaultValue={coach.email}
+                required
+                className="w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              disabled={isUpdating}
+              className="rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white enabled:hover:bg-zinc-800 disabled:opacity-60"
+            >
+              {isUpdating ? "Speichere …" : "Speichern"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUpdateError(null);
+                setEditing(false);
+              }}
+              className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+            >
+              Abbrechen
+            </button>
+            {updateError && (
+              <span
+                role="status"
+                aria-live="polite"
+                className="text-xs text-red-700"
+              >
+                {updateError}
+              </span>
+            )}
+          </div>
+          {!coach.emailVerified && (
+            <p className="text-xs text-zinc-500">
+              Hinweis: Der bereits verschickte Einladungs-Link zeigt auf die alte
+              Adresse. Nach einer E-Mail-Änderung „Einladung erneut senden“.
+            </p>
+          )}
+        </form>
+      </li>
+    );
+  }
+
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
       <div className="min-w-0">
@@ -84,6 +178,17 @@ export function CoachListItem({
             )}
           </form>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            setUpdateError(null);
+            setEditing(true);
+          }}
+          className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+          title="Name oder E-Mail des Coaches ändern"
+        >
+          Bearbeiten
+        </button>
         {canImpersonate && (
           <form action={impersonateCoach}>
             <input type="hidden" name="userId" value={coach.id} />
