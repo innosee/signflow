@@ -40,6 +40,8 @@ export type CockpitRow = {
 
 export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
   const [query, setQuery] = useState("");
+  const [coachFilter, setCoachFilter] = useState("");
+  const [bedarfstraegerFilter, setBedarfstraegerFilter] = useState("");
 
   // Such-Event entkoppelt vom Tippen: erst ~600 ms nach der letzten Eingabe
   // feuern (sonst ein Event pro Tastendruck → Analytics-Kontingent). Nur ab
@@ -53,11 +55,31 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
     searchTimer.current = setTimeout(() => track("search", { q }), 600);
   };
 
+  // Filter-Optionen aus den vorhandenen Zeilen ableiten (eindeutig, alphabetisch)
+  // — kein zusätzlicher Server-Query nötig, die Namen stehen pro Zeile bereit.
+  const coachOptions = useMemo(
+    () =>
+      Array.from(new Set(rows.map((r) => r.coachName).filter(Boolean))).sort(
+        (a, b) => a.localeCompare(b, "de"),
+      ),
+    [rows],
+  );
+  const bedarfstraegerOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(rows.map((r) => r.bedarfstraegerName).filter(Boolean)),
+      ).sort((a, b) => a.localeCompare(b, "de")),
+    [rows],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) =>
-      [
+    return rows.filter((r) => {
+      if (coachFilter && r.coachName !== coachFilter) return false;
+      if (bedarfstraegerFilter && r.bedarfstraegerName !== bedarfstraegerFilter)
+        return false;
+      if (!q) return true;
+      return [
         r.participantName,
         r.title,
         r.kundenNr,
@@ -69,13 +91,17 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
       ]
         .join(" ")
         .toLowerCase()
-        .includes(q),
-    );
-  }, [rows, query]);
+        .includes(q);
+    });
+  }, [rows, query, coachFilter, bedarfstraegerFilter]);
+
+  const filtersActive = Boolean(
+    query.trim() || coachFilter || bedarfstraegerFilter,
+  );
 
   return (
     <section className="rounded-xl border border-zinc-300 bg-white">
-      <div className="border-b border-zinc-200 px-6 py-3">
+      <div className="space-y-2 border-b border-zinc-200 px-6 py-3">
         <input
           type="search"
           value={query}
@@ -83,6 +109,34 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
           placeholder="Suche nach Kunde, Kunden-Nr., Coach, Status …"
           className="block w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black"
         />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <select
+            value={coachFilter}
+            onChange={(e) => setCoachFilter(e.target.value)}
+            aria-label="Nach Coach filtern"
+            className="w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black sm:w-1/2"
+          >
+            <option value="">Alle Coaches</option>
+            {coachOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            value={bedarfstraegerFilter}
+            onChange={(e) => setBedarfstraegerFilter(e.target.value)}
+            aria-label="Nach Bedarfsträger filtern"
+            className="w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black sm:w-1/2"
+          >
+            <option value="">Alle Bedarfsträger</option>
+            {bedarfstraegerOptions.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -91,7 +145,9 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
         </p>
       ) : filtered.length === 0 ? (
         <p className="px-6 py-10 text-center text-sm text-zinc-500">
-          Keine Treffer für „{query}“.
+          {filtersActive
+            ? "Keine Treffer für die aktuelle Auswahl."
+            : "Keine Kunden."}
         </p>
       ) : (
         <ul className="divide-y divide-zinc-200">
