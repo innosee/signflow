@@ -35,6 +35,7 @@ export type AuditAction =
   | "ber.submitted"
   | "ber.edited_after_submit"
   | "coach.delete"
+  | "coach.invite.resend"
   | "ber.soft_flags.acknowledged"
   | "bildungstraeger.invite"
   | "bildungstraeger.deactivate"

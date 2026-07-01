@@ -1,6 +1,6 @@
 "use client";
 
-import { deleteCoach, impersonateCoach } from "./actions";
+import { deleteCoach, impersonateCoach, resendCoachInvite } from "./actions";
 
 export type CoachRow = {
   id: string;
@@ -46,6 +46,18 @@ export function CoachListItem({
         </div>
       </div>
       <div className="flex items-center gap-2">
+        {!coach.emailVerified && (
+          <form action={resendCoachInvite}>
+            <input type="hidden" name="coachId" value={coach.id} />
+            <button
+              type="submit"
+              className="rounded-lg border border-zinc-500 px-3 py-1.5 text-sm hover:bg-zinc-50"
+              title="Neuen Anmelde-Link (24 h gültig) an den Coach senden"
+            >
+              Einladung erneut senden
+            </button>
+          </form>
+        )}
         {canImpersonate && (
           <form action={impersonateCoach}>
             <input type="hidden" name="userId" value={coach.id} />

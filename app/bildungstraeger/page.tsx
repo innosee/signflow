@@ -23,18 +23,28 @@ const IMP_ERRORS: Record<string, string> = {
   delete_failed: "Coach konnte nicht gelöscht werden.",
   not_owner:
     "Impersonation ist dem Owner-Account vorbehalten — bitte den Owner deines Tenants bitten zu übernehmen.",
+  already_active:
+    "Coach ist bereits aktiv angemeldet — eine neue Einladung ist nicht nötig.",
+  resend_failed:
+    "Einladung konnte nicht erneut versendet werden. Bitte später erneut versuchen.",
+};
+
+const COACH_NOTICES: Record<string, string> = {
+  resent:
+    "Einladung erneut versendet — der neue Anmelde-Link ist 24 Stunden gültig.",
 };
 
 type Props = {
-  searchParams: Promise<{ imp_error?: string }>;
+  searchParams: Promise<{ imp_error?: string; coach_notice?: string }>;
 };
 
 export default async function BildungstraegerDashboard({ searchParams }: Props) {
   const session = await requireBildungstraeger();
   const tenantId = getTenantId(session);
   const isOwner = await isTenantOwner(session);
-  const { imp_error } = await searchParams;
+  const { imp_error, coach_notice } = await searchParams;
   const impErrorMsg = imp_error ? IMP_ERRORS[imp_error] : undefined;
+  const coachNoticeMsg = coach_notice ? COACH_NOTICES[coach_notice] : undefined;
 
   // Offene AfA-Übermittlungen (gesiegelt, aber noch nicht an die AfA raus)
   // — als Teaser oben in der Übersicht anzeigen, damit der Firmen-User
@@ -103,6 +113,15 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
           className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
         >
           {impErrorMsg}
+        </div>
+      )}
+
+      {coachNoticeMsg && (
+        <div
+          role="status"
+          className="rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800"
+        >
+          {coachNoticeMsg}
         </div>
       )}
 
