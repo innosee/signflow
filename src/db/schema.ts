@@ -703,8 +703,8 @@ export const sessions = pgTable(
 );
 
 /**
- * Magic-Link-Tokens, scope: **ein Kurs × ein Teilnehmer**, 24 h gültig.
- * Nicht one-shot: innerhalb der 24 h kann der Teilnehmer beliebige noch
+ * Magic-Link-Tokens, scope: **ein Kurs × ein Teilnehmer**, 7 Tage gültig.
+ * Nicht one-shot: innerhalb der Gültigkeit kann der Teilnehmer beliebige noch
  * offene Sessions des Kurses signieren. Löst der Coach einen neuen Link aus,
  * wird der alte NICHT mehr invalidiert (geändert 2026-06-19) — jeder Link
  * lebt bis zu seinem eigenen `expires_at`, mehrere aktive Links pro Paarung

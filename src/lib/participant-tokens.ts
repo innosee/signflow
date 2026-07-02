@@ -39,7 +39,13 @@ function effectiveChannel(
   return requested;
 }
 
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h per CLAUDE.md
+// Magic-Link-Gültigkeit. 7 Tage (statt vormals 24 h) aus Usability-Gründen —
+// Teilnehmer brauchen realistisch länger als einen Tag. DSGVO-vertretbar, weil
+// der Zugriff zusätzlich durch gehashten Token, kurs-scoped Bindung, aktive
+// Bestätigung + Zeitstempel + IP + Audit-Log je Signatur abgesichert ist
+// (Begründung gehört ins VVT/Datenschutzerklärung). Einzige Source of Truth der
+// TTL — speist Sign-Link UND Preview-Freigabe.
+const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
 
 function newToken(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -53,7 +59,7 @@ function hashToken(token: string): string {
  * Erzeugt einen neuen Magic-Link-Token für die Paarung (course × participant).
  *
  * Alte Links werden bewusst NICHT mehr invalidiert (geändert 2026-06-19): jeder
- * ausgestellte Link bleibt bis zu seinem eigenen 24-h-Ablauf gültig. Damit
+ * ausgestellte Link bleibt bis zu seinem eigenen Ablauf (7 Tage) gültig. Damit
  * funktioniert auch eine kürzlich erhaltene Mail noch, wenn der Coach
  * zwischenzeitlich erneut benachrichtigt hat — mehrere aktive Links pro Paarung
  * sind erlaubt. Sie zeigen alle auf dieselbe Sign-Seite (aktueller Stand der
@@ -162,7 +168,7 @@ export async function sendParticipantInvite(params: {
  * Preview-Variant: identisch zu `sendParticipantInvite`, aber mit der
  * Preview-Mail-Vorlage. Flow (CLAUDE.md Schritt 7-8):
  *   - Alle Sessions sind signiert → Coach klickt "Preview senden"
- *   - TN bekommt frischen 24-h-Token + eine andere Betreffzeile/CTA
+ *   - TN bekommt frischen 7-Tage-Token + eine andere Betreffzeile/CTA
  *   - Sign-Page erkennt automatisch den Preview-Stand (keine offenen
  *     Sessions mehr, aber noch keine Freigabe) und zeigt das finale
  *     Dokument zur Freigabe an.
@@ -270,7 +276,7 @@ export type ResolvedToken = {
 /**
  * Validiert einen Magic Link und gibt den Kurs-Kontext inkl. aller Sessions
  * (signiert + noch offen) zurück. Verbraucht den Token NICHT — innerhalb der
- * 24-h-Gültigkeit kann der Teilnehmer beliebig viele Sessions signieren.
+ * 7-Tage-Gültigkeit kann der Teilnehmer beliebig viele Sessions signieren.
  */
 export async function resolveParticipantToken(
   token: string,
