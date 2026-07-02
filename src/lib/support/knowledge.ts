@@ -41,7 +41,7 @@ MODUL A – ANWESENHEITSNACHWEISE, Ablauf:
    Unterschrift wird mit Zeitstempel + IP im Audit-Log festgehalten, kein
    erneutes Zeichnen.
 6. Teilnehmer:in benachrichtigen: Button verschickt Magic-Link per E-Mail oder
-   QR-Code. Jeder Link 24 h gültig. Erneutes Auslösen lässt ältere Links bis zu
+   QR-Code. Jeder Link 7 Tage gültig. Erneutes Auslösen lässt ältere Links bis zu
    ihrem eigenen Ablauf gültig (mehrere parallel) — eine alte Mail läuft nie
    ins Leere.
 7. TN signiert mobil: öffnet Link, zeichnet beim ersten Mal die eigene

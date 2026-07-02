@@ -14,7 +14,7 @@ const FEATURES = [
   {
     icon: MailIcon,
     title: "Magic-Link für Teilnehmer:innen",
-    desc: "Kein Account, keine Passwort-Registrierung. 24 h gültig, pro Kunde, bei jedem Coach-Sign wird ein frischer Link verschickt.",
+    desc: "Kein Account, keine Passwort-Registrierung. 7 Tage gültig, pro Kunde, bei jedem Coach-Sign wird ein frischer Link verschickt.",
   },
   {
     icon: ShieldIcon,

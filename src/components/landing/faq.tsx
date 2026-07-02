@@ -15,7 +15,7 @@ const COACH_FAQ: Q[] = [
   },
   {
     q: "Wie bestätigen meine Teilnehmer:innen?",
-    a: "Nach jeder Coach-Signatur wird automatisch ein Magic-Link pro Kunde an die Teilnehmer:in verschickt (24 h gültig). Beim ersten Öffnen legt sie einmalig ihre Unterschrift an; alle danach anstehenden Termine werden per Klick-Bestätigung quittiert. Kein Account, kein Passwort.",
+    a: "Nach jeder Coach-Signatur wird automatisch ein Magic-Link pro Kunde an die Teilnehmer:in verschickt (7 Tage gültig). Beim ersten Öffnen legt sie einmalig ihre Unterschrift an; alle danach anstehenden Termine werden per Klick-Bestätigung quittiert. Kein Account, kein Passwort.",
   },
   {
     q: "Kann ich Termine nachträglich hinzufügen?",

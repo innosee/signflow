@@ -231,7 +231,7 @@ export async function sendParticipantMagicLink(params: {
     <p>Hallo ${esc(params.participantName)},</p>
     <p>Bitte bestätige deine Anwesenheit für den Termin am <strong>${esc(params.sessionDate)}</strong> in der Maßnahme <strong>${esc(params.courseTitle)}</strong>.</p>
     ${renderButton(params.url, "Jetzt bestätigen")}
-    <p style="font-size:12px; color:#888;">Der Link ist 24 Stunden gültig und kann nur einmal verwendet werden.</p>
+    <p style="font-size:12px; color:#888;">Der Link ist 7 Tage gültig. Du kannst ihn mehrfach öffnen und darüber alle offenen Termine bestätigen.</p>
   `;
   await sendEmail({
     to: params.to,
@@ -257,7 +257,7 @@ export async function sendParticipantPreview(params: {
     <p>Hallo ${esc(params.participantName)},</p>
     <p>Deine Maßnahme <strong>${esc(params.courseTitle)}</strong> ist abgeschlossen. Bitte sieh dir den fertigen Stundennachweis einmal an und gib ihn frei — du bestätigst damit die inhaltliche Richtigkeit deiner Anwesenheiten.</p>
     ${renderButton(params.url, "Nachweis ansehen & freigeben")}
-    <p style="font-size:12px; color:#888;">Der Link ist 24 Stunden gültig. Die Freigabe ist kein rechtliches Siegel — das setzt im Anschluss dein Coach.</p>
+    <p style="font-size:12px; color:#888;">Der Link ist 7 Tage gültig. Die Freigabe ist kein rechtliches Siegel — das setzt im Anschluss dein Coach.</p>
   `;
   await sendEmail({
     to: params.to,
