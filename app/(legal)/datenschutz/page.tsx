@@ -172,6 +172,25 @@ export default function DatenschutzPage() {
             Identifizierung) an den Aussteller übermittelt.
           </p>
         </Subsection>
+        <Subsection title="4.5 Gültigkeit und Absicherung der Magic Links">
+          <p>
+            Die zur Signatur versandten Magic Links sind ab Ausstellung{" "}
+            <strong>7 Tage</strong> gültig und werden danach automatisch
+            ungültig. Die Geltungsdauer ist bewusst an der praktischen
+            Erreichbarkeit der Teilnehmer:innen ausgerichtet und im Sinne der
+            Datenminimierung (Art. 5 Abs. 1 lit. c DSGVO) auf ein
+            verhältnismäßiges, nicht unnötig langes Fenster begrenzt.
+          </p>
+          <p>
+            Der Zugriff ist zusätzlich durch geeignete technische Maßnahmen nach
+            Art. 32 DSGVO abgesichert: Der Token wird ausschließlich als
+            kryptographischer Hash (SHA-256) gespeichert – der Klartext ist uns
+            nicht bekannt –, gilt nur für genau einen Kurs und eine:n
+            bestimmte:n Teilnehmer:in, und jede Signatur erfordert eine aktive
+            Bestätigung, die mit Zeitstempel und IP-Adresse im Audit-Protokoll
+            festgehalten wird.
+          </p>
+        </Subsection>
       </Section>
 
       <Section title="5. Verarbeitungen im Abschlussbericht-Checker">
@@ -273,6 +292,16 @@ export default function DatenschutzPage() {
           <li>
             Freigegebene Berichtsinhalte (nach Regelprüfung): bis zum Ende der
             Dokumentationspflicht, danach Löschung
+          </li>
+          <li>
+            Zugriffstoken für die Signatur (Magic Links): ab Ausstellung
+            7 Tage gültig, danach automatisch ungültig. Gespeichert wird
+            ausschließlich ein kryptographischer Hash des Tokens, nicht der
+            versandte Link selbst.{" "}
+            <Placeholder>
+              Aufbewahrungs-/Löschintervall der abgelaufenen Token-Datensätze
+              (Cleanup-Routine) festlegen und hier ergänzen.
+            </Placeholder>
           </li>
           <li>
             Audit-Log-Einträge: in der Regel 12 Monate, soweit keine längere
