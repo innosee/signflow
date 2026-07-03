@@ -46,14 +46,19 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
 
   // Such-Event entkoppelt vom Tippen: erst ~600 ms nach der letzten Eingabe
   // feuern (sonst ein Event pro Tastendruck → Analytics-Kontingent). Nur ab
-  // 2 Zeichen. q landet automatisch in der Query-Spalte des Dashboards.
+  // 2 Zeichen. Der Suchstring selbst wird NICHT getrackt: hier wird nach
+  // Teilnehmernamen (Sozialkontext) gesucht, die dürfen nicht ins Analytics-
+  // System. Nur die Länge als grobes Nutzungssignal.
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearch = (value: string) => {
     setQuery(value);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     const q = value.trim();
     if (q.length < 2) return;
-    searchTimer.current = setTimeout(() => track("search", { q }), 600);
+    searchTimer.current = setTimeout(
+      () => track("search", { qLength: q.length }),
+      600,
+    );
   };
 
   // Filter-Optionen aus den vorhandenen Zeilen ableiten (eindeutig, alphabetisch)
