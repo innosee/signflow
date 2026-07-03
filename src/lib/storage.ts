@@ -10,6 +10,11 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { del as vercelBlobDel, put as vercelBlobPut } from "@vercel/blob";
 
+import {
+  selectStorageProvider,
+  type StorageProvider,
+} from "@/lib/storage-provider";
+
 /**
  * Storage-Layer für Signaturen, Logos und gesiegelte PDFs.
  *
@@ -33,24 +38,16 @@ import { del as vercelBlobDel, put as vercelBlobPut } from "@vercel/blob";
  * ersetzt URLs durch Keys in der DB.
  */
 
-type Provider = "r2" | "vercel-blob";
+type Provider = StorageProvider;
 
+// Entscheidung ausgelagert nach storage-provider.ts (rein + unit-getestet).
+// `activeProvider()` wird nur von den Upload-Pfaden gerufen — Löschen/Auflösen
+// von Bestands-Blobs (Vercel-Blob-URLs aus der Migrationszeit) bleibt unberührt.
 function activeProvider(): Provider {
-  if (process.env.R2_ACCOUNT_ID) return "r2";
-  // Kein R2 konfiguriert. In Production NICHT still auf öffentlichen Vercel Blob
-  // zurückfallen: Signaturen und gesiegelte PDFs von Sozialleistungsempfängern
-  // dürfen nicht public (mit 1-Jahr-CDN-Cache) erreichbar landen. Lieber ein
-  // harter Upload-Fehler als eine stille Datenschutz-Degradierung. Analog zum
-  // Prod-Fail-hard-Pattern in email.ts / sms.ts. `activeProvider()` wird nur von
-  // den Upload-Pfaden gerufen — Löschen/Auflösen von Bestands-Blobs (Vercel-Blob-
-  // URLs aus der Migrationszeit) bleibt unberührt.
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "Storage ist in Production nicht korrekt konfiguriert (R2_ACCOUNT_ID fehlt) — " +
-        "der Fallback auf öffentlichen Vercel Blob ist in Prod deaktiviert.",
-    );
-  }
-  return "vercel-blob";
+  return selectStorageProvider({
+    r2AccountId: process.env.R2_ACCOUNT_ID,
+    nodeEnv: process.env.NODE_ENV,
+  });
 }
 
 // --- R2 (S3-kompatibel) ---
