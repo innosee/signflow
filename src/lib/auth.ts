@@ -2,34 +2,12 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
-import {
-  defaultAc,
-  userAc,
-} from "better-auth/plugins/admin/access";
+import { userAc } from "better-auth/plugins/admin/access";
 import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { bildungstraegerAc } from "@/lib/auth-access";
 import { sendResetPasswordEmail } from "@/lib/email";
-
-// Bildungsträger ist bewusst KEIN Voll-Admin (früher: adminAc, das u.a. list /
-// set-password / delete / ban / set-role über ALLE Mandanten erlaubte — Better
-// Auth kennt kein Tenant-Konzept). Er braucht nur zwei Fähigkeiten, und beide
-// ausschließlich serverseitig über `auth.api.*` in tenant-geprüften Server
-// Actions:
-//   - impersonate: tenant-geprüfter Coach-Wechsel (impersonateCoach)
-//   - create:      Anlage von Coach-/BT-Team-Accounts (auth.api.createUser)
-// Bewusst NICHT enthalten: list (User-Enumeration), set-password (Fremd-Account-
-// Übernahme), delete, ban, set-role, get, update.
-//
-// Zweite Verteidigungslinie: die öffentlichen /api/auth/admin/*-HTTP-Endpoints
-// sind komplett gesperrt (app/api/auth/[...all]/route.ts). Diese Rolle greift
-// damit NUR für die serverseitigen auth.api.*-Aufrufe, nie über rohes HTTP —
-// so kann ein Bildungsträger den Tenant-Gate der Server Action nicht per
-// direktem POST umgehen.
-const bildungstraegerAc = defaultAc.newRole({
-  user: ["impersonate", "create"],
-  session: [],
-});
 
 if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET is not set");

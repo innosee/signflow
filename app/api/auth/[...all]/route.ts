@@ -1,6 +1,7 @@
 import { toNextJsHandler } from "better-auth/next-js";
 
 import { auth } from "@/lib/auth";
+import { isBlockedAdminAuthPath } from "@/lib/auth-access";
 
 const handler = toNextJsHandler(auth);
 
@@ -15,9 +16,10 @@ const handler = toNextJsHandler(auth);
  * an `/api/auth/admin/impersonate-user` bzw. `/create-user` den Tenant-Gate der
  * Server Action umgehen und cross-tenant agieren (Better Auth kennt kein
  * Tenant-Konzept). Deshalb: harte 404 auf die gesamte Admin-Fläche.
+ * Die Pfad-Regel liegt (unit-getestet) in `isBlockedAdminAuthPath`.
  */
 function isBlockedAdminPath(req: Request): boolean {
-  return new URL(req.url).pathname.includes("/api/auth/admin");
+  return isBlockedAdminAuthPath(new URL(req.url).pathname);
 }
 
 export async function GET(req: Request): Promise<Response> {
