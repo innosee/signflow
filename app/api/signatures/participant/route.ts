@@ -100,9 +100,20 @@ export async function POST(req: Request) {
     .where(eq(schema.participants.id, participantId));
 
   if (previous?.signatureUrl && previous.signatureUrl !== url) {
-    await deleteBlob(previous.signatureUrl).catch(() => {
-      // Verwaister Blob ist kein Abbruch-Grund — Cleanup-Job später.
-    });
+    // Nur löschen, wenn keine signatures-Zeile den alten Object-Key mehr als
+    // Snapshot referenziert — sonst zerstört der Re-Upload die Unterschriften
+    // in bereits erstellten (ggf. abgeschlossenen) Nachweisen. Siehe
+    // ausführlicher Kommentar in app/api/signatures/me/route.ts.
+    const [stillReferenced] = await db
+      .select({ url: schema.signatures.signatureUrl })
+      .from(schema.signatures)
+      .where(eq(schema.signatures.signatureUrl, previous.signatureUrl))
+      .limit(1);
+    if (!stillReferenced) {
+      await deleteBlob(previous.signatureUrl).catch(() => {
+        // Verwaister Blob ist kein Abbruch-Grund — Cleanup-Job später.
+      });
+    }
   }
 
   return NextResponse.json({ url });
