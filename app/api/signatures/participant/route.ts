@@ -3,6 +3,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
+import { shouldDeleteReplacedSignatureBlob } from "@/lib/signature-blob-cleanup";
 import { deleteBlob, uploadSignature } from "@/lib/storage";
 
 const MAX_BYTES = 500_000;
@@ -109,7 +110,13 @@ export async function POST(req: Request) {
       .from(schema.signatures)
       .where(eq(schema.signatures.signatureUrl, previous.signatureUrl))
       .limit(1);
-    if (!stillReferenced) {
+    if (
+      shouldDeleteReplacedSignatureBlob({
+        previousUrl: previous.signatureUrl,
+        newUrl: url,
+        isStillReferenced: !!stillReferenced,
+      })
+    ) {
       await deleteBlob(previous.signatureUrl).catch(() => {
         // Verwaister Blob ist kein Abbruch-Grund — Cleanup-Job später.
       });

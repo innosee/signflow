@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
 import { getCurrentSession, isImpersonating } from "@/lib/dal";
+import { shouldDeleteReplacedSignatureBlob } from "@/lib/signature-blob-cleanup";
 import { deleteBlob, uploadSignature } from "@/lib/storage";
 
 const MAX_BYTES = 500_000;
@@ -84,13 +85,20 @@ export async function POST(req: Request) {
     // diesen Snapshots gerendert). Ihn beim Re-Upload zu löschen würde alle
     // bisherigen Unterschriften — auch in bereits abgeschlossenen Nachweisen —
     // zerstören; das sind Beweismittel für die AfA. Deshalb nur löschen, wenn
-    // KEINE Signatur mehr darauf zeigt (echter Waise).
+    // KEINE Signatur mehr darauf zeigt (echter Waise). Entscheid: reine,
+    // unit-getestete shouldDeleteReplacedSignatureBlob().
     const [stillReferenced] = await db
       .select({ url: schema.signatures.signatureUrl })
       .from(schema.signatures)
       .where(eq(schema.signatures.signatureUrl, previous.signatureUrl))
       .limit(1);
-    if (!stillReferenced) {
+    if (
+      shouldDeleteReplacedSignatureBlob({
+        previousUrl: previous.signatureUrl,
+        newUrl: url,
+        isStillReferenced: !!stillReferenced,
+      })
+    ) {
       await deleteBlob(previous.signatureUrl).catch(() => {
         // Verwaister Blob ist kein Abbruch-Grund — Cleanup-Job später.
       });
