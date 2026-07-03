@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { ANW_TONE_BADGE, type AnwTone } from "@/lib/anw-status";
 import { track } from "@/lib/analytics";
+import { buildSearchEventPayload } from "@/lib/analytics-privacy";
 
 import { archiveCourse, setCourseBewilligt, unarchiveCourse } from "./actions";
 import { DeleteCourseButton } from "./delete-course-button";
@@ -45,20 +46,16 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
   const [bedarfstraegerFilter, setBedarfstraegerFilter] = useState("");
 
   // Such-Event entkoppelt vom Tippen: erst ~600 ms nach der letzten Eingabe
-  // feuern (sonst ein Event pro Tastendruck → Analytics-Kontingent). Nur ab
-  // 2 Zeichen. Der Suchstring selbst wird NICHT getrackt: hier wird nach
-  // Teilnehmernamen (Sozialkontext) gesucht, die dürfen nicht ins Analytics-
-  // System. Nur die Länge als grobes Nutzungssignal.
+  // feuern (sonst ein Event pro Tastendruck → Analytics-Kontingent). Payload
+  // kommt aus buildSearchEventPayload (rein + getestet): nur die Länge, nie der
+  // Suchstring selbst — hier wird nach Teilnehmernamen (Sozialkontext) gesucht.
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearch = (value: string) => {
     setQuery(value);
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    const q = value.trim();
-    if (q.length < 2) return;
-    searchTimer.current = setTimeout(
-      () => track("search", { qLength: q.length }),
-      600,
-    );
+    const payload = buildSearchEventPayload(value);
+    if (!payload) return;
+    searchTimer.current = setTimeout(() => track("search", payload), 600);
   };
 
   // Filter-Optionen aus den vorhandenen Zeilen ableiten (eindeutig, alphabetisch)
