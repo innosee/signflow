@@ -26,6 +26,9 @@ export async function makeUser(
     role?: "coach" | "bildungstraeger";
     email?: string;
     name?: string;
+    /** Explizit setzbar für Owner-Tests (Owner = ältester aktiver BT-User). */
+    createdAt?: Date;
+    deletedAt?: Date;
   },
 ) {
   const n = next();
@@ -36,6 +39,8 @@ export async function makeUser(
       role: opts.role ?? "coach",
       email: opts.email ?? `user-${n}@example.com`,
       name: opts.name ?? `User ${n}`,
+      ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
+      ...(opts.deletedAt ? { deletedAt: opts.deletedAt } : {}),
     })
     .returning();
   return row;
@@ -47,8 +52,8 @@ export const makeCoach = (db: TestDb, tenantId: string, email?: string) =>
 export const makeBildungstraeger = (
   db: TestDb,
   tenantId: string,
-  email?: string,
-) => makeUser(db, { tenantId, role: "bildungstraeger", email });
+  opts: { email?: string; createdAt?: Date; deletedAt?: Date } = {},
+) => makeUser(db, { tenantId, role: "bildungstraeger", ...opts });
 
 export async function makeParticipant(
   db: TestDb,
