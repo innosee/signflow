@@ -2,13 +2,11 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
-import {
-  adminAc,
-  userAc,
-} from "better-auth/plugins/admin/access";
+import { userAc } from "better-auth/plugins/admin/access";
 import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { bildungstraegerAc } from "@/lib/auth-access";
 import { sendResetPasswordEmail } from "@/lib/email";
 
 if (!process.env.BETTER_AUTH_SECRET) {
@@ -178,7 +176,7 @@ export const auth = betterAuth({
       defaultRole: "coach",
       adminRoles: ["bildungstraeger"],
       impersonationSessionDuration: 60 * 60, // 1h
-      roles: { bildungstraeger: adminAc, coach: userAc },
+      roles: { bildungstraeger: bildungstraegerAc, coach: userAc },
     }),
     nextCookies(),
   ],
