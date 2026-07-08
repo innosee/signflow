@@ -1130,7 +1130,9 @@ export async function notifyParticipants(
       });
       success++;
     } catch (err) {
-      console.error(`notifyParticipants failed for ${p.email}:`, err);
+      // Keine p.email in Logs — PII gehört nicht in Log-Aggregatoren (Vercel =
+      // US-Verarbeitungsort). participantId reicht zur Diagnose.
+      console.error(`notifyParticipants failed for ${p.participantId}:`, err);
       failedEmails.push(p.email);
     }
   }
