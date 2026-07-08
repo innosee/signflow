@@ -2199,3 +2199,54 @@ export async function signSessionAsCoach(
   revalidatePath(`/coach/courses/${ownedCourseId}`);
   return undefined;
 }
+
+export type UpdateAngabenState =
+  | { ok?: boolean; error?: string }
+  | undefined;
+
+/**
+ * Speichert das freie „Angaben / Begründungen"-Feld der Maßnahme
+ * (`courses.angaben_text`). Der Coach kann es jederzeit füllen, z. B. für einen
+ * genehmigten Urlaubszeitraum des Kunden. Erscheint auf dem Stundennachweis
+ * unter „Ergänzende Angaben" + im PDF. Nach Einreichung/Abschluss gesperrt
+ * (wie correctSessionTopic), damit ein bereits geprüfter Nachweis unverändert
+ * bleibt.
+ */
+export async function updateCourseAngaben(
+  _prev: UpdateAngabenState,
+  formData: FormData,
+): Promise<UpdateAngabenState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const angaben = String(formData.get("angaben") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+  if (angaben.length > 2000) {
+    return { error: "Angaben dürfen höchstens 2000 Zeichen haben." };
+  }
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const [doc] = await db
+    .select({ fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, ownedCourseId))
+    .limit(1);
+  if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
+    return {
+      error:
+        "Dieser Kunde ist bereits abgeschlossen und kann nicht mehr verändert werden.",
+    };
+  }
+
+  await db
+    .update(schema.courses)
+    .set({ angabenText: angaben || null })
+    .where(eq(schema.courses.id, ownedCourseId));
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { ok: true };
+}

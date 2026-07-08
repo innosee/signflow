@@ -116,10 +116,11 @@ export default async function BildungstraegerCoursesPage() {
       avgsStageBadge: isArchived ? null : AVGS_STAGE_BADGE[stage],
       anwLabel: ANW_STATUS_LABEL[anw],
       anwTone: ANW_STATUS_TONE[anw],
-      // Download nur, wenn wirklich gesiegelt (Entscheidung: „fertig" = Siegel).
-      // BT-eigener Endpoint — der gespeicherte pdfUrl zeigt auf den coach-
-      // scoped Endpoint und würde den BT abweisen.
-      anwPdfUrl: sealed ? `/api/bildungstraeger/courses/${c.id}/anw-pdf` : null,
+      // Download IMMER anbieten (BT-eigener Endpoint) — der BT darf die ANW
+      // auch vor der Freigabe als PDF prüfen. `anwSealed` steuert nur den
+      // „(Entwurf)"-Hinweis, kein Gate mehr.
+      anwPdfUrl: `/api/bildungstraeger/courses/${c.id}/anw-pdf`,
+      anwSealed: sealed,
       afaSubmitted: c.afaStatus === "submitted",
       berStatus:
         c.berStatus === "submitted"

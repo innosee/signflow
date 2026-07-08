@@ -64,12 +64,10 @@ export async function GET(
   if (!row) {
     return NextResponse.json({ error: "Kunde nicht gefunden." }, { status: 404 });
   }
-  if (row.fesStatus !== "completed") {
-    return NextResponse.json(
-      { error: "Stundennachweis ist noch nicht gesiegelt." },
-      { status: 409 },
-    );
-  }
+  // Kein Abschluss-Gate: der Bildungsträger darf die ANW jederzeit als PDF
+  // ziehen (auch vor der Freigabe), z. B. um sie vor dem Abschließen zu
+  // prüfen. Das PDF rendert den aktuellen Stand. Zugriff bleibt tenant-scoped
+  // (siehe innerJoin auf users.tenant_id oben).
 
   const h = await headers();
   const hostHeader = h.get("host");
