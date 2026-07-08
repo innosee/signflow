@@ -30,6 +30,24 @@ export async function POST(req: Request) {
     );
   }
 
+  // Server-seitiger Fail-Closed-Riegel: dieser Endpoint kann nicht sehen, ob
+  // der übergebene Text tatsächlich anonymisiert wurde. Wenn der IONOS-Proxy
+  // in Production gar nicht konfiguriert ist, KANN kein Client anonymisiert
+  // haben — dann verweigern wir den Azure-Call, statt Klartext zu riskieren.
+  // (Gleiche Bedingung wie der Token-Endpoint, s. /api/checker/anonymize-token.)
+  if (
+    process.env.NODE_ENV === "production" &&
+    (!process.env.IONOS_PROXY_URL || !process.env.IONOS_PROXY_SHARED_SECRET)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Der Prüf-Dienst ist vorübergehend nicht verfügbar (Anonymisierung nicht konfiguriert).",
+      },
+      { status: 503 },
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();

@@ -41,9 +41,15 @@ type ProxyResponse = {
  * Holt einen kurzlebigen HMAC-Token aus Vercel und ruft damit den IONOS-Proxy
  * direkt aus dem Browser auf. Vercel sieht den Rohtext NICHT.
  *
- * Wenn der Proxy noch nicht konfiguriert ist (503 vom Token-Endpoint), gibt
- * `bypassed: true` zurück und der Aufrufer entscheidet, ob er weitermacht
- * (Dev) oder abbricht (Prod-Strict).
+ * Wenn der Proxy noch nicht konfiguriert ist (503 vom Token-Endpoint):
+ *  - **Production: fail-closed.** Es wird geworfen, statt Klartext an Azure zu
+ *    schicken. Ein vergessener/rotierter `IONOS_PROXY_*`-Env-Var darf niemals
+ *    dazu führen, dass unanonymisierte Sozialdaten das Land verlassen.
+ *  - **Nicht-Production (Dev/Preview): Bypass** mit `bypassed: true`, damit man
+ *    den Checker ohne laufenden Proxy lokal ausprobieren kann.
+ *
+ * `NODE_ENV` wird von Next.js zur Build-Zeit auch ins Client-Bundle inlined,
+ * die Unterscheidung funktioniert also im Browser.
  */
 export async function anonymize(input: CheckerInput): Promise<AnonResult> {
   let tokenRes: Response;
@@ -62,7 +68,16 @@ export async function anonymize(input: CheckerInput): Promise<AnonResult> {
     throw new AuthRequiredError();
   }
   if (tokenRes.status === 503) {
-    // Proxy nicht konfiguriert — Bypass mit Klartext
+    // Proxy nicht konfiguriert. In Production ist das ein harter Abbruch:
+    // lieber kein Check als Klartext an Azure. Nur außerhalb von Production
+    // fällt der Flow bewusst auf einen Klartext-Bypass zurück.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "Anonymisierung ist derzeit nicht verfügbar — die Prüfung wurde " +
+          "abgebrochen, damit kein Klartext übertragen wird. Bitte später " +
+          "erneut versuchen oder den Support kontaktieren.",
+      );
+    }
     return {
       anonymized: input,
       entities: [],

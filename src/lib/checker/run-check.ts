@@ -4,9 +4,11 @@ import type { CheckerInput, CheckerResult } from "./types";
 /**
  * Ruft den serverseitigen Azure-Check auf.
  *
- * Hinweis: Bis der IONOS-Anonymisierungs-Proxy live ist, sendet diese Funktion
- * den Rohtext direkt an Azure OpenAI EU. Für Production muss `input` vorher
- * über `anon.signflow.coach` pseudonymisiert werden — siehe
+ * WICHTIG: `input` muss bereits pseudonymisiert sein. Der Aufrufer schickt
+ * ausschließlich `anonResult.anonymized` (aus `anonymize()`) hierher — nie
+ * Rohtext. In Production ist doppelt abgesichert: `anonymize()` wirft, wenn der
+ * IONOS-Proxy fehlt (fail-closed), und `/api/checker/check` verweigert den
+ * Azure-Call serverseitig, wenn der Proxy nicht konfiguriert ist. Siehe
  * docs/abschlussbericht-checker.md §2.
  */
 export async function runCheck(input: CheckerInput): Promise<CheckerResult> {
