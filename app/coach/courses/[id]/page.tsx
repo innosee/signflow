@@ -553,9 +553,10 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               <h2 className="text-lg font-semibold">Abschluss</h2>
               <p className="mt-1 text-sm text-zinc-600">
                 Wenn alle Termine signiert sind, sende dem Teilnehmer die
-                Vorschau. Nach dessen Freigabe schließt du den Nachweis ab
-                (einfache elektronische Signatur) und übergibst ihn an deinen
-                Bildungsträger zur Übermittlung an die Agentur für Arbeit.
+                Vorschau. Nach dessen Freigabe reichst du die Liste beim
+                Bildungsträger zur Prüfung ein. Mit seiner Freigabe schließt der
+                Bildungsträger den Nachweis ab und übermittelt ihn an die
+                Agentur für Arbeit.
               </p>
             </div>
             {participants.length > 0 && (
