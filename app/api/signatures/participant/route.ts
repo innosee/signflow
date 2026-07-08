@@ -3,6 +3,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
+import { shouldDeleteReplacedSignatureBlob } from "@/lib/signature-blob-cleanup";
 import { deleteBlob, uploadSignature } from "@/lib/storage";
 
 const MAX_BYTES = 500_000;
@@ -100,9 +101,26 @@ export async function POST(req: Request) {
     .where(eq(schema.participants.id, participantId));
 
   if (previous?.signatureUrl && previous.signatureUrl !== url) {
-    await deleteBlob(previous.signatureUrl).catch(() => {
-      // Verwaister Blob ist kein Abbruch-Grund — Cleanup-Job später.
-    });
+    // Nur löschen, wenn keine signatures-Zeile den alten Object-Key mehr als
+    // Snapshot referenziert — sonst zerstört der Re-Upload die Unterschriften
+    // in bereits erstellten (ggf. abgeschlossenen) Nachweisen. Siehe
+    // ausführlicher Kommentar in app/api/signatures/me/route.ts.
+    const [stillReferenced] = await db
+      .select({ url: schema.signatures.signatureUrl })
+      .from(schema.signatures)
+      .where(eq(schema.signatures.signatureUrl, previous.signatureUrl))
+      .limit(1);
+    if (
+      shouldDeleteReplacedSignatureBlob({
+        previousUrl: previous.signatureUrl,
+        newUrl: url,
+        isStillReferenced: !!stillReferenced,
+      })
+    ) {
+      await deleteBlob(previous.signatureUrl).catch(() => {
+        // Verwaister Blob ist kein Abbruch-Grund — Cleanup-Job später.
+      });
+    }
   }
 
   return NextResponse.json({ url });
