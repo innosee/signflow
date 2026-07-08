@@ -34,6 +34,7 @@ export type CockpitRow = {
   anwLabel: string;
   anwTone: AnwTone;
   anwPdfUrl: string | null;
+  anwSealed: boolean;
   afaSubmitted: boolean;
   // Abschlussbericht
   berStatus: "missing" | "draft" | "submitted";
@@ -205,19 +206,20 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
 
                     {/* Downloads für den Versand ans Jobcenter / die AfA */}
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                      {c.anwPdfUrl ? (
+                      {c.anwPdfUrl && (
                         <a
                           href={c.anwPdfUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-medium text-zinc-900 underline-offset-2 hover:underline"
+                          title={
+                            c.anwSealed
+                              ? "Anwesenheitsnachweis als PDF"
+                              : "Anwesenheitsnachweis als PDF — Entwurfsstand, noch nicht freigegeben"
+                          }
                         >
-                          ↓ ANW-PDF (gesiegelt)
+                          ↓ ANW-PDF{!c.anwSealed && " (Entwurf)"}
                         </a>
-                      ) : (
-                        <span className="text-zinc-400">
-                          ANW-PDF erst nach Siegel
-                        </span>
                       )}
                       {c.berStatus === "submitted" && c.berId ? (
                         <a

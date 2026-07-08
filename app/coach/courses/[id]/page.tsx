@@ -13,6 +13,7 @@ import { wochenUnter2 } from "@/lib/termine-pro-woche";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ReviewThread } from "@/components/review-thread";
 
+import { AngabenEditor } from "./angaben-editor";
 import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
 import { CorrectTopicButton } from "./correct-topic-button";
@@ -62,6 +63,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       endDate: schema.courses.endDate,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
       begruendungText: schema.courses.begruendungText,
+      angabenText: schema.courses.angabenText,
       anwCheckPassedAt: schema.courses.anwCheckPassedAt,
       abgeschlossenAt: schema.courses.abgeschlossenAt,
       reviewStatus: schema.courses.reviewStatus,
@@ -527,6 +529,20 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             })}
           </ul>
         )}
+      </section>
+
+      {/* Freies Angaben-/Begründungsfeld — vom Coach jederzeit befüllbar,
+          erscheint auf dem Anwesenheitsnachweis + PDF. */}
+      <section className="rounded-xl border border-zinc-300 bg-white px-6 py-4">
+        <AngabenEditor
+          courseId={course.id}
+          angabenText={course.angabenText}
+          disabled={
+            impersonating ||
+            finalDoc?.fesStatus === "sent" ||
+            finalDoc?.fesStatus === "completed"
+          }
+        />
       </section>
 
       {/* Abschluss-Workflow (Gates → FES): jeder Team-Coach darf ihn auslösen. */}

@@ -506,6 +506,14 @@ export const courses = pgTable("courses", {
     .default(false),
   begruendungText: text("begruendung_text"),
   /**
+   * Freies Angaben-/Begründungsfeld, das der Coach jederzeit während der
+   * Maßnahme füllen kann (z. B. genehmigter Urlaubszeitraum des Kunden,
+   * sonstige Anmerkungen). Erscheint auf dem Stundennachweis unter
+   * „Ergänzende Angaben" + im PDF. Bewusst getrennt von `begruendungText`,
+   * das an die AVGS-Gate-Flags hängt.
+   */
+  angabenText: text("angaben_text"),
+  /**
    * FES-Gate (1/2): Coach-Klick „Maßnahme als abgeschlossen markieren".
    * Der Coach bestätigt damit aktiv, dass keine weiteren Sessions mehr
    * kommen. Bei jeder Session-Änderung (create/update/reopen) wird das
