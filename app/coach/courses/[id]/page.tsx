@@ -17,6 +17,7 @@ import { AngabenEditor } from "./angaben-editor";
 import { AnwCheckButton } from "./anw-check-button";
 import { CoachSignForm } from "./coach-sign-form";
 import { CorrectTopicButton } from "./correct-topic-button";
+import { DeleteSessionButton } from "./delete-session-button";
 import { MarkAbgeschlossenButton } from "./mark-abgeschlossen-button";
 import { NotifyParticipantsButton } from "./notify-button";
 import { QrHandoverButton } from "./qr-handover-button";
@@ -493,6 +494,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                           <ReopenSessionButton
                             courseId={course.id}
                             sessionId={s.id}
+                          />
+                        )}
+                        {canManage && (
+                          <DeleteSessionButton
+                            courseId={course.id}
+                            sessionId={s.id}
+                            sessionDate={s.sessionDate}
+                            hasSignatures={coachSigned || tnSigned > 0}
                           />
                         )}
                       </div>
