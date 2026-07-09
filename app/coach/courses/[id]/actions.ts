@@ -795,6 +795,111 @@ export async function reopenSession(
   );
 }
 
+export type DeleteSessionState = { error?: string } | undefined;
+
+/**
+ * Löscht einen angelegten Termin (Soft-Delete via `sessions.deletedAt`), z. B.
+ * einen versehentlich oder doppelt angelegten. Konsistent zu `reopenSession`:
+ *
+ *   - Geblockt, wenn der Kurs bereits versiegelt ist (`fesStatus` sent/completed)
+ *     — dann ist die Maßnahme rechtlich unveränderbar.
+ *   - War der Termin bereits signiert, werden seine Signaturen gelöscht UND die
+ *     Teilnehmer-Freigaben des Kurses verworfen (das Gesamtdokument ändert sich,
+ *     eine alte Freigabe wäre nicht mehr aussagekräftig) — wie beim Reopen.
+ *   - Die inhaltsabhängigen FES-Gates (Abschluss/ANW/BT-Prüfung) werden immer
+ *     zurückgesetzt, weil das Löschen den Stand der Maßnahme ändert.
+ *
+ * Soft-Delete (kein harter Delete), damit der Datensatz für Audit/Forensik
+ * erhalten bleibt; alle Lese-Queries filtern ohnehin auf `isNull(deletedAt)`.
+ */
+export async function deleteSession(
+  _prev: DeleteSessionState,
+  formData: FormData,
+): Promise<DeleteSessionState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  if (!courseId || !sessionId) return { error: "Kurs oder Termin fehlt." };
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Versiegelter Kurs ist rechtlich unveränderbar — wie bei Reopen/Korrektur.
+  const [doc] = await db
+    .select({ fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, ownedCourseId))
+    .limit(1);
+  if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
+    return {
+      error:
+        "Dieser Kunde ist bereits abgeschlossen und kann rechtlich nicht mehr verändert werden.",
+    };
+  }
+
+  const [sess] = await db
+    .select({ id: schema.sessions.id })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Termin nicht gefunden." };
+
+  const [existingSig] = await db
+    .select({ id: schema.signatures.id })
+    .from(schema.signatures)
+    .where(eq(schema.signatures.sessionId, sessionId))
+    .limit(1);
+  const wasSigned = Boolean(existingSig);
+
+  try {
+    await db.transaction(async (tx) => {
+      // War der Termin signiert: Signaturen weg + Kurs-Freigaben verwerfen
+      // (das Gesamtdokument ändert sich) — spiegelt reopenSession.
+      if (wasSigned) {
+        await tx
+          .delete(schema.signatures)
+          .where(eq(schema.signatures.sessionId, sessionId));
+        await tx
+          .delete(schema.participantApprovals)
+          .where(eq(schema.participantApprovals.courseId, ownedCourseId));
+      }
+      // Soft-Delete des Termins.
+      await tx
+        .update(schema.sessions)
+        .set({ deletedAt: new Date() })
+        .where(eq(schema.sessions.id, sessionId));
+      // Stand der Maßnahme hat sich geändert → Gates neu.
+      await resetFesGates(tx, ownedCourseId);
+      await logAudit(
+        {
+          actorType: "coach",
+          actorId: coachId,
+          action: "session.deleted",
+          resourceType: "session",
+          resourceId: sessionId,
+          metadata: { courseId: ownedCourseId, wasSigned },
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Termin konnte nicht gelöscht werden (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return undefined;
+}
+
 export type CorrectTopicState = { error?: string; success?: boolean } | undefined;
 
 /**

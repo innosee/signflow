@@ -30,6 +30,7 @@ export type AuditAction =
   | "course.bewilligt.unset"
   | "anw.soft_flags.acknowledged"
   | "session.topic_corrected"
+  | "session.deleted"
   | "impersonation.start"
   | "impersonation.end"
   | "checker.report_submitted"
