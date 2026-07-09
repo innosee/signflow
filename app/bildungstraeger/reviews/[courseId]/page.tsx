@@ -204,6 +204,7 @@ export default async function BildungstraegerReviewDetailPage({
         {sheet ? (
           <div className="overflow-x-auto rounded-xl border border-zinc-300 bg-zinc-100 p-4">
             <Stundennachweis
+              draft={sheet.draft}
               course={sheet.course}
               bedarfstraeger={sheet.bedarfstraeger}
               coach={sheet.coach}

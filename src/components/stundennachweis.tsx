@@ -18,6 +18,14 @@ import {
 
 export type StundennachweisSheet = {
   /**
+   * True, solange der Nachweis noch nicht abgeschlossen/freigegeben ist
+   * (`final_documents.fesStatus != 'completed'`). Blendet ein dezentes
+   * „Entwurf, noch nicht freigegeben"-Wasserzeichen über das Sheet, damit
+   * niemand eine Vor-Freigabe-Version final an die AfA schickt. Verschwindet
+   * automatisch, sobald der Bildungsträger freigibt.
+   */
+  draft?: boolean;
+  /**
    * Bildungsträger-Branding (tenant-scoped via `getBranding`). Logo im Header;
    * fehlt ein Logo, wird der `name` (Tenant-/BT-Name) als Text-Fallback
    * geschrieben. Ist beides leer, bleibt der Header wie vorher.
@@ -121,6 +129,7 @@ function formatDateTime(iso: string | null): string {
 export function Stundennachweis(props: StundennachweisSheet) {
   const { course, bedarfstraeger, coach, participant, sessions, audit, branding } =
     props;
+  const draft = props.draft ?? false;
 
   // Kompetenzteams: sind mehrere Coaches im Spiel, wird der Coach PRO Termin
   // ausgewiesen (statt eines globalen Coaches). Bei genau einem Coach bleibt
@@ -146,7 +155,12 @@ export function Stundennachweis(props: StundennachweisSheet) {
       {/* lang="de" aktiviert die deutsche Silbentrennung (hyphens: auto) für
           die Fließtext-Spalten — bricht lange Wörter an Silbengrenzen statt
           hart mitten im Wort. */}
-      <article className="sheet" lang="de">
+      <article className={`sheet${draft ? " sheet--draft" : ""}`} lang="de">
+        {draft ? (
+          <div className="sheet-watermark" aria-hidden="true">
+            <span>Entwurf, noch nicht freigegeben</span>
+          </div>
+        ) : null}
         <header className="sheet-header">
           <div className="sheet-title">
             <h1>Stundennachweis</h1>
@@ -485,6 +499,7 @@ function formatUe(value: string): string {
 // beidseits) — Puppeteer nutzt später `@page { margin: 15mm }` direkt aus.
 const printCss = `
   .sheet {
+    position: relative;
     font-family: "Helvetica Neue", Arial, sans-serif;
     color: #111;
     max-width: 180mm;
@@ -499,6 +514,31 @@ const printCss = `
        Print-Engines, das CSS-Color treu zu rendern. */
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+  /* Entwurfs-Wasserzeichen: dezent, diagonal gekachelt über das ganze Sheet
+     (auch über Seitenumbrüche im PDF, da als tilendes Hintergrundbild). Der
+     SVG-Text nutzt reine Latin-Zeichen — der Vercel-Chromium-Font kann keine
+     Sonderzeichen (siehe Memory pdf_no_unicode_symbols). Liegt mit niedriger
+     Deckkraft über dem Inhalt, pointer-events:none stört das Signieren nicht. */
+  .sheet-watermark {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    background-repeat: repeat;
+    background-position: center;
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='340'%20height='230'%3E%3Ctext%20x='170'%20y='115'%20font-family='Helvetica,Arial,sans-serif'%20font-size='18'%20font-weight='700'%20fill='%239aa3ad'%20fill-opacity='0.20'%20text-anchor='middle'%20transform='rotate(-28%20170%20115)'%3EEntwurf,%20noch%20nicht%20freigegeben%3C/text%3E%3C/svg%3E");
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  /* Text nur für Screenreader — sichtbar ist das getilte Hintergrundbild. */
+  .sheet-watermark span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
   .sheet h1 { font-size: 18pt; margin: 0 0 2mm 0; }
   .sheet h2 {

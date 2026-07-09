@@ -90,6 +90,18 @@ export async function loadStundennachweisSheet(params: {
     .limit(1);
   if (!enrollment) return null;
 
+  // Entwurfs-Status: solange der Nachweis nicht abgeschlossen ist
+  // (`final_documents.fesStatus != 'completed'` bzw. gar kein final_document),
+  // trägt das Sheet ein „Entwurf, noch nicht freigegeben"-Wasserzeichen. Das
+  // verhindert, dass eine Vor-Freigabe-Version versehentlich final an die AfA
+  // geht. Im Bridge-Modus ist 'completed' = abgeschlossen (kein echtes Siegel).
+  const [finalDoc] = await db
+    .select({ fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, params.courseId))
+    .limit(1);
+  const draft = finalDoc?.fesStatus !== "completed";
+
   // 1:1: Alle nicht-gelöschten Termine des Kurses gehören dem einen Kunden.
   // Kompetenzteams: pro Termin den zugewiesenen Coach-Namen mitladen (Fallback
   // = Lead-Coach für Alt-Termine ohne Zuweisung).
@@ -230,6 +242,7 @@ export async function loadStundennachweisSheet(params: {
   auditEntries.sort((a, b) => a.at.localeCompare(b.at));
 
   return {
+    draft,
     branding: { logoUrl: branding.logoUrl, name: ctx.tenantName },
     course: {
       title: ctx.title,
