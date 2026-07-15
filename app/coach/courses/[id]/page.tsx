@@ -487,6 +487,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                             courseId={course.id}
                             sessionId={s.id}
                             topic={s.topic}
+                            modus={s.modus}
                           />
                         )}
                         {canManage && (coachSigned || tnSigned > 0) && (
