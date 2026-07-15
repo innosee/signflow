@@ -15,6 +15,7 @@ import { withAdvisoryHints } from "@/lib/checker/hints";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import {
   fingerprintApplied,
+  markCarriedOver,
   markPreviouslyAddressed,
 } from "@/lib/checker/previously-addressed";
 import { inputsEqual } from "@/lib/checker/snapshot";
@@ -455,9 +456,16 @@ export function CheckerForm({ userId }: { userId: string }) {
       return;
     }
     const reverseMapped = reverseMap(anonResult.entities, azureResult);
-    const mappedResult = markPreviouslyAddressed(
-      reverseMapped,
-      appliedFingerprints,
+    // Konvergenz: erst „sitzt auf übernommener Umformulierung" markieren,
+    // dann Nachschieber in unverändertem Text (markCarriedOver). Beide
+    // Marker zählen in der Sidebar als erledigt — nach dem Übernehmen der
+    // Vorschläge konvergiert der Re-Check auf grün, statt endlos „Neues"
+    // zu zeigen. lastCheckedInput/lastCheckIds sind hier noch die Werte
+    // der VORHERIGEN Runde (werden erst unten überschrieben).
+    const mappedResult = markCarriedOver(
+      markPreviouslyAddressed(reverseMapped, appliedFingerprints),
+      lastCheckedInput,
+      lastCheckIds,
     );
     updateStep("validate", {
       state: "success",

@@ -251,6 +251,18 @@ export type Violation = {
    */
   previouslyAddressed?: boolean;
   /**
+   * True wenn diese Stelle in unverändertem, bereits geprüftem Text liegt,
+   * die vorherige Prüfung sie aber NICHT gemeldet hat. Das ist der
+   * „Nachschieber"-Effekt: der Prompt deckelt Findings (max 5 / 2 soft),
+   * nach jeder Korrektur rückt die nächst-schwächere Ebene nach — für den
+   * Coach wirkt das wie eine endlose Schleife. Konvergenz-Regel: Was die
+   * letzte Prüfung im selben Text nicht bemängelt hat, gilt als erledigt
+   * (Klappblock), nicht als offen. Nur soft_flags — hard_blocks (Art-9/
+   * Gesundheit) erscheinen IMMER, egal was die Vorrunde sagte. Wird
+   * clientseitig nach `runCheck` gesetzt, kommt nicht von Azure.
+   */
+  carriedOver?: boolean;
+  /**
    * True für deterministisch erzeugte „inhaltliche Hinweise" (zu dünner/
    * floskelhafter Abschnitt, fehlender Pflichtbaustein) — NICHT vom Modell,
    * sondern client-seitig aus Input + Result abgeleitet (siehe

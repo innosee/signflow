@@ -62,6 +62,11 @@ export function ReviewSidebar({
     // KI hat ihre eigene schon übernommene Umformulierung erneut markiert →
     // gilt als erledigt (kein Handlungsbedarf, blockiert nicht).
     v.previouslyAddressed ||
+    // Konvergenz-Regel: Stelle lag unverändert schon in der letzten Prüfung
+    // und wurde damals nicht gemeldet (Nachschieber des Findings-Caps) →
+    // erledigt, damit Re-Checks auf grün konvergieren statt endlos
+    // „Neues" zu zeigen. Betrifft nie hard_blocks (siehe markCarriedOver).
+    v.carriedOver ||
     (v.severity === "soft_flag"
       ? acceptedIds.has(v.id)
       : acceptedIds.has(v.id) || isHardBlockDismissed(v.id, dismissReasons));
@@ -282,7 +287,9 @@ function ResolvedSection({
               ? "Vorschlag übernommen / abgehakt"
               : dismissed
                 ? `Fehlalarm: ${(dismissReasons[v.id] ?? "").trim()}`
-                : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
+                : v.carriedOver
+                  ? "Bereits geprüfter Text — die letzte Prüfung hatte hier nichts bemängelt (optionaler Zusatz-Tipp)"
+                  : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
             // Strukturelle Hinweise haben kein Zitat → Regel-Text als Titel.
             const title = v.structural ? v.rule : `„${v.quote}“`;
             return (
