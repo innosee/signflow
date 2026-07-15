@@ -162,7 +162,7 @@ ${mustHaveList}
 
 ### C.1. Maßnahme-Inhalts-Konsistenz
 
-Prüfe, ob die im Bericht beschriebenen Inhalte zur gewählten Maßnahme **${massnahmeTyp}** passen.
+Prüfe, ob die im Bericht beschriebenen Inhalte zur **tatsächlich gewählten** Maßnahme **${massnahmeTyp}** passen.
 
 **Erwartete Schwerpunkte pro Maßnahme:**
 - **EKC** (Karriere-Coaching): Standortbestimmung, Bewerbungsstrategie, Vermittlung in Anstellung, Stellenmarkt-Analyse, Selbstmarketing
@@ -170,14 +170,20 @@ Prüfe, ob die im Bericht beschriebenen Inhalte zur gewählten Maßnahme **${mas
 - **EGC** (Gründungs-Coaching): Geschäfts-Idee, Businessplan, Markt-Analyse, Finanzierung, Rechtsform, Gewerbeanmeldung, Tragfähigkeit — TN strebt **Selbständigkeit** an, NICHT Anstellung
 - **ESCA** (Ausbildungs-Coaching): Lernziele, Ausbildungs-Etappen, Prüfungsvorbereitung, Konflikte im Ausbildungs-Verhältnis — TN ist in **laufender Ausbildung**
 
-**Mismatch-Erkennung:** wenn der Bericht **überwiegend** (nicht nur am Rand erwähnt) Themen einer ANDEREN Maßnahme beschreibt, setze \`massnahmeMismatch.detected = true\` und gib in \`massnahmeMismatch.hint\` einen sachlichen Hinweis: welche Themen dominieren, zu welcher Maßnahme die eher passen würden, und ein Lösungs-Vorschlag (Maßnahmetyp korrigieren ODER Bericht-Inhalt auf den passenden Fokus umstellen).
+**Entscheidungs-Regel — strikt in dieser Reihenfolge:**
 
-**Beispiele:**
-- EKC ausgewählt, Bericht beschreibt überwiegend Businessplan/Liquiditätsplanung/Tragfähigkeit/Gewerbeanmeldung → \`detected=true\`, hint = „Bericht beschreibt überwiegend Gründungs-Themen, gewählter Maßnahmetyp ist aber EKC (Karriere-Coaching). Entweder Maßnahmetyp auf EGC korrigieren oder Bericht inhaltlich auf Karriere-/Bewerbungs-Fokus ausrichten."
-- EGC ausgewählt, Bericht beschreibt überwiegend Bewerbungs-Strategien für Anstellung → \`detected=true\`
-- EKC ausgewählt, Bericht streift Selbständigkeit am Rand (z.B. „TN überlegt langfristig auch Gründung") → \`detected=false\` (nur erwähnt, nicht dominant)
+1. Lies den Bericht-Inhalt.
+2. Welches der vier Schwerpunkt-Profile passt **am besten** zum Bericht?
+3. Wenn das beste Profil = **${massnahmeTyp}** (also: die gewählte Maßnahme passt zum Bericht) → \`detected=false\`, \`hint=""\`. **Das ist der häufige Normalfall — nicht flaggen.**
+4. Nur wenn das beste Profil eine **andere** Maßnahme als ${massnahmeTyp} ist UND der Bericht **überwiegend** (nicht nur am Rand) Themen jener anderen Maßnahme beschreibt → \`detected=true\`.
 
-**Konservativ sein:** im Zweifel \`detected=false\`. Wir wollen Coaches nicht für jedes themen-grenzwertige Wort flaggen. Nur wenn ein neutraler Außenstehender klar sagen würde „das ist eigentlich ein anderer Maßnahme-Bericht".
+**Hint-Schablone bei detected=true** (Slots in eckigen Klammern für den vorliegenden Bericht ausfüllen, KEIN Beispiel-Wortlaut blind kopieren):
+
+> „Bericht beschreibt überwiegend [konkrete Themen aus dem Bericht], gewählter Maßnahmetyp ist aber **${massnahmeTyp}**. Inhaltlich passt das eher zu [passende andere Maßnahme]. Entweder Maßnahmetyp auf [passende Maßnahme] korrigieren oder Bericht inhaltlich auf [Fokus der gewählten Maßnahme ${massnahmeTyp}] ausrichten."
+
+**Konservativ sein:** im Zweifel \`detected=false\`. Themen-Streifungen am Rand (z.B. „TN überlegt langfristig auch Gründung" bei EKC) sind KEIN Mismatch. Nur dominante, durchgehende Themen-Verschiebungen flaggen.
+
+**Anti-Anker-Regel:** Der \`hint\` MUSS den tatsächlich gewählten Maßnahmetyp **${massnahmeTyp}** wörtlich enthalten. Ein \`hint\`, der einen anderen Typ als „gewählt" bezeichnet, ist immer falsch und darf nicht ausgegeben werden.
 
 Wenn kein Mismatch: \`detected=false\`, \`hint=""\`.
 
