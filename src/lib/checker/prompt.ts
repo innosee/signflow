@@ -162,7 +162,7 @@ ${mustHaveList}
 
 ### C.1. Maßnahme-Inhalts-Konsistenz
 
-Prüfe, ob die im Bericht beschriebenen Inhalte zur gewählten Maßnahme **${massnahmeTyp}** passen.
+Prüfe, ob die im Bericht beschriebenen Inhalte zur **tatsächlich gewählten** Maßnahme **${massnahmeTyp}** passen.
 
 **Erwartete Schwerpunkte pro Maßnahme:**
 - **EKC** (Karriere-Coaching): Standortbestimmung, Bewerbungsstrategie, Vermittlung in Anstellung, Stellenmarkt-Analyse, Selbstmarketing
@@ -170,14 +170,20 @@ Prüfe, ob die im Bericht beschriebenen Inhalte zur gewählten Maßnahme **${mas
 - **EGC** (Gründungs-Coaching): Geschäfts-Idee, Businessplan, Markt-Analyse, Finanzierung, Rechtsform, Gewerbeanmeldung, Tragfähigkeit — TN strebt **Selbständigkeit** an, NICHT Anstellung
 - **ESCA** (Ausbildungs-Coaching): Lernziele, Ausbildungs-Etappen, Prüfungsvorbereitung, Konflikte im Ausbildungs-Verhältnis — TN ist in **laufender Ausbildung**
 
-**Mismatch-Erkennung:** wenn der Bericht **überwiegend** (nicht nur am Rand erwähnt) Themen einer ANDEREN Maßnahme beschreibt, setze \`massnahmeMismatch.detected = true\` und gib in \`massnahmeMismatch.hint\` einen sachlichen Hinweis: welche Themen dominieren, zu welcher Maßnahme die eher passen würden, und ein Lösungs-Vorschlag (Maßnahmetyp korrigieren ODER Bericht-Inhalt auf den passenden Fokus umstellen).
+**Entscheidungs-Regel — strikt in dieser Reihenfolge:**
 
-**Beispiele:**
-- EKC ausgewählt, Bericht beschreibt überwiegend Businessplan/Liquiditätsplanung/Tragfähigkeit/Gewerbeanmeldung → \`detected=true\`, hint = „Bericht beschreibt überwiegend Gründungs-Themen, gewählter Maßnahmetyp ist aber EKC (Karriere-Coaching). Entweder Maßnahmetyp auf EGC korrigieren oder Bericht inhaltlich auf Karriere-/Bewerbungs-Fokus ausrichten."
-- EGC ausgewählt, Bericht beschreibt überwiegend Bewerbungs-Strategien für Anstellung → \`detected=true\`
-- EKC ausgewählt, Bericht streift Selbständigkeit am Rand (z.B. „TN überlegt langfristig auch Gründung") → \`detected=false\` (nur erwähnt, nicht dominant)
+1. Lies den Bericht-Inhalt.
+2. Welches der vier Schwerpunkt-Profile passt **am besten** zum Bericht?
+3. Wenn das beste Profil = **${massnahmeTyp}** (also: die gewählte Maßnahme passt zum Bericht) → \`detected=false\`, \`hint=""\`. **Das ist der häufige Normalfall — nicht flaggen.**
+4. Nur wenn das beste Profil eine **andere** Maßnahme als ${massnahmeTyp} ist UND der Bericht **überwiegend** (nicht nur am Rand) Themen jener anderen Maßnahme beschreibt → \`detected=true\`.
 
-**Konservativ sein:** im Zweifel \`detected=false\`. Wir wollen Coaches nicht für jedes themen-grenzwertige Wort flaggen. Nur wenn ein neutraler Außenstehender klar sagen würde „das ist eigentlich ein anderer Maßnahme-Bericht".
+**Hint-Schablone bei detected=true** (Slots in eckigen Klammern für den vorliegenden Bericht ausfüllen, KEIN Beispiel-Wortlaut blind kopieren):
+
+> „Bericht beschreibt überwiegend [konkrete Themen aus dem Bericht], gewählter Maßnahmetyp ist aber **${massnahmeTyp}**. Inhaltlich passt das eher zu [passende andere Maßnahme]. Entweder Maßnahmetyp auf [passende Maßnahme] korrigieren oder Bericht inhaltlich auf [Fokus der gewählten Maßnahme ${massnahmeTyp}] ausrichten."
+
+**Konservativ sein:** im Zweifel \`detected=false\`. Themen-Streifungen am Rand (z.B. „TN überlegt langfristig auch Gründung" bei EKC) sind KEIN Mismatch. Nur dominante, durchgehende Themen-Verschiebungen flaggen.
+
+**Anti-Anker-Regel:** Der \`hint\` MUSS den tatsächlich gewählten Maßnahmetyp **${massnahmeTyp}** wörtlich enthalten. Ein \`hint\`, der einen anderen Typ als „gewählt" bezeichnet, ist immer falsch und darf nicht ausgegeben werden.
 
 Wenn kein Mismatch: \`detected=false\`, \`hint=""\`.
 
@@ -226,7 +232,7 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
       "section": "teilnahme" | "ablauf" | "fazit",
       "quote": "exaktes Zitat aus dem Bericht — BUCHSTABENGETREU aus dem Abschnitt kopiert, KEINE Kürzung mit … oder ..., KEINE Paraphrase, KEINE hinzugefügten Satzzeichen. Maximum ein Satz pro Zitat; bei langen Sätzen einen kürzeren, aber exakt im Text vorhandenen Ausschnitt wählen",
       "rule": "kurze Benennung der Regel (z.B. 'Diagnosen unzulässig')",
-      "suggestion": "konkrete Umformulierung nach erango-Standard: wohlwollend, ressourcenorientiert, ohne verbotene Begriffe — UND selbst keine neuen Regelverstöße"
+      "suggestion": "fertiger ERSATZTEXT, der das quote wörtlich ersetzt (siehe 'KRITISCH: Suggestion = Ersatztext'): Berichtssprache, 3. Person, keine Meta-Ratschläge — UND selbst keine neuen Regelverstöße"
     }
   ],
   "tonalityFeedback": "optional: nur bei klarem Gesamtmuster, sonst leer/weglassen",
@@ -254,6 +260,23 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
 - "Mobbing am vorherigen Arbeitsplatz" → "konfliktbehaftetes Vorbeschäftigungsverhältnis"
 
 **Merksatz:** Schreib den Bericht so, dass der TN ihn lesen kann ohne sich angegriffen zu fühlen, und der Prüfer ihn lesen kann ohne eine Kürzung der Mittel zu begründen.
+
+## KRITISCH: Suggestion = Ersatztext, KEIN Ratschlag
+
+Die \`suggestion\` ersetzt das \`quote\` beim Klick auf „Im Text übernehmen" **wörtlich** im Bericht. Sie muss deshalb ein fertiger Berichtssatz sein: gleiche Erzählperspektive (3. Person), gleiche Zeitform, grammatikalisch passend an der Stelle des Zitats.
+
+**VERBOTEN** sind Meta-Formulierungen, die ÜBER den Text sprechen statt Text zu SEIN:
+- „Es wäre besser/hilfreich, …"
+- „Stattdessen könnte man formulieren, dass …"
+- „Diese Formulierung sollte vermieden werden …"
+- jede Empfehlung oder Anrede an den Coach
+
+Beispiel:
+- Quote: „Herr X zeigte dabei wenig Eigeninitiative und wirkte desinteressiert."
+- FALSCH: „Es könnte hilfreich sein, die Formulierung zu ändern, um die Entwicklungsmöglichkeiten zu betonen."
+- RICHTIG: „Der TN benötigte zu Beginn Unterstützung, um ins eigenständige Arbeiten zu finden; im Verlauf nahm die Eigeninitiative zu."
+
+Test vor der Ausgabe: Ergibt der Abschnitt einen sinnvollen Berichtstext, wenn man das Zitat 1:1 durch die suggestion ersetzt? Wenn nein → suggestion neu formulieren.
 
 ## KRITISCH: Quote-Treue
 

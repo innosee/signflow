@@ -1,5 +1,6 @@
 import { AzureOpenAI } from "openai";
 
+import { quoteJustifiesHardBlock } from "./hard-block-terms";
 import { stableViolationId } from "./previously-addressed";
 import { buildCheckerSystemPrompt } from "./prompt";
 import {
@@ -8,6 +9,7 @@ import {
   type CheckerInput,
   type CheckerResult,
   type MassnahmeMismatch,
+  type MassnahmeTyp,
   type MustHaveCoverage,
   type MustHaveTopic,
   type ProbeAnswer,
@@ -16,6 +18,15 @@ import {
   type Violation,
   type ViolationCategory,
 } from "./types";
+
+// Anti-Halluzinations-Check für Maßnahme-Mismatch: das LLM neigt dazu,
+// Beispiel-Hints aus dem Prompt zu übernehmen und dann „gewählter Typ ist
+// aber EKC" zu schreiben, auch wenn der User EGC gewählt hat. Ein valider
+// Hint muss den tatsächlich gewählten Typ als Kurzcode (\bEKC\b etc.)
+// enthalten — sonst ist es Halluzination.
+function hintMentionsTyp(hint: string, typ: MassnahmeTyp): boolean {
+  return new RegExp(`\\b${typ}\\b`).test(hint);
+}
 
 const VALID_PROBE_TOPICS = new Set<ProbeTopic>([
   "bewerbungsunterlagen",
@@ -88,6 +99,7 @@ const VALID_SECTIONS = new Set(["teilnahme", "ablauf", "fazit"]);
 function parseAndValidate(
   raw: string,
   expectedTopics: ReadonlySet<MustHaveTopic>,
+  actualMassnahmeTyp: MassnahmeTyp,
 ): CheckerResult {
   // Tolerant gegen Markdown-Fences, falls das Modell sich nicht ans Prompt hält.
   const stripped = raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
@@ -157,12 +169,19 @@ function parseAndValidate(
     .map((v) => {
       const section = v.section as Violation["section"];
       const quote = typeof v.quote === "string" ? v.quote : "";
+      // Severity-Leitplanke: hard_block nur, wenn das Modell ihn behauptet
+      // UND das Zitat einen der wörtlich gelisteten Risiko-Begriffe enthält
+      // (Prompt-Definition, im Code erzwungen — verhindert Flip-Flops
+      // zwischen Re-Checks). Vorher defaultete fehlende severity sogar auf
+      // hard_block; jetzt ist soft_flag der Fail-Default.
+      const severity: Violation["severity"] =
+        v.severity === "hard_block" && quoteJustifiesHardBlock(quote)
+          ? "hard_block"
+          : "soft_flag";
       return {
         id: stableViolationId(section, quote),
         category: v.category as ViolationCategory,
-        severity: (v.severity === "soft_flag" ? "soft_flag" : "hard_block") as
-          | "soft_flag"
-          | "hard_block",
+        severity,
         section,
         quote,
         rule: typeof v.rule === "string" ? v.rule : "",
@@ -222,12 +241,18 @@ function parseAndValidate(
   // Maßnahme-Inhalts-Mismatch (Stage 2.1). Nur durchreichen wenn das LLM
   // explizit `detected=true` UND eine Begründung geliefert hat — sonst
   // weglassen, damit die UI keine leere Warnbox rendert.
+  //
+  // Zusätzliche Anti-Halluzinations-Schicht: der hint muss den tatsächlich
+  // gewählten Maßnahmetyp wörtlich nennen. Tut er es nicht, ist er fast
+  // sicher eine Beispiel-Übernahme aus dem Prompt (siehe `hintMentionsTyp`).
+  // Dann gar nicht zeigen — false-positive-Mismatch ist schädlicher als
+  // ein übersehener echter Mismatch (Coach sieht ja den Bericht trotzdem).
   let massnahmeMismatch: MassnahmeMismatch | undefined;
   if (obj.massnahmeMismatch && typeof obj.massnahmeMismatch === "object") {
     const mm = obj.massnahmeMismatch as Record<string, unknown>;
     if (mm.detected === true) {
       const hint = typeof mm.hint === "string" ? mm.hint.trim() : "";
-      if (hint.length > 0) {
+      if (hint.length > 0 && hintMentionsTyp(hint, actualMassnahmeTyp)) {
         massnahmeMismatch = { detected: true, hint };
       }
     }
@@ -281,5 +306,5 @@ export async function runAzureCheck(input: CheckerInput): Promise<CheckerResult>
   if (!raw) {
     throw new Error("Azure-Antwort enthielt keinen Inhalt");
   }
-  return parseAndValidate(raw, expectedTopics);
+  return parseAndValidate(raw, expectedTopics, massnahmeTyp);
 }
