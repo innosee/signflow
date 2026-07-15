@@ -62,6 +62,11 @@ export function ReviewSidebar({
     // KI hat ihre eigene schon übernommene Umformulierung erneut markiert →
     // gilt als erledigt (kein Handlungsbedarf, blockiert nicht).
     v.previouslyAddressed ||
+    // Konvergenz-Regel: Stelle lag unverändert schon in der letzten Prüfung
+    // und wurde damals nicht gemeldet (Nachschieber des Findings-Caps) →
+    // erledigt, damit Re-Checks auf grün konvergieren statt endlos
+    // „Neues" zu zeigen. Betrifft nie hard_blocks (siehe markCarriedOver).
+    v.carriedOver ||
     (v.severity === "soft_flag"
       ? acceptedIds.has(v.id)
       : acceptedIds.has(v.id) || isHardBlockDismissed(v.id, dismissReasons));
@@ -282,7 +287,9 @@ function ResolvedSection({
               ? "Vorschlag übernommen / abgehakt"
               : dismissed
                 ? `Fehlalarm: ${(dismissReasons[v.id] ?? "").trim()}`
-                : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
+                : v.carriedOver
+                  ? "Bereits geprüfter Text — die letzte Prüfung hatte hier nichts bemängelt (optionaler Zusatz-Tipp)"
+                  : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
             // Strukturelle Hinweise haben kein Zitat → Regel-Text als Titel.
             const title = v.structural ? v.rule : `„${v.quote}“`;
             return (
@@ -400,6 +407,19 @@ function StatusPill({
         {hintCount > 0
           ? `${hintCount} ${hintCount === 1 ? "Hinweis" : "Hinweise"} offen — beratend, kein Muss.`
           : "Keine offenen Hinweise."}
+      </p>
+      {/* Endzustand explizit machen: die häufigste Frustration ist, dass ein
+          erneuter Check nach jeder Korrektur wieder „neue" (in Wahrheit
+          schwächere) Hinweise zeigt. Sobald nichts mehr blockiert, ist der
+          Bericht fertig — das hier sagt klar, dass man aufhören darf. */}
+      <p className="mt-2 border-t border-emerald-200 pt-2 text-[11px] leading-relaxed text-emerald-800">
+        {hintCount > 0
+          ? isCheck
+            ? "Der Bericht ist so in Ordnung. Weitere Prüfungen sind optional und finden meist nur noch kleinere Formulierungs-Tipps — du musst nicht auf null Hinweise kommen."
+            : "Du kannst so einreichen. Weitere Prüfungen sind optional und finden meist nur noch kleinere Formulierungs-Tipps — du musst nicht auf null Hinweise kommen."
+          : isCheck
+            ? "Fertig — hier ist nichts mehr zu tun."
+            : "Fertig — du kannst einreichen."}
       </p>
     </div>
   );

@@ -5,19 +5,22 @@ import { useActionState, useState } from "react";
 import { correctSessionTopic, type CorrectTopicState } from "./actions";
 
 /**
- * „Inhalt korrigieren" für bereits signierte Termine: ändert NUR den Themen-/
- * ANW-Text, OHNE die Unterschriften oder die Teilnehmer-Freigabe zurückzusetzen.
- * Inline-Textarea (mit aktuellem Text vorbelegt). Für materielle Änderungen
- * (Datum/UE/…) gibt es weiterhin „Bearbeiten (Signaturen zurücksetzen)".
+ * „Inhalt korrigieren" für bereits signierte Termine: ändert den Themen-/
+ * ANW-Text und den Modus (Präsenz/Online), OHNE die Unterschriften oder die
+ * Teilnehmer-Freigabe zurückzusetzen. Inline-Formular (mit aktuellen Werten
+ * vorbelegt). Für materielle Änderungen (Datum/UE/…) gibt es weiterhin
+ * „Bearbeiten (Signaturen zurücksetzen)".
  */
 export function CorrectTopicButton({
   courseId,
   sessionId,
   topic,
+  modus,
 }: {
   courseId: string;
   sessionId: string;
   topic: string;
+  modus: "praesenz" | "online";
 }) {
   const [state, action, pending] = useActionState<CorrectTopicState, FormData>(
     correctSessionTopic,
@@ -49,9 +52,21 @@ export function CorrectTopicButton({
         required
         className="block w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black"
       />
+      <label className="flex items-center gap-2 text-xs text-zinc-600">
+        <span className="w-14 shrink-0">Modus</span>
+        <select
+          name="modus"
+          defaultValue={modus}
+          className="rounded-lg border border-zinc-400 bg-white px-2 py-1.5 text-sm outline-none focus:border-black"
+        >
+          <option value="praesenz">Präsenz</option>
+          <option value="online">Online</option>
+        </select>
+      </label>
       <p className="text-[10px] text-zinc-500">
-        Nur der Themen-/Inhaltstext wird geändert. Unterschriften &amp; Freigabe
-        bleiben erhalten. ANW-Check und Bildungsträger-Prüfung laufen danach neu.
+        Themen-/Inhaltstext und Modus werden geändert. Unterschriften &amp;
+        Freigabe bleiben erhalten. ANW-Check und Bildungsträger-Prüfung laufen
+        danach neu.
       </p>
       <div className="flex items-center gap-2">
         <button

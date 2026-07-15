@@ -20,6 +20,7 @@ import { locateQuote } from "@/lib/checker/locate-quote";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import {
   fingerprintApplied,
+  markCarriedOver,
   markPreviouslyAddressed,
 } from "@/lib/checker/previously-addressed";
 import { reverseMap } from "@/lib/checker/reverse-map";
@@ -435,7 +436,14 @@ export function BerEditor({
       return;
     }
     const reverseMapped = reverseMap(anonResult.entities, r);
-    const mapped = markPreviouslyAddressed(reverseMapped, appliedFingerprints);
+    // Konvergenz wie im Schnell-Check: übernommene Umformulierungen +
+    // Nachschieber in unverändertem Text zählen als erledigt, nicht als
+    // offen. lastCheckedInput/lastCheckIds sind hier noch die Vorrunde.
+    const mapped = markCarriedOver(
+      markPreviouslyAddressed(reverseMapped, appliedFingerprints),
+      lastCheckedInput,
+      lastCheckIds,
+    );
     updateStep("validate", {
       state: "success",
       detail: `${mapped.violations.length} ${mapped.violations.length === 1 ? "Regelverstoß" : "Regelverstöße"} · ${mapped.mustHaves.filter((m) => m.covered).length}/${mapped.mustHaves.length} Pflichtbausteine abgedeckt.`,

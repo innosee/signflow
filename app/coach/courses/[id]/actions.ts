@@ -903,19 +903,21 @@ export async function deleteSession(
 export type CorrectTopicState = { error?: string; success?: boolean } | undefined;
 
 /**
- * „Inhalt korrigieren": ändert NUR den Themen-/ANW-Text eines Termins —
- * **ohne** die Signaturen zurückzusetzen und **ohne** die Teilnehmer-Freigabe
- * zu verwerfen (User-Entscheidung 2026-06-19). Begründung: Die Unterschrift
- * des Kunden bezeugt die **Anwesenheit am Datum**, nicht den exakten Wortlaut
- * der Themen-Beschreibung; eine AZAV-Konkretisierung der Formulierung ändert
- * die bezeugte Tatsache nicht. Der Edit wird audit-geloggt.
+ * „Inhalt korrigieren": ändert Themen-/ANW-Text **und Modus** (Präsenz/Online)
+ * eines Termins — **ohne** die Signaturen zurückzusetzen und **ohne** die
+ * Teilnehmer-Freigabe zu verwerfen (Topic: User-Entscheidung 2026-06-19;
+ * Modus: User-Entscheidung 2026-07-15). Der Edit wird audit-geloggt.
+ *
+ * Hinweis: Der Modus ist inhaltlich Teil dessen, was die Unterschrift bezeugt
+ * (Präsenz vs. Online) — er wird hier bewusst dennoch als korrigierbar geführt,
+ * damit ein Tippfehler nicht die Unterschriften kostet. Für Datum/UE/
+ * Erstgespräch/Eignung gilt das NICHT — die gehen weiter über „Bearbeiten
+ * (Signaturen zurücksetzen)".
  *
  * Da sich der INHALT ändert, werden die inhaltsabhängigen Compliance-Gates
  * zurückgesetzt — ANW-Check (`anwCheckPassedAt`) und Bildungsträger-Prüfung
  * (`reviewStatus`) müssen neu laufen. `abgeschlossenAt`, Signaturen und
- * Freigaben bleiben erhalten. Datum/UE/Erstgespräch/Eignung sind hier NICHT
- * änderbar — die hängen an der Signatur und gehen weiter über „Bearbeiten
- * (Signaturen zurücksetzen)".
+ * Freigaben bleiben erhalten.
  */
 export async function correctSessionTopic(
   _prev: CorrectTopicState,
@@ -928,8 +930,12 @@ export async function correctSessionTopic(
   const courseId = String(formData.get("courseId") ?? "").trim();
   const sessionId = String(formData.get("sessionId") ?? "").trim();
   const topic = String(formData.get("topic") ?? "").trim();
+  const modus = String(formData.get("modus") ?? "").trim();
   if (!courseId || !sessionId) return { error: "Kurs oder Termin fehlt." };
   if (!topic) return { error: "Themen / Inhalte dürfen nicht leer sein." };
+  if (modus !== "praesenz" && modus !== "online") {
+    return { error: "Modus muss Präsenz oder Online sein." };
+  }
 
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
@@ -964,10 +970,10 @@ export async function correctSessionTopic(
     await db.transaction(async (tx) => {
       await tx
         .update(schema.sessions)
-        .set({ topic })
+        .set({ topic, modus })
         .where(eq(schema.sessions.id, sessionId));
       // Inhaltsabhängige Gates zurücksetzen (Maßnahme-Abschluss, Signaturen
-      // und Freigaben bleiben — nur der Themen-Text ändert sich).
+      // und Freigaben bleiben — nur Themen-Text und Modus ändern sich).
       await resetFesGates(tx, ownedCourseId, { keepAbgeschlossen: true });
       await logAudit(
         {
@@ -976,7 +982,7 @@ export async function correctSessionTopic(
           action: "session.topic_corrected",
           resourceType: "session",
           resourceId: sessionId,
-          metadata: { courseId: ownedCourseId },
+          metadata: { courseId: ownedCourseId, modus },
         },
         tx,
       );
