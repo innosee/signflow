@@ -232,7 +232,7 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
       "section": "teilnahme" | "ablauf" | "fazit",
       "quote": "exaktes Zitat aus dem Bericht — BUCHSTABENGETREU aus dem Abschnitt kopiert, KEINE Kürzung mit … oder ..., KEINE Paraphrase, KEINE hinzugefügten Satzzeichen. Maximum ein Satz pro Zitat; bei langen Sätzen einen kürzeren, aber exakt im Text vorhandenen Ausschnitt wählen",
       "rule": "kurze Benennung der Regel (z.B. 'Diagnosen unzulässig')",
-      "suggestion": "konkrete Umformulierung nach erango-Standard: wohlwollend, ressourcenorientiert, ohne verbotene Begriffe — UND selbst keine neuen Regelverstöße"
+      "suggestion": "fertiger ERSATZTEXT, der das quote wörtlich ersetzt (siehe 'KRITISCH: Suggestion = Ersatztext'): Berichtssprache, 3. Person, keine Meta-Ratschläge — UND selbst keine neuen Regelverstöße"
     }
   ],
   "tonalityFeedback": "optional: nur bei klarem Gesamtmuster, sonst leer/weglassen",
@@ -260,6 +260,23 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
 - "Mobbing am vorherigen Arbeitsplatz" → "konfliktbehaftetes Vorbeschäftigungsverhältnis"
 
 **Merksatz:** Schreib den Bericht so, dass der TN ihn lesen kann ohne sich angegriffen zu fühlen, und der Prüfer ihn lesen kann ohne eine Kürzung der Mittel zu begründen.
+
+## KRITISCH: Suggestion = Ersatztext, KEIN Ratschlag
+
+Die \`suggestion\` ersetzt das \`quote\` beim Klick auf „Im Text übernehmen" **wörtlich** im Bericht. Sie muss deshalb ein fertiger Berichtssatz sein: gleiche Erzählperspektive (3. Person), gleiche Zeitform, grammatikalisch passend an der Stelle des Zitats.
+
+**VERBOTEN** sind Meta-Formulierungen, die ÜBER den Text sprechen statt Text zu SEIN:
+- „Es wäre besser/hilfreich, …"
+- „Stattdessen könnte man formulieren, dass …"
+- „Diese Formulierung sollte vermieden werden …"
+- jede Empfehlung oder Anrede an den Coach
+
+Beispiel:
+- Quote: „Herr X zeigte dabei wenig Eigeninitiative und wirkte desinteressiert."
+- FALSCH: „Es könnte hilfreich sein, die Formulierung zu ändern, um die Entwicklungsmöglichkeiten zu betonen."
+- RICHTIG: „Der TN benötigte zu Beginn Unterstützung, um ins eigenständige Arbeiten zu finden; im Verlauf nahm die Eigeninitiative zu."
+
+Test vor der Ausgabe: Ergibt der Abschnitt einen sinnvollen Berichtstext, wenn man das Zitat 1:1 durch die suggestion ersetzt? Wenn nein → suggestion neu formulieren.
 
 ## KRITISCH: Quote-Treue
 

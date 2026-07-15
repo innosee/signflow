@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { HARD_BLOCK_REASON_MIN, isHardBlockDismissed } from "@/lib/checker/gate";
+import { isMetaSuggestion } from "@/lib/checker/meta-suggestion";
 import {
   MUST_HAVE_LABELS,
   PROBE_TOPIC_LABELS,
@@ -503,6 +504,10 @@ function ViolationCard({
   // Deterministischer inhaltlicher Hinweis (zu dünn/floskelhaft/Baustein fehlt):
   // kein Zitat, keine Auto-Übernahme — nur Empfehlung + „Passt schon".
   const isStructural = !!violation.structural;
+  // Meta-Vorschlag („Es wäre besser, …" statt Ersatztext): „Im Text
+  // übernehmen" ausblenden, sonst landet Beratungssprech wörtlich im
+  // Bericht. Markieren + selbst umformulieren bleibt möglich.
+  const metaSuggestion = !isStructural && isMetaSuggestion(violation.suggestion);
   const isCheck = mode === "check";
   const dismissed =
     !isSoft && dismissReason.trim().length >= HARD_BLOCK_REASON_MIN;
@@ -571,11 +576,17 @@ function ViolationCard({
 
           <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
             <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-900">
-              {isStructural ? "Empfehlung" : "Vorschlag"}
+              {isStructural || metaSuggestion ? "Empfehlung" : "Vorschlag"}
             </div>
             <p className="mt-0.5 text-xs text-zinc-800">
               {violation.suggestion}
             </p>
+            {metaSuggestion && (
+              <p className="mt-1 text-[10px] text-zinc-500">
+                Kein fertiger Ersatztext — bitte die Stelle markieren und
+                selbst umformulieren.
+              </p>
+            )}
           </div>
 
           {!isStructural && (
@@ -599,13 +610,15 @@ function ViolationCard({
 
           {!resolved && !isStructural && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleApplyClick}
-                className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800"
-              >
-                Im Text übernehmen
-              </button>
+              {!metaSuggestion && (
+                <button
+                  type="button"
+                  onClick={handleApplyClick}
+                  className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800"
+                >
+                  Im Text übernehmen
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleLocateClick}

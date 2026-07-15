@@ -1,5 +1,6 @@
 import { AzureOpenAI } from "openai";
 
+import { quoteJustifiesHardBlock } from "./hard-block-terms";
 import { stableViolationId } from "./previously-addressed";
 import { buildCheckerSystemPrompt } from "./prompt";
 import {
@@ -168,12 +169,19 @@ function parseAndValidate(
     .map((v) => {
       const section = v.section as Violation["section"];
       const quote = typeof v.quote === "string" ? v.quote : "";
+      // Severity-Leitplanke: hard_block nur, wenn das Modell ihn behauptet
+      // UND das Zitat einen der wörtlich gelisteten Risiko-Begriffe enthält
+      // (Prompt-Definition, im Code erzwungen — verhindert Flip-Flops
+      // zwischen Re-Checks). Vorher defaultete fehlende severity sogar auf
+      // hard_block; jetzt ist soft_flag der Fail-Default.
+      const severity: Violation["severity"] =
+        v.severity === "hard_block" && quoteJustifiesHardBlock(quote)
+          ? "hard_block"
+          : "soft_flag";
       return {
         id: stableViolationId(section, quote),
         category: v.category as ViolationCategory,
-        severity: (v.severity === "soft_flag" ? "soft_flag" : "hard_block") as
-          | "soft_flag"
-          | "hard_block",
+        severity,
         section,
         quote,
         rule: typeof v.rule === "string" ? v.rule : "",
