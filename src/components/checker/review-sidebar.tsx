@@ -401,6 +401,19 @@ function StatusPill({
           ? `${hintCount} ${hintCount === 1 ? "Hinweis" : "Hinweise"} offen — beratend, kein Muss.`
           : "Keine offenen Hinweise."}
       </p>
+      {/* Endzustand explizit machen: die häufigste Frustration ist, dass ein
+          erneuter Check nach jeder Korrektur wieder „neue" (in Wahrheit
+          schwächere) Hinweise zeigt. Sobald nichts mehr blockiert, ist der
+          Bericht fertig — das hier sagt klar, dass man aufhören darf. */}
+      <p className="mt-2 border-t border-emerald-200 pt-2 text-[11px] leading-relaxed text-emerald-800">
+        {hintCount > 0
+          ? isCheck
+            ? "Der Bericht ist so in Ordnung. Weitere Prüfungen sind optional und finden meist nur noch kleinere Formulierungs-Tipps — du musst nicht auf null Hinweise kommen."
+            : "Du kannst so einreichen. Weitere Prüfungen sind optional und finden meist nur noch kleinere Formulierungs-Tipps — du musst nicht auf null Hinweise kommen."
+          : isCheck
+            ? "Fertig — hier ist nichts mehr zu tun."
+            : "Fertig — du kannst einreichen."}
+      </p>
     </div>
   );
 }
