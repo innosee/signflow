@@ -16,6 +16,7 @@ import {
   resolveHardBlockOverrideReason,
 } from "@/lib/checker/gate";
 import { withAdvisoryHints } from "@/lib/checker/hints";
+import { applySuggestionToText } from "@/lib/checker/apply-suggestion";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import {
@@ -292,8 +293,8 @@ export function BerEditor({
     const text = input[v.section];
     const loc = locateQuote(text, v.quote);
     if (!loc.found) return "not_found";
-    const nextText =
-      text.slice(0, loc.start) + v.suggestion + text.slice(loc.end);
+    // Naht-Bereinigung gegen Subjekt-Doppelungen („Herr M. Herr M. …").
+    const nextText = applySuggestionToText(text, loc.start, loc.end, v.suggestion);
     setInput((prev) => ({ ...prev, [v.section]: nextText }));
     setAcceptedIds((prev) => {
       const out = new Set(prev);

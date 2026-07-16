@@ -27,6 +27,10 @@ describe("isMetaSuggestion", () => {
         "Es könnte hilfreich sein, die Formulierung zu ändern, um die Unterstützung und Entwicklungsmöglichkeiten zu betonen.",
       ),
     ).toBe(true);
+    // Rutschte am 2026-07-16 durch den Guard und landete im Bericht.
+    expect(
+      isMetaSuggestion("Es könnte hilfreich sein, an der Selbstwahrnehmung zu arbeiten."),
+    ).toBe(true);
   });
 
   it("lässt echte Ersatz-Formulierungen durch (Beispiele aus dem Prompt)", () => {
