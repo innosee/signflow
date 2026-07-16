@@ -7,6 +7,13 @@ Prod-DB schreiben/migrieren ohne Backup + User-OK. Pre-Push-Checkliste in
 DEVELOPMENT.md §4. Staging-How-to: [STAGING.md](STAGING.md). Backups:
 [docs/backups.md](docs/backups.md).
 
+# Formulare mit Server-Actions
+
+Jedes `<form action={serverAction}>` muss die Eingaben **bei Fehler behalten**
+(React 19 resettet das Form sonst → getippter Text weg). Verbindliches Muster:
+**[docs/forms-server-actions.md](docs/forms-server-actions.md)** (controlled
+State oder Werte-Echo via `defaultValue`). Nie uncontrolled ohne `defaultValue`.
+
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 
