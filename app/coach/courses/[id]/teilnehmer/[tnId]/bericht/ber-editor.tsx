@@ -32,6 +32,7 @@ import {
   readSnapshotResult,
 } from "@/lib/checker/snapshot";
 import {
+  CHECKER_ENGINE_REV,
   CHECKER_SECTIONS,
   type CheckerInput,
   type CheckerResult,
@@ -187,7 +188,11 @@ export function BerEditor({
        localStorage (External State) beim Mount */
     try {
       const raw = localStorage.getItem(reviewStateKey);
-      if (raw) {
+      // Engine-Revision: Review-State aus einer älteren Checker-Version wird
+      // verworfen — sonst würde die Konvergenz-Regel (markCarriedOver via
+      // lastCheckIds) die Funde der neuen, besseren Engine als „bereits
+      // geprüft" wegsortieren.
+      if (raw && (JSON.parse(raw) as Record<string, unknown>).rev === CHECKER_ENGINE_REV) {
         const m = JSON.parse(raw) as Record<string, unknown>;
         const strArray = (v: unknown): string[] =>
           Array.isArray(v)
@@ -221,6 +226,7 @@ export function BerEditor({
       localStorage.setItem(
         reviewStateKey,
         JSON.stringify({
+          rev: CHECKER_ENGINE_REV,
           acceptedIds: [...acceptedIds],
           dismissReasons,
           appliedFingerprints: [...appliedFingerprints],

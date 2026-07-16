@@ -210,6 +210,20 @@ export const MUST_HAVES_BY_MASSNAHMETYP: Record<MassnahmeTyp, MustHaveTopic[]> =
   ],
 };
 
+/**
+ * Revision der Prüf-Engine für den im Browser persistierten Prüf-Zustand
+ * (Result + lastCheckedInput + lastCheckIds + Abarbeitungsstatus).
+ *
+ * Bei jedem Upgrade, das die ERKENNUNG verbessert (Prompt-Umbau, Recall-Scan,
+ * neue Regeln), hochzählen: gespeicherter Zustand älterer Revisionen wird
+ * beim Laden verworfen und die nächste Prüfung startet frisch. Sonst sortiert
+ * die Konvergenz-Regel (markCarriedOver) die Funde der NEUEN Engine in
+ * unverändertem Text als „bereits geprüft" weg — der Coach sähe Grün, obwohl
+ * die bessere Engine Verstöße gefunden hat (beobachtet 2026-07-16 nach dem
+ * Recall-Scan-Deploy).
+ */
+export const CHECKER_ENGINE_REV = 2;
+
 export type MustHaveCoverage = {
   topic: MustHaveTopic;
   covered: boolean;
