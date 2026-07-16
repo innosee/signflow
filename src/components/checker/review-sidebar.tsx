@@ -414,8 +414,8 @@ function StatusPill({
         </p>
         <p className="mt-2 border-t border-amber-200 pt-2 text-[11px] leading-relaxed text-amber-800">
           {isCheck
-            ? "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon") — dann wird der Status grün. Einreichen wäre auch so möglich."
-            : "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon") — dann wird der Status grün. Einreichen ist auch so möglich."}
+            ? "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon“) — dann wird der Status grün. Einreichen wäre auch so möglich."
+            : "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon“) — dann wird der Status grün. Einreichen ist auch so möglich."}
         </p>
       </div>
     );
