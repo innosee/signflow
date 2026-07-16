@@ -443,6 +443,7 @@ export function BerEditor({
       markPreviouslyAddressed(reverseMapped, appliedFingerprints),
       lastCheckedInput,
       lastCheckIds,
+      input,
     );
     updateStep("validate", {
       state: "success",

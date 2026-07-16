@@ -466,6 +466,7 @@ export function CheckerForm({ userId }: { userId: string }) {
       markPreviouslyAddressed(reverseMapped, appliedFingerprints),
       lastCheckedInput,
       lastCheckIds,
+      input,
     );
     updateStep("validate", {
       state: "success",
