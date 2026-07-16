@@ -210,6 +210,20 @@ export const MUST_HAVES_BY_MASSNAHMETYP: Record<MassnahmeTyp, MustHaveTopic[]> =
   ],
 };
 
+/**
+ * Revision der Prüf-Engine für den im Browser persistierten Prüf-Zustand
+ * (Result + lastCheckedInput + lastCheckIds + Abarbeitungsstatus).
+ *
+ * Bei jedem Upgrade, das die ERKENNUNG verbessert (Prompt-Umbau, Recall-Scan,
+ * neue Regeln), hochzählen: gespeicherter Zustand älterer Revisionen wird
+ * beim Laden verworfen und die nächste Prüfung startet frisch. Sonst sortiert
+ * die Konvergenz-Regel (markCarriedOver) die Funde der NEUEN Engine in
+ * unverändertem Text als „bereits geprüft" weg — der Coach sähe Grün, obwohl
+ * die bessere Engine Verstöße gefunden hat (beobachtet 2026-07-16 nach dem
+ * Recall-Scan-Deploy).
+ */
+export const CHECKER_ENGINE_REV = 2;
+
 export type MustHaveCoverage = {
   topic: MustHaveTopic;
   covered: boolean;
@@ -250,6 +264,18 @@ export type Violation = {
    * kommt nicht von Azure. Visuell als „schon übernommen"-Badge gerendert.
    */
   previouslyAddressed?: boolean;
+  /**
+   * True wenn diese Stelle in unverändertem, bereits geprüftem Text liegt,
+   * die vorherige Prüfung sie aber NICHT gemeldet hat. Das ist der
+   * „Nachschieber"-Effekt: der Prompt deckelt Findings (max 5 / 2 soft),
+   * nach jeder Korrektur rückt die nächst-schwächere Ebene nach — für den
+   * Coach wirkt das wie eine endlose Schleife. Konvergenz-Regel: Was die
+   * letzte Prüfung im selben Text nicht bemängelt hat, gilt als erledigt
+   * (Klappblock), nicht als offen. Nur soft_flags — hard_blocks (Art-9/
+   * Gesundheit) erscheinen IMMER, egal was die Vorrunde sagte. Wird
+   * clientseitig nach `runCheck` gesetzt, kommt nicht von Azure.
+   */
+  carriedOver?: boolean;
   /**
    * True für deterministisch erzeugte „inhaltliche Hinweise" (zu dünner/
    * floskelhafter Abschnitt, fehlender Pflichtbaustein) — NICHT vom Modell,

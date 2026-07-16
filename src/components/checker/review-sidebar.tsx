@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { HARD_BLOCK_REASON_MIN, isHardBlockDismissed } from "@/lib/checker/gate";
+import { isMetaSuggestion } from "@/lib/checker/meta-suggestion";
 import {
   MUST_HAVE_LABELS,
   PROBE_TOPIC_LABELS,
@@ -62,6 +63,11 @@ export function ReviewSidebar({
     // KI hat ihre eigene schon übernommene Umformulierung erneut markiert →
     // gilt als erledigt (kein Handlungsbedarf, blockiert nicht).
     v.previouslyAddressed ||
+    // Konvergenz-Regel: Stelle lag unverändert schon in der letzten Prüfung
+    // und wurde damals nicht gemeldet (Nachschieber des Findings-Caps) →
+    // erledigt, damit Re-Checks auf grün konvergieren statt endlos
+    // „Neues" zu zeigen. Betrifft nie hard_blocks (siehe markCarriedOver).
+    v.carriedOver ||
     (v.severity === "soft_flag"
       ? acceptedIds.has(v.id)
       : acceptedIds.has(v.id) || isHardBlockDismissed(v.id, dismissReasons));
@@ -282,7 +288,9 @@ function ResolvedSection({
               ? "Vorschlag übernommen / abgehakt"
               : dismissed
                 ? `Fehlalarm: ${(dismissReasons[v.id] ?? "").trim()}`
-                : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
+                : v.carriedOver
+                  ? "Bereits geprüfter Text — die letzte Prüfung hatte hier nichts bemängelt (optionaler Zusatz-Tipp)"
+                  : "Schon übernommen — KI hat die eigene Umformulierung erneut markiert";
             // Strukturelle Hinweise haben kein Zitat → Regel-Text als Titel.
             const title = v.structural ? v.rule : `„${v.quote}“`;
             return (
@@ -391,15 +399,37 @@ function StatusPill({
       </div>
     );
   }
+  // Ampel-Logik (User-Feedback 2026-07-16): gelb solange Hinweise offen sind
+  // — grün + „9 Hinweise offen" las sich wie „alles gut". Grün gibt es erst,
+  // wenn wirklich nichts mehr zu tun ist. Blockieren tun weiterhin nur
+  // Sensibel-Stellen (rot, oben).
+  if (hintCount > 0) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+        <div className="text-sm font-semibold text-amber-900">
+          {hintCount} {hintCount === 1 ? "Hinweis" : "Hinweise"} offen
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-amber-900">
+          Kein kritischer Verstoß — die Punkte rechts sind beratend, kein Muss.
+        </p>
+        <p className="mt-2 border-t border-amber-200 pt-2 text-[11px] leading-relaxed text-amber-800">
+          {isCheck
+            ? "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon“) — dann wird der Status grün. Einreichen wäre auch so möglich."
+            : "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon“) — dann wird der Status grün. Einreichen ist auch so möglich."}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
       <div className="text-sm font-semibold text-emerald-900">
         {isCheck ? "Sprachlich sauber" : "Einreichen möglich"}
       </div>
       <p className="mt-1 text-xs leading-relaxed text-emerald-900">
-        {hintCount > 0
-          ? `${hintCount} ${hintCount === 1 ? "Hinweis" : "Hinweise"} offen — beratend, kein Muss.`
-          : "Keine offenen Hinweise."}
+        Keine offenen Hinweise.
+      </p>
+      <p className="mt-2 border-t border-emerald-200 pt-2 text-[11px] leading-relaxed text-emerald-800">
+        {isCheck ? "Fertig — hier ist nichts mehr zu tun." : "Fertig — du kannst einreichen."}
       </p>
     </div>
   );
@@ -483,6 +513,10 @@ function ViolationCard({
   // Deterministischer inhaltlicher Hinweis (zu dünn/floskelhaft/Baustein fehlt):
   // kein Zitat, keine Auto-Übernahme — nur Empfehlung + „Passt schon".
   const isStructural = !!violation.structural;
+  // Meta-Vorschlag („Es wäre besser, …" statt Ersatztext): „Im Text
+  // übernehmen" ausblenden, sonst landet Beratungssprech wörtlich im
+  // Bericht. Markieren + selbst umformulieren bleibt möglich.
+  const metaSuggestion = !isStructural && isMetaSuggestion(violation.suggestion);
   const isCheck = mode === "check";
   const dismissed =
     !isSoft && dismissReason.trim().length >= HARD_BLOCK_REASON_MIN;
@@ -551,11 +585,17 @@ function ViolationCard({
 
           <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
             <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-900">
-              {isStructural ? "Empfehlung" : "Vorschlag"}
+              {isStructural || metaSuggestion ? "Empfehlung" : "Vorschlag"}
             </div>
             <p className="mt-0.5 text-xs text-zinc-800">
               {violation.suggestion}
             </p>
+            {metaSuggestion && (
+              <p className="mt-1 text-[10px] text-zinc-500">
+                Kein fertiger Ersatztext — bitte die Stelle markieren und
+                selbst umformulieren.
+              </p>
+            )}
           </div>
 
           {!isStructural && (
@@ -579,13 +619,15 @@ function ViolationCard({
 
           {!resolved && !isStructural && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleApplyClick}
-                className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800"
-              >
-                Im Text übernehmen
-              </button>
+              {!metaSuggestion && (
+                <button
+                  type="button"
+                  onClick={handleApplyClick}
+                  className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800"
+                >
+                  Im Text übernehmen
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleLocateClick}

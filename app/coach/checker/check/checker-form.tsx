@@ -12,9 +12,11 @@ import { ReviewSidebar } from "@/components/checker/review-sidebar";
 import { anonymize } from "@/lib/checker/anonymize";
 import { AuthRequiredError } from "@/lib/checker/errors";
 import { withAdvisoryHints } from "@/lib/checker/hints";
+import { applySuggestionToText } from "@/lib/checker/apply-suggestion";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import {
   fingerprintApplied,
+  markCarriedOver,
   markPreviouslyAddressed,
 } from "@/lib/checker/previously-addressed";
 import { inputsEqual } from "@/lib/checker/snapshot";
@@ -22,6 +24,7 @@ import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
 import {
+  CHECKER_ENGINE_REV,
   CHECKER_SECTIONS,
   DEFAULT_MASSNAHME_TYP,
   isCheckerInput,
@@ -205,6 +208,10 @@ export function CheckerForm({ userId }: { userId: string }) {
         if (
           maybe &&
           typeof maybe === "object" &&
+          // Engine-Revision: Zustand aus einer älteren Checker-Version wird
+          // verworfen — sonst würde die Konvergenz-Regel die Funde der neuen,
+          // besseren Engine als „bereits geprüft" wegsortieren.
+          (maybe as { rev?: unknown }).rev === CHECKER_ENGINE_REV &&
           isCheckerResult((maybe as { result?: unknown }).result) &&
           isCheckerInput(
             (maybe as { lastCheckedInput?: unknown }).lastCheckedInput,
@@ -277,6 +284,7 @@ export function CheckerForm({ userId }: { userId: string }) {
         localStorage.setItem(
           resultKey,
           JSON.stringify({
+            rev: CHECKER_ENGINE_REV,
             result,
             lastCheckedInput,
             // Review-State mitpersistieren, damit erledigte/weggeklickte
@@ -455,9 +463,17 @@ export function CheckerForm({ userId }: { userId: string }) {
       return;
     }
     const reverseMapped = reverseMap(anonResult.entities, azureResult);
-    const mappedResult = markPreviouslyAddressed(
-      reverseMapped,
-      appliedFingerprints,
+    // Konvergenz: erst „sitzt auf übernommener Umformulierung" markieren,
+    // dann Nachschieber in unverändertem Text (markCarriedOver). Beide
+    // Marker zählen in der Sidebar als erledigt — nach dem Übernehmen der
+    // Vorschläge konvergiert der Re-Check auf grün, statt endlos „Neues"
+    // zu zeigen. lastCheckedInput/lastCheckIds sind hier noch die Werte
+    // der VORHERIGEN Runde (werden erst unten überschrieben).
+    const mappedResult = markCarriedOver(
+      markPreviouslyAddressed(reverseMapped, appliedFingerprints),
+      lastCheckedInput,
+      lastCheckIds,
+      input,
     );
     updateStep("validate", {
       state: "success",
@@ -511,8 +527,8 @@ export function CheckerForm({ userId }: { userId: string }) {
     const text = input[v.section];
     const loc = locateQuote(text, v.quote);
     if (!loc.found) return "not_found";
-    const nextText =
-      text.slice(0, loc.start) + v.suggestion + text.slice(loc.end);
+    // Naht-Bereinigung gegen Subjekt-Doppelungen („Herr M. Herr M. …").
+    const nextText = applySuggestionToText(text, loc.start, loc.end, v.suggestion);
     setInput((prev) => ({ ...prev, [v.section]: nextText }));
     setAcceptedIds((prev) => {
       const out = new Set(prev);

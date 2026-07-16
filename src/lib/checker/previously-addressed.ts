@@ -1,4 +1,9 @@
-import type { CheckerResult, CheckerSection, Violation } from "./types";
+import type {
+  CheckerInput,
+  CheckerResult,
+  CheckerSection,
+  Violation,
+} from "./types";
 
 /**
  * Inhaltsstabile ID einer Violation — `section::normalisiertes Zitat`. Anders
@@ -60,6 +65,75 @@ export function markPreviouslyAddressed(
       (sug) => sug.includes(normalQuote) || normalQuote.includes(sug),
     );
     return hit ? { ...v, previouslyAddressed: true } : v;
+  });
+
+  return { ...result, violations };
+}
+
+/**
+ * Konvergenz-Regel gegen die „endlose Anpassungsrunden"-Schleife
+ * (Miriam-Feedback 2026-07-15): Ein Re-Check darf nur bemängeln, was
+ *   (a) die vorherige Prüfung schon gemeldet hat (gleiche stabile ID —
+ *       bekanntes, noch offenes Finding), ODER
+ *   (b) in Text liegt, der sich seit der letzten Prüfung geändert hat.
+ *
+ * Ein soft_flag zu unverändertem, bereits geprüftem Text, das die Vorrunde
+ * NICHT gemeldet hat, ist ein „Nachschieber": der Prompt deckelt Findings
+ * (max 5 / 2 soft), nach jeder Korrektur rückt die nächst-schwächere Ebene
+ * nach. Solche Findings werden als `carriedOver` markiert — die Sidebar
+ * behandelt sie wie `previouslyAddressed` als erledigt (Klappblock), damit
+ * der Coach nach dem Übernehmen der Vorschläge tatsächlich „grün" sieht.
+ *
+ * Bewusst NIE unterdrückt:
+ *   - hard_blocks (Art-9/Gesundheit) — Datenschutz schlägt Komfort; auch
+ *     wenn die Vorrunde sie verpasst hat, müssen sie erscheinen.
+ *   - Findings, deren Quote im Vorrunden-Text nicht vorkommt — der Text
+ *     ist neu/geändert, das Finding ist legitim.
+ *   - Quotes < 10 Zeichen — zu kurz für einen sicheren Substring-Match
+ *     (gleiche Schwelle wie `markPreviouslyAddressed`).
+ *
+ * Erster Check (`prevInput === null`): nichts wird markiert.
+ *
+ * Zwei Stufen, von hart nach heuristisch:
+ *   1. **Section-Regel** (braucht `currentInput`): Ist der Text eines
+ *      Abschnitts seit der letzten Prüfung UNVERÄNDERT, kann es dort per
+ *      Definition keine neuen offenen Funde geben — jedes neue Finding in
+ *      diesem Abschnitt ist ein Nachschieber, unabhängig vom Zitat.
+ *   2. **Quote-Regel** (für geänderte Abschnitte): das konkrete Zitat lag
+ *      wortgleich schon im Vorrunden-Text und wurde nicht gemeldet.
+ */
+export function markCarriedOver(
+  result: CheckerResult,
+  prevInput: CheckerInput | null,
+  prevIds: ReadonlySet<string> | null,
+  currentInput?: CheckerInput | null,
+): CheckerResult {
+  if (!prevInput || !prevIds) return result;
+
+  // Vorrunden-Text pro Section einmal normalisieren (nicht pro Violation).
+  const prevBySection: Record<CheckerSection, string> = {
+    teilnahme: normalize(prevInput.teilnahme),
+    ablauf: normalize(prevInput.ablauf),
+    fazit: normalize(prevInput.fazit),
+  };
+  // Section-Regel: welche Abschnitte sind seit der letzten Prüfung
+  // unverändert? (Nur wenn der Aufrufer den aktuellen Input mitgibt.)
+  const sectionUnchanged: Record<CheckerSection, boolean> = {
+    teilnahme: !!currentInput && normalize(currentInput.teilnahme) === prevBySection.teilnahme,
+    ablauf: !!currentInput && normalize(currentInput.ablauf) === prevBySection.ablauf,
+    fazit: !!currentInput && normalize(currentInput.fazit) === prevBySection.fazit,
+  };
+
+  const violations: Violation[] = result.violations.map((v) => {
+    if (v.severity === "hard_block") return v;
+    if (v.previouslyAddressed || v.carriedOver) return v;
+    if (prevIds.has(v.id)) return v; // bekanntes Finding — bleibt offen
+    if (sectionUnchanged[v.section]) return { ...v, carriedOver: true };
+    const normalQuote = normalize(v.quote);
+    if (normalQuote.length < 10) return v;
+    return prevBySection[v.section].includes(normalQuote)
+      ? { ...v, carriedOver: true }
+      : v;
   });
 
   return { ...result, violations };

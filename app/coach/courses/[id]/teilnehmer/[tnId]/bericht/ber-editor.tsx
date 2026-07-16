@@ -16,10 +16,12 @@ import {
   resolveHardBlockOverrideReason,
 } from "@/lib/checker/gate";
 import { withAdvisoryHints } from "@/lib/checker/hints";
+import { applySuggestionToText } from "@/lib/checker/apply-suggestion";
 import { locateQuote } from "@/lib/checker/locate-quote";
 import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import {
   fingerprintApplied,
+  markCarriedOver,
   markPreviouslyAddressed,
 } from "@/lib/checker/previously-addressed";
 import { reverseMap } from "@/lib/checker/reverse-map";
@@ -31,6 +33,7 @@ import {
   readSnapshotResult,
 } from "@/lib/checker/snapshot";
 import {
+  CHECKER_ENGINE_REV,
   CHECKER_SECTIONS,
   type CheckerInput,
   type CheckerResult,
@@ -186,7 +189,11 @@ export function BerEditor({
        localStorage (External State) beim Mount */
     try {
       const raw = localStorage.getItem(reviewStateKey);
-      if (raw) {
+      // Engine-Revision: Review-State aus einer älteren Checker-Version wird
+      // verworfen — sonst würde die Konvergenz-Regel (markCarriedOver via
+      // lastCheckIds) die Funde der neuen, besseren Engine als „bereits
+      // geprüft" wegsortieren.
+      if (raw && (JSON.parse(raw) as Record<string, unknown>).rev === CHECKER_ENGINE_REV) {
         const m = JSON.parse(raw) as Record<string, unknown>;
         const strArray = (v: unknown): string[] =>
           Array.isArray(v)
@@ -220,6 +227,7 @@ export function BerEditor({
       localStorage.setItem(
         reviewStateKey,
         JSON.stringify({
+          rev: CHECKER_ENGINE_REV,
           acceptedIds: [...acceptedIds],
           dismissReasons,
           appliedFingerprints: [...appliedFingerprints],
@@ -285,8 +293,8 @@ export function BerEditor({
     const text = input[v.section];
     const loc = locateQuote(text, v.quote);
     if (!loc.found) return "not_found";
-    const nextText =
-      text.slice(0, loc.start) + v.suggestion + text.slice(loc.end);
+    // Naht-Bereinigung gegen Subjekt-Doppelungen („Herr M. Herr M. …").
+    const nextText = applySuggestionToText(text, loc.start, loc.end, v.suggestion);
     setInput((prev) => ({ ...prev, [v.section]: nextText }));
     setAcceptedIds((prev) => {
       const out = new Set(prev);
@@ -435,7 +443,15 @@ export function BerEditor({
       return;
     }
     const reverseMapped = reverseMap(anonResult.entities, r);
-    const mapped = markPreviouslyAddressed(reverseMapped, appliedFingerprints);
+    // Konvergenz wie im Schnell-Check: übernommene Umformulierungen +
+    // Nachschieber in unverändertem Text zählen als erledigt, nicht als
+    // offen. lastCheckedInput/lastCheckIds sind hier noch die Vorrunde.
+    const mapped = markCarriedOver(
+      markPreviouslyAddressed(reverseMapped, appliedFingerprints),
+      lastCheckedInput,
+      lastCheckIds,
+      input,
+    );
     updateStep("validate", {
       state: "success",
       detail: `${mapped.violations.length} ${mapped.violations.length === 1 ? "Regelverstoß" : "Regelverstöße"} · ${mapped.mustHaves.filter((m) => m.covered).length}/${mapped.mustHaves.length} Pflichtbausteine abgedeckt.`,

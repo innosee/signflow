@@ -103,7 +103,7 @@ Die Mehrheit der Coaches schreibt fachlich gut. Dein Job ist NICHT, jeden Berich
 
 **Im Zweifel: NICHT flaggen.** Lieber zwei Stilfragen übersehen, als fünf falsch-positive Violations melden.
 
-**Maximal 5 Violations pro Bericht.** Wenn Du mehr Kandidaten findest, wähle die schwerwiegendsten. Wenn dasselbe Problem mehrfach im selben Bericht vorkommt: **genau eine Violation** mit einem repräsentativen Zitat — nicht alle Stellen einzeln.
+**Vollständig in EINEM Durchlauf.** Melde ALLE Stellen, die die Kriterien klar erfüllen — der Coach verlässt sich darauf, dass nach dem Einarbeiten Deiner Vorschläge ein erneuter Check nichts Neues mehr findet. Jede Textstelle bekommt ihre EIGENE Violation mit eigenem Zitat und eigenem Ersatztext: die Vorschläge werden pro Stelle automatisch übernommen — eine „repräsentative" Sammel-Violation ließe die übrigen Stellen unkorrigiert zurück. Die Qualitäts-Schwelle bleibt hoch (im Zweifel nicht flaggen); als technische Obergrenze gilt: mehr als 12 Violations nie — dann die schwerwiegendsten wählen.
 
 **Was Du NICHT flaggen sollst** (häufige Fehl-Trigger):
 - Standard-Coaching-Vokabular wie „Reflexion", „Standortbestimmung", „Klärung", „Perspektive"
@@ -139,7 +139,7 @@ Flagge **nur**, wenn der Bericht eine der folgenden Begriffe **wörtlich** oder 
 
 ### B. \`soft_flag\` — NUR auffällig harte Wertungen, KEIN Stil-Coaching
 
-Flagge **nur**, wenn eine Formulierung deutlich abwertend wirkt UND kein erkennbares Coaching-Framing dahintersteht. Höchstens **2 soft_flags pro Bericht** — wenn Du zögerst, lass es weg.
+Flagge **nur**, wenn eine Formulierung deutlich abwertend wirkt UND kein erkennbares Coaching-Framing dahintersteht — dann aber **jede** solche Stelle (vollständig in einem Durchlauf, siehe Toleranz-Prinzip). Wenn Du bei einer Stelle zögerst, lass sie weg.
 
 Gültig:
 - **Harte Charakter-Bewertung**: „faul", „desinteressiert", „uneinsichtig", „stur", „emotional labil"
@@ -162,7 +162,7 @@ ${mustHaveList}
 
 ### C.1. Maßnahme-Inhalts-Konsistenz
 
-Prüfe, ob die im Bericht beschriebenen Inhalte zur gewählten Maßnahme **${massnahmeTyp}** passen.
+Prüfe, ob die im Bericht beschriebenen Inhalte zur **tatsächlich gewählten** Maßnahme **${massnahmeTyp}** passen.
 
 **Erwartete Schwerpunkte pro Maßnahme:**
 - **EKC** (Karriere-Coaching): Standortbestimmung, Bewerbungsstrategie, Vermittlung in Anstellung, Stellenmarkt-Analyse, Selbstmarketing
@@ -170,14 +170,20 @@ Prüfe, ob die im Bericht beschriebenen Inhalte zur gewählten Maßnahme **${mas
 - **EGC** (Gründungs-Coaching): Geschäfts-Idee, Businessplan, Markt-Analyse, Finanzierung, Rechtsform, Gewerbeanmeldung, Tragfähigkeit — TN strebt **Selbständigkeit** an, NICHT Anstellung
 - **ESCA** (Ausbildungs-Coaching): Lernziele, Ausbildungs-Etappen, Prüfungsvorbereitung, Konflikte im Ausbildungs-Verhältnis — TN ist in **laufender Ausbildung**
 
-**Mismatch-Erkennung:** wenn der Bericht **überwiegend** (nicht nur am Rand erwähnt) Themen einer ANDEREN Maßnahme beschreibt, setze \`massnahmeMismatch.detected = true\` und gib in \`massnahmeMismatch.hint\` einen sachlichen Hinweis: welche Themen dominieren, zu welcher Maßnahme die eher passen würden, und ein Lösungs-Vorschlag (Maßnahmetyp korrigieren ODER Bericht-Inhalt auf den passenden Fokus umstellen).
+**Entscheidungs-Regel — strikt in dieser Reihenfolge:**
 
-**Beispiele:**
-- EKC ausgewählt, Bericht beschreibt überwiegend Businessplan/Liquiditätsplanung/Tragfähigkeit/Gewerbeanmeldung → \`detected=true\`, hint = „Bericht beschreibt überwiegend Gründungs-Themen, gewählter Maßnahmetyp ist aber EKC (Karriere-Coaching). Entweder Maßnahmetyp auf EGC korrigieren oder Bericht inhaltlich auf Karriere-/Bewerbungs-Fokus ausrichten."
-- EGC ausgewählt, Bericht beschreibt überwiegend Bewerbungs-Strategien für Anstellung → \`detected=true\`
-- EKC ausgewählt, Bericht streift Selbständigkeit am Rand (z.B. „TN überlegt langfristig auch Gründung") → \`detected=false\` (nur erwähnt, nicht dominant)
+1. Lies den Bericht-Inhalt.
+2. Welches der vier Schwerpunkt-Profile passt **am besten** zum Bericht?
+3. Wenn das beste Profil = **${massnahmeTyp}** (also: die gewählte Maßnahme passt zum Bericht) → \`detected=false\`, \`hint=""\`. **Das ist der häufige Normalfall — nicht flaggen.**
+4. Nur wenn das beste Profil eine **andere** Maßnahme als ${massnahmeTyp} ist UND der Bericht **überwiegend** (nicht nur am Rand) Themen jener anderen Maßnahme beschreibt → \`detected=true\`.
 
-**Konservativ sein:** im Zweifel \`detected=false\`. Wir wollen Coaches nicht für jedes themen-grenzwertige Wort flaggen. Nur wenn ein neutraler Außenstehender klar sagen würde „das ist eigentlich ein anderer Maßnahme-Bericht".
+**Hint-Schablone bei detected=true** (Slots in eckigen Klammern für den vorliegenden Bericht ausfüllen, KEIN Beispiel-Wortlaut blind kopieren):
+
+> „Bericht beschreibt überwiegend [konkrete Themen aus dem Bericht], gewählter Maßnahmetyp ist aber **${massnahmeTyp}**. Inhaltlich passt das eher zu [passende andere Maßnahme]. Entweder Maßnahmetyp auf [passende Maßnahme] korrigieren oder Bericht inhaltlich auf [Fokus der gewählten Maßnahme ${massnahmeTyp}] ausrichten."
+
+**Konservativ sein:** im Zweifel \`detected=false\`. Themen-Streifungen am Rand (z.B. „TN überlegt langfristig auch Gründung" bei EKC) sind KEIN Mismatch. Nur dominante, durchgehende Themen-Verschiebungen flaggen.
+
+**Anti-Anker-Regel:** Der \`hint\` MUSS den tatsächlich gewählten Maßnahmetyp **${massnahmeTyp}** wörtlich enthalten. Ein \`hint\`, der einen anderen Typ als „gewählt" bezeichnet, ist immer falsch und darf nicht ausgegeben werden.
 
 Wenn kein Mismatch: \`detected=false\`, \`hint=""\`.
 
@@ -226,7 +232,7 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
       "section": "teilnahme" | "ablauf" | "fazit",
       "quote": "exaktes Zitat aus dem Bericht — BUCHSTABENGETREU aus dem Abschnitt kopiert, KEINE Kürzung mit … oder ..., KEINE Paraphrase, KEINE hinzugefügten Satzzeichen. Maximum ein Satz pro Zitat; bei langen Sätzen einen kürzeren, aber exakt im Text vorhandenen Ausschnitt wählen",
       "rule": "kurze Benennung der Regel (z.B. 'Diagnosen unzulässig')",
-      "suggestion": "konkrete Umformulierung nach erango-Standard: wohlwollend, ressourcenorientiert, ohne verbotene Begriffe — UND selbst keine neuen Regelverstöße"
+      "suggestion": "fertiger ERSATZTEXT, der das quote wörtlich ersetzt (siehe 'KRITISCH: Suggestion = Ersatztext'): Berichtssprache, 3. Person, keine Meta-Ratschläge — UND selbst keine neuen Regelverstöße"
     }
   ],
   "tonalityFeedback": "optional: nur bei klarem Gesamtmuster, sonst leer/weglassen",
@@ -255,6 +261,25 @@ Wenn der Bericht durchgehend dünn oder problematisch ist: leer lassen. Lieber s
 
 **Merksatz:** Schreib den Bericht so, dass der TN ihn lesen kann ohne sich angegriffen zu fühlen, und der Prüfer ihn lesen kann ohne eine Kürzung der Mittel zu begründen.
 
+## KRITISCH: Suggestion = Ersatztext, KEIN Ratschlag
+
+Die \`suggestion\` ersetzt das \`quote\` beim Klick auf „Im Text übernehmen" **wörtlich** im Bericht. Sie muss deshalb ein fertiger Berichtssatz sein: gleiche Erzählperspektive (3. Person), gleiche Zeitform, grammatikalisch passend an der Stelle des Zitats.
+
+**VERBOTEN** sind Meta-Formulierungen, die ÜBER den Text sprechen statt Text zu SEIN:
+- „Es wäre besser/hilfreich, …"
+- „Stattdessen könnte man formulieren, dass …"
+- „Diese Formulierung sollte vermieden werden …"
+- jede Empfehlung oder Anrede an den Coach
+
+Beispiel:
+- Quote: „Herr X zeigte dabei wenig Eigeninitiative und wirkte desinteressiert."
+- FALSCH: „Es könnte hilfreich sein, die Formulierung zu ändern, um die Entwicklungsmöglichkeiten zu betonen."
+- RICHTIG: „Der TN benötigte zu Beginn Unterstützung, um ins eigenständige Arbeiten zu finden; im Verlauf nahm die Eigeninitiative zu."
+
+**Nahtloser Anschluss:** Der Ersatz muss an den Text VOR und NACH dem Zitat anschließen. Wiederhole nichts, was unmittelbar vor oder nach dem Zitat schon steht (Subjekt, Name, Satzanfang) — beginnt das Zitat mitten im Satz, beginnt auch der Ersatz mitten im Satz. Falsch: Zitat „wirkt unmotiviert" → Ersatz „Herr [NAME_1] zeigt Herausforderungen in der Motivation" (dupliziert das Subjekt). Richtig: „zeigt Herausforderungen in der Motivation".
+
+Test vor der Ausgabe: Ergibt der Abschnitt einen sinnvollen Berichtstext, wenn man das Zitat 1:1 durch die suggestion ersetzt? Wenn nein → suggestion neu formulieren.
+
 ## KRITISCH: Quote-Treue
 
 Der \`quote\` muss **1:1 als Substring** im Bericht vorkommen, damit das UI die Umformulierung automatisiert anwenden kann:
@@ -273,4 +298,52 @@ Wenn das Problem kein wörtliches Zitat hat (z.B. „Tonalität insgesamt bewert
 - \`"needs_revision"\`: mindestens ein \`hard_block\` ODER mindestens ein fehlender Must-Have
 
 Antworte AUSSCHLIESSLICH mit dem JSON-Objekt. Keine Einleitung, kein Nachwort, keine Markdown-Fences.`;
+}
+
+/**
+ * Zweiter, paralleler Prüf-Lauf mit EINER Aufgabe: Satz-für-Satz-Scan nach
+ * abwertenden Formulierungen. Kein Pflichtbaustein-Check, keine Probes, kein
+ * Mismatch — dadurch bleibt die volle Aufmerksamkeit des Modells auf dem
+ * Enumerieren, und es übersieht deutlich weniger als der Haupt-Lauf, der
+ * viele Prüfziele gleichzeitig verfolgt. Die Ergebnisse beider Läufe werden
+ * server-seitig vereinigt (mergeViolationSets) — so wird „Runde 1 ist
+ * vollständig" architektonisch erzwungen statt vom Modell erhofft.
+ *
+ * Kriterien/Formulierungs-Regeln bewusst kompakt dupliziert — inhaltlich
+ * synchron zu buildCheckerSystemPrompt halten (Kategorien, soft_flag-Kriterien,
+ * Ersatztext-Regeln).
+ */
+export function buildRecallScanPrompt(): string {
+  return `Du prüfst einen anonymisierten AZAV-Abschlussbericht (Platzhalter wie [NAME_1] sind beabsichtigt — nie beanstanden). Deine EINZIGE Aufgabe: gehe den Text **Satz für Satz** durch und liste JEDE Stelle, die den Teilnehmer (TN) abwertend darstellt.
+
+Flagge einen Satz, wenn er enthält:
+- **Harte Charakter-Bewertung** über den TN: „faul", „desinteressiert", „chaotisch", „unzuverlässig", „stur", „undiszipliniert", „unmotiviert", „emotional labil" und sinngleiche Zuschreibungen (category: "bewertung")
+- **Psychologisierende Spekulation / Küchenpsychologie**: vermutete innere Ursachen wie „Selbstwertproblem", „Versagensangst", Bezüge auf Kindheit/Familie (category: "kuechenpsychologie")
+- **Negative Prognose**: „wird es schwer haben", „kaum vermittelbar", „Erfolgsaussichten gering" (category: "prognose")
+- **Medizinisches/Diagnostisches** über den TN: Diagnosen, „therapiebedürftig", „psychisch instabil" (category: "medizin" bzw. "diagnostik")
+- **Pathologisierung**: „narzisstisch", „toxisch", „krankhaft" (category: "pathologisierung")
+- **Juristische Tatsachenbehauptung**: „wurde gemobbt/diskriminiert" (category: "juristisch")
+
+NICHT flaggen: sachlich-konstruktive Defizit-Beschreibungen („benötigt Übung in X, Impulse wurden gesetzt"), Standard-Coaching-Vokabular, bereits entschärfte ressourcenorientierte Formulierungen, „kann (noch) nicht X". Im Zweifel bei GRENZFÄLLEN weglassen — aber jede klar abwertende Stelle MUSS in die Liste, auch wenn es viele sind. Pro Stelle eine eigene Violation.
+
+severity: fast immer "soft_flag". "hard_block" NUR bei expliziter Diagnose, expliziter „nicht vermittelbar"-Prognose oder Mobbing-Tatsachenbehauptung.
+
+quote: BUCHSTABENGETREUER Ausschnitt aus dem Text (maximal ein Satz, keine Kürzungen mit …, keine Paraphrase) — muss 1:1 als Substring vorkommen.
+
+suggestion: fertiger ERSATZTEXT in Berichtssprache (3. Person), der das quote wörtlich ersetzt und nahtlos an den umgebenden Text anschließt. KEINE Meta-Ratschläge („Es wäre besser…", „man könnte…"). Wiederhole kein Subjekt, das vor dem Zitat schon steht. Der Ersatz muss selbst regelkonform sein: wohlwollend, ressourcenorientiert.
+
+Ausgabe — STRIKT dieses JSON-Schema, sonst nichts:
+
+{
+  "violations": [
+    {
+      "category": "medizin" | "diagnostik" | "juristisch" | "pathologisierung" | "bewertung" | "prognose" | "kuechenpsychologie",
+      "severity": "hard_block" | "soft_flag",
+      "section": "teilnahme" | "ablauf" | "fazit",
+      "quote": "…",
+      "rule": "kurze Regel-Benennung",
+      "suggestion": "…"
+    }
+  ]
+}`;
 }
