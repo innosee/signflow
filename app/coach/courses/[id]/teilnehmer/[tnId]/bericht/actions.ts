@@ -65,6 +65,18 @@ async function currentRequestMeta() {
 }
 
 /**
+ * Validiert das Abschlussdatum aus dem Formular. `<input type="date">` liefert
+ * ISO `yyyy-mm-dd` oder Leerstring. Alles andere → null (kein Datum). Verhindert
+ * Müll in der `date`-Spalte, ohne eine schwere Datums-Lib zu ziehen.
+ */
+function parseIsoDate(raw: string): string | null {
+  const v = raw.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : v;
+}
+
+/**
  * Autosave eines Entwurfs. Upsert-Logik: existiert ein BER für (course, TN),
  * werden Texte aktualisiert; sonst wird ein neuer angelegt. Status wird NICHT
  * automatisch auf "draft" zurückgesetzt — wer nach Einreichung noch editiert,
@@ -90,6 +102,7 @@ export async function saveBerDraftAction(
     SONSTIGES_MAX,
   );
   const keineFehlzeiten = formData.get("keineFehlzeiten") === "true";
+  const abschlussDatum = parseIsoDate(String(formData.get("abschlussDatum") ?? ""));
 
   if (!courseId || !participantId) {
     return { error: "Kurs oder Teilnehmer fehlt." };
@@ -115,7 +128,7 @@ export async function saveBerDraftAction(
   if (existing) {
     await db
       .update(schema.abschlussberichte)
-      .set({ teilnahme, ablauf, fazit, sonstiges, keineFehlzeiten })
+      .set({ teilnahme, ablauf, fazit, sonstiges, keineFehlzeiten, abschlussDatum })
       .where(eq(schema.abschlussberichte.id, existing.id));
     berId = existing.id;
   } else {
@@ -130,6 +143,7 @@ export async function saveBerDraftAction(
         fazit,
         sonstiges,
         keineFehlzeiten,
+        abschlussDatum,
       })
       .returning({ id: schema.abschlussberichte.id });
     berId = created.id;
@@ -201,6 +215,7 @@ export async function submitBerAction(
   const sonstigesRaw = String(formData.get("sonstiges") ?? "").trim();
   const sonstiges = sonstigesRaw.slice(0, SONSTIGES_MAX);
   const keineFehlzeiten = formData.get("keineFehlzeiten") === "true";
+  const abschlussDatum = parseIsoDate(String(formData.get("abschlussDatum") ?? ""));
   const overrideReasonRaw = String(
     formData.get("mustHaveOverrideReason") ?? "",
   ).trim();
@@ -295,9 +310,13 @@ export async function submitBerAction(
   const spaceIdx = tnName.indexOf(" ");
   const tnVornameSnapshot = spaceIdx < 0 ? tnName : tnName.slice(0, spaceIdx);
   const tnNachnameSnapshot = spaceIdx < 0 ? "" : tnName.slice(spaceIdx + 1);
+  // Zeitraum im Dokument: Kurs-Start bis Abschlussdatum (= letzter Termin,
+  // vom Coach überschreibbar). Fällt auf das Bewilligungsende zurück, wenn
+  // kein Abschlussdatum mitkam (z.B. Alt-Bericht ohne den Wert).
+  const zeitraumEnde = abschlussDatum ?? snapshotData?.courseEnd ?? null;
   const tnZeitraumSnapshot =
-    snapshotData?.courseStart && snapshotData?.courseEnd
-      ? `${formatDateDE(snapshotData.courseStart)} — ${formatDateDE(snapshotData.courseEnd)}`
+    snapshotData?.courseStart && zeitraumEnde
+      ? `${formatDateDE(snapshotData.courseStart)} — ${formatDateDE(zeitraumEnde)}`
       : "";
 
   const now = new Date();
@@ -324,6 +343,7 @@ export async function submitBerAction(
         ? String(snapshotData.courseUe)
         : "",
     coachNameSnapshot: snapshotData?.coachName ?? "",
+    abschlussDatum,
   };
 
   let berId: string;

@@ -50,6 +50,7 @@ export default async function CoachBerPrintPage({ params }: Props) {
         tnKundenNr: schema.abschlussberichte.tnKundenNr,
         tnAvgsNummer: schema.abschlussberichte.tnAvgsNummer,
         tnZeitraum: schema.abschlussberichte.tnZeitraum,
+        abschlussDatum: schema.abschlussberichte.abschlussDatum,
         tnUe: schema.abschlussberichte.tnUe,
         coachNameSnapshot: schema.abschlussberichte.coachNameSnapshot,
       },
@@ -103,10 +104,14 @@ export default async function CoachBerPrintPage({ params }: Props) {
     row.participantName ||
     "";
   const kundenNr = ber.tnKundenNr || row.participantKundenNr || "";
+  // Snapshot gewinnt (eingereichte Berichte). Für Entwürfe ohne Snapshot:
+  // Kurs-Start bis Abschlussdatum (= letzter Termin, überschreibbar), sonst
+  // Bewilligungsende als Fallback.
+  const zeitraumEnde = ber.abschlussDatum ?? row.courseEnd ?? null;
   const zeitraum =
     ber.tnZeitraum ||
-    (row.courseStart && row.courseEnd
-      ? `${formatDateDE(row.courseStart)} — ${formatDateDE(row.courseEnd)}`
+    (row.courseStart && zeitraumEnde
+      ? `${formatDateDE(row.courseStart)} — ${formatDateDE(zeitraumEnde)}`
       : "");
   const coachName = row.coachName || ber.coachNameSnapshot || "";
 

@@ -42,6 +42,7 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
       tnKundenNr: schema.abschlussberichte.tnKundenNr,
       tnAvgsNummer: schema.abschlussberichte.tnAvgsNummer,
       tnZeitraum: schema.abschlussberichte.tnZeitraum,
+      abschlussDatum: schema.abschlussberichte.abschlussDatum,
       tnUe: schema.abschlussberichte.tnUe,
       coachNameSnapshot: schema.abschlussberichte.coachNameSnapshot,
       // Fallback für Kurs-gebundene BERs ohne befüllten Snapshot.
@@ -91,10 +92,11 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
     row.participantName ||
     "";
   const kundenNr = row.tnKundenNr || row.participantKundenNr || "";
+  const zeitraumEnde = row.abschlussDatum ?? row.courseEnd ?? null;
   const zeitraum =
     row.tnZeitraum ||
-    (row.courseStart && row.courseEnd
-      ? `${formatDateDE(row.courseStart)} — ${formatDateDE(row.courseEnd)}`
+    (row.courseStart && zeitraumEnde
+      ? `${formatDateDE(row.courseStart)} — ${formatDateDE(zeitraumEnde)}`
       : "");
   const coachName = row.coachName || row.coachNameSnapshot || "";
 

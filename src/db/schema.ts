@@ -1025,6 +1025,17 @@ export const abschlussberichte = pgTable(
     tnAvgsNummer: text("tn_avgs_nummer").notNull().default(""),
     tnZeitraum: text("tn_zeitraum").notNull().default(""),
     tnUe: text("tn_ue").notNull().default(""),
+    /**
+     * Tatsächliches Abschlussdatum des Berichts (= Datum des letzten Termins,
+     * überschreibbar durch den Coach). Bildet das ENDE des im Dokument
+     * gezeigten „Zeitraum" (Start bleibt Kurs-Start). Wird beim Öffnen des
+     * BER-Editors mit dem letzten Termin vorbelegt; `NULL` = noch nie gesetzt,
+     * dann fällt die Anzeige auf letzten Termin bzw. Bewilligungsende zurück.
+     * Fachlich verschieden vom Bewilligungsende (`courses.end_date`): das ist
+     * der genehmigte Rahmen, dies die reale Durchführung (User-Feedback
+     * 2026-07-16).
+     */
+    abschlussDatum: date("abschluss_datum"),
     coachNameSnapshot: text("coach_name_snapshot").notNull().default(""),
     status: berStatus("status").notNull().default("draft"),
     /**
