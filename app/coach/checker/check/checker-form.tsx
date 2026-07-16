@@ -23,6 +23,7 @@ import { countPseudonymisedEntities } from "@/lib/checker/dummy-response";
 import { reverseMap } from "@/lib/checker/reverse-map";
 import { runCheck } from "@/lib/checker/run-check";
 import {
+  CHECKER_ENGINE_REV,
   CHECKER_SECTIONS,
   DEFAULT_MASSNAHME_TYP,
   isCheckerInput,
@@ -206,6 +207,10 @@ export function CheckerForm({ userId }: { userId: string }) {
         if (
           maybe &&
           typeof maybe === "object" &&
+          // Engine-Revision: Zustand aus einer älteren Checker-Version wird
+          // verworfen — sonst würde die Konvergenz-Regel die Funde der neuen,
+          // besseren Engine als „bereits geprüft" wegsortieren.
+          (maybe as { rev?: unknown }).rev === CHECKER_ENGINE_REV &&
           isCheckerResult((maybe as { result?: unknown }).result) &&
           isCheckerInput(
             (maybe as { lastCheckedInput?: unknown }).lastCheckedInput,
@@ -278,6 +283,7 @@ export function CheckerForm({ userId }: { userId: string }) {
         localStorage.setItem(
           resultKey,
           JSON.stringify({
+            rev: CHECKER_ENGINE_REV,
             result,
             lastCheckedInput,
             // Review-State mitpersistieren, damit erledigte/weggeklickte
