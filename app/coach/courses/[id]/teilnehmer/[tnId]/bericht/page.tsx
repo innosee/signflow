@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, max } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { courseVisibleToCoach } from "@/lib/course-access";
@@ -72,6 +72,19 @@ export default async function BerEditorPage({ params }: Props) {
 
   const initialBer: Abschlussbericht | null = existingBer ?? null;
 
+  // Letzter Termin = spätestes Datum aller nicht gelöschten Termine. Dient als
+  // Vorbelegung für das Abschlussdatum (= Ende des Zeitraums im Dokument);
+  // der Coach kann es im Editor überschreiben.
+  const [{ letzterTermin } = { letzterTermin: null }] = await db
+    .select({ letzterTermin: max(schema.sessions.sessionDate) })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, courseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10 space-y-6">
       <div>
@@ -108,11 +121,9 @@ export default async function BerEditorPage({ params }: Props) {
         participantName={row.participant.name}
         kundenNr={row.participant.kundenNr}
         avgsNummer={row.course.avgsNummer}
-        zeitraum={
-          row.course.startDate && row.course.endDate
-            ? `${row.course.startDate} – ${row.course.endDate}`
-            : ""
-        }
+        courseStartDate={row.course.startDate}
+        courseEndDate={row.course.endDate}
+        letzterTermin={letzterTermin ?? null}
         gesamtzahlUe={String(row.course.anzahlBewilligteUe)}
         initialBer={initialBer}
         impersonating={isImpersonating(session)}

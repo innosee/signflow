@@ -97,7 +97,12 @@ type Props = {
   participantName: string;
   kundenNr: string;
   avgsNummer: string;
-  zeitraum: string;
+  /** Kurs-Start (ISO) = Beginn des Zeitraums im Dokument. */
+  courseStartDate: string | null;
+  /** Bewilligungsende (ISO) — nur Fallback, wenn es keinen Termin gibt. */
+  courseEndDate: string | null;
+  /** Letzter Termin (ISO, max. session_date) — Vorbelegung des Abschlussdatums. */
+  letzterTermin: string | null;
   gesamtzahlUe: string;
   initialBer: Abschlussbericht | null;
   impersonating: boolean;
@@ -112,7 +117,9 @@ export function BerEditor({
   participantName,
   kundenNr,
   avgsNummer,
-  zeitraum,
+  courseStartDate,
+  courseEndDate,
+  letzterTermin,
   gesamtzahlUe,
   initialBer,
   impersonating,
@@ -132,6 +139,17 @@ export function BerEditor({
   const [keineFehlzeiten, setKeineFehlzeiten] = useState(
     initialBer?.keineFehlzeiten ?? false,
   );
+  // Abschlussdatum (= Ende des Zeitraums im Dokument). Vorbelegt mit dem
+  // gespeicherten Wert, sonst dem letzten Termin, sonst dem Bewilligungsende.
+  // ISO 'yyyy-mm-dd' für das native <input type="date">.
+  const [abschlussDatum, setAbschlussDatum] = useState<string>(
+    initialBer?.abschlussDatum ?? letzterTermin ?? courseEndDate ?? "",
+  );
+  // Angezeigter Zeitraum: Kurs-Start bis Abschlussdatum (deutsches Format).
+  const zeitraumAnzeige =
+    courseStartDate && abschlussDatum
+      ? `${formatDateDE(courseStartDate)} – ${formatDateDE(abschlussDatum)}`
+      : "";
   // Pro Sensibel-Stelle (hard_block, per violation.id) die Fehlalarm-
   // Begründung des Coaches. Wegklicken geht NUR mit Begründung (≥10 Zeichen) —
   // der Bildungsträger prüft sie nach. Startet leer; bei Re-Edit eines
@@ -336,6 +354,7 @@ export function BerEditor({
       fd.append("fazit", input.fazit);
       fd.append("sonstiges", sonstiges);
       fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
+      fd.append("abschlussDatum", abschlussDatum);
       startSaveTransition(async () => {
         const res = await saveBerDraftAction(undefined, fd);
         if (res?.savedAt) setSavedAt(new Date(res.savedAt));
@@ -347,6 +366,7 @@ export function BerEditor({
     input,
     sonstiges,
     keineFehlzeiten,
+    abschlussDatum,
     courseId,
     participantId,
     impersonating,
@@ -542,6 +562,7 @@ export function BerEditor({
     fd.append("fazit", input.fazit);
     fd.append("sonstiges", sonstiges);
     fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
+    fd.append("abschlussDatum", abschlussDatum);
     if (overrideTrim.length > 0) {
       fd.append("mustHaveOverrideReason", overrideTrim);
     }
@@ -589,6 +610,7 @@ export function BerEditor({
         fd.append("fazit", input.fazit);
         fd.append("sonstiges", sonstiges);
         fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
+        fd.append("abschlussDatum", abschlussDatum);
         const res = await saveBerDraftAction(undefined, fd);
         if (res?.berId) {
           id = res.berId;
@@ -781,6 +803,23 @@ export function BerEditor({
           </span>
         </label>
 
+        <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-800">
+          <label htmlFor="abschluss-datum" className="font-medium">
+            Abschlussdatum
+          </label>
+          <input
+            id="abschluss-datum"
+            type="date"
+            value={abschlussDatum}
+            onChange={(e) => setAbschlussDatum(e.target.value)}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+          />
+          <span className="text-xs text-zinc-500">
+            Vorbelegt mit dem letzten Termin. Bildet das Ende des Zeitraums im
+            Dokument{zeitraumAnzeige ? ` (${zeitraumAnzeige})` : ""}.
+          </span>
+        </div>
+
         {hasHardBlock && status !== "submitted" && (
           <div className="rounded-xl border border-rose-300 bg-rose-50 p-5">
             <p className="text-sm font-medium text-rose-900">
@@ -919,7 +958,7 @@ export function BerEditor({
               </div>
               <div>Kunden-Nr.: {kundenNr}</div>
               <div>AVGS: {avgsNummer}</div>
-              <div>Zeitraum: {zeitraum}</div>
+              <div>Zeitraum: {zeitraumAnzeige || "—"}</div>
               <div>Gesamt UE: {gesamtzahlUe}</div>
               <div className="mt-1">Coach: {coachName}</div>
             </div>
