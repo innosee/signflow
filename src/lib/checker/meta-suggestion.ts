@@ -16,8 +16,8 @@
  * (guter Ersatztext nicht übernehmbar) nur ein Klick mehr.
  */
 const META_PATTERNS: readonly RegExp[] = [
-  // „Es wäre besser/hilfreich/ratsam/sinnvoll/empfehlenswert, …"
-  /\bes (?:wäre|ist) (?:besser|hilfreich|ratsam|sinnvoll|empfehlenswert|angebracht)\b/i,
+  // „Es wäre/ist/könnte/kann besser/hilfreich/ratsam … (sein)"
+  /\bes (?:wäre|ist|könnte|kann) (?:\w+ )?(?:besser|hilfreich|ratsam|sinnvoll|empfehlenswert|angebracht)\b/i,
   // „Stattdessen könnte/sollte man …", „man könnte/sollte formulieren …"
   /\bstattdessen (?:könnte|sollte|kann|wäre)\b/i,
   /\bman (?:könnte|sollte|kann) (?:formulieren|schreiben|erwähnen|beschreiben)\b/i,

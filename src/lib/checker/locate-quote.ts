@@ -71,5 +71,8 @@ function buildFlexiblePattern(quote: string): RegExp {
   const flexQuotes = flexWs
     .replace(/["„""]/g, `["„""]`)
     .replace(/['']/g, `['']`);
-  return new RegExp(flexQuotes, "u");
+  // "i": das LLM ändert gern die Groß-/Kleinschreibung des ersten Wortes
+  // („seine chaotische Art…" statt „Seine chaotische Art…" am Satzanfang) —
+  // ohne case-insensitives Matching scheitert dann „Im Text übernehmen".
+  return new RegExp(flexQuotes, "iu");
 }
