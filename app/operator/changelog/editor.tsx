@@ -16,11 +16,25 @@ export function ChangelogEditor({ entries }: { entries: EntryRow[] }) {
   // Secret einmal eintippen, in jede Aktion (Create + Delete) als Hidden-Feld
   // mitgeben. Bewusst controlled, damit es über Form-Resets hinweg bleibt.
   const [secret, setSecret] = useState("");
+  // Titel + Text controlled — sonst resettet React 19 das Form nach der Action
+  // und der getippte Text ist bei einem Fehler (z.B. falsches Secret) weg.
+  // Konvention: docs/forms-server-actions.md.
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
 
+  // Action-Wrapper: leert Titel + Text NUR bei Erfolg (im Transition-Kontext,
+  // nicht per Effect). Bei Fehler bleibt die Eingabe zum Korrigieren stehen.
   const [createState, createAction, creating] = useActionState<
     ChangelogEditorState,
     FormData
-  >(createChangelogEntry, undefined);
+  >(async (prev, formData) => {
+    const res = await createChangelogEntry(prev, formData);
+    if (res?.success) {
+      setTitle("");
+      setBody("");
+    }
+    return res;
+  }, undefined);
   const [deleteState, deleteAction] = useActionState<
     ChangelogEditorState,
     FormData
@@ -58,6 +72,8 @@ export function ChangelogEditor({ entries }: { entries: EntryRow[] }) {
             name="title"
             type="text"
             required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
             placeholder="z.B. Erstgespräch vor Gutschein & mobile Bedienung"
             className={inputClass}
           />
@@ -70,6 +86,8 @@ export function ChangelogEditor({ entries }: { entries: EntryRow[] }) {
             name="body"
             required
             rows={8}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
             placeholder="Plaintext mit Zeilenumbrüchen. Wird auf der „Neu“-Seite 1:1 angezeigt."
             className={inputClass}
           />
