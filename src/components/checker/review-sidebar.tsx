@@ -399,35 +399,37 @@ function StatusPill({
       </div>
     );
   }
+  // Ampel-Logik (User-Feedback 2026-07-16): gelb solange Hinweise offen sind
+  // — grün + „9 Hinweise offen" las sich wie „alles gut". Grün gibt es erst,
+  // wenn wirklich nichts mehr zu tun ist. Blockieren tun weiterhin nur
+  // Sensibel-Stellen (rot, oben).
+  if (hintCount > 0) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+        <div className="text-sm font-semibold text-amber-900">
+          {hintCount} {hintCount === 1 ? "Hinweis" : "Hinweise"} offen
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-amber-900">
+          Kein kritischer Verstoß — die Punkte rechts sind beratend, kein Muss.
+        </p>
+        <p className="mt-2 border-t border-amber-200 pt-2 text-[11px] leading-relaxed text-amber-800">
+          {isCheck
+            ? "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon") — dann wird der Status grün. Einreichen wäre auch so möglich."
+            : "Arbeite die Hinweise durch (übernehmen, selbst umformulieren oder „Passt schon") — dann wird der Status grün. Einreichen ist auch so möglich."}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
       <div className="text-sm font-semibold text-emerald-900">
-        {/* „Sprachlich sauber" erst bei 0 offenen Hinweisen — mit offenen
-            Hinweisen wäre die Überschrift irreführend (User-Feedback
-            2026-07-16); grün bleibt sie, weil nichts blockiert. */}
-        {hintCount > 0
-          ? "Keine kritischen Verstöße"
-          : isCheck
-            ? "Sprachlich sauber"
-            : "Einreichen möglich"}
+        {isCheck ? "Sprachlich sauber" : "Einreichen möglich"}
       </div>
       <p className="mt-1 text-xs leading-relaxed text-emerald-900">
-        {hintCount > 0
-          ? `${hintCount} ${hintCount === 1 ? "Hinweis" : "Hinweise"} offen — beratend, kein Muss.`
-          : "Keine offenen Hinweise."}
+        Keine offenen Hinweise.
       </p>
-      {/* Endzustand explizit machen: die häufigste Frustration ist, dass ein
-          erneuter Check nach jeder Korrektur wieder „neue" (in Wahrheit
-          schwächere) Hinweise zeigt. Sobald nichts mehr blockiert, ist der
-          Bericht fertig — das hier sagt klar, dass man aufhören darf. */}
       <p className="mt-2 border-t border-emerald-200 pt-2 text-[11px] leading-relaxed text-emerald-800">
-        {hintCount > 0
-          ? isCheck
-            ? "Der Bericht ist so in Ordnung. Weitere Prüfungen sind optional und finden meist nur noch kleinere Formulierungs-Tipps — du musst nicht auf null Hinweise kommen."
-            : "Du kannst so einreichen. Weitere Prüfungen sind optional und finden meist nur noch kleinere Formulierungs-Tipps — du musst nicht auf null Hinweise kommen."
-          : isCheck
-            ? "Fertig — hier ist nichts mehr zu tun."
-            : "Fertig — du kannst einreichen."}
+        {isCheck ? "Fertig — hier ist nichts mehr zu tun." : "Fertig — du kannst einreichen."}
       </p>
     </div>
   );
