@@ -276,6 +276,8 @@ Beispiel:
 - FALSCH: „Es könnte hilfreich sein, die Formulierung zu ändern, um die Entwicklungsmöglichkeiten zu betonen."
 - RICHTIG: „Der TN benötigte zu Beginn Unterstützung, um ins eigenständige Arbeiten zu finden; im Verlauf nahm die Eigeninitiative zu."
 
+**Nahtloser Anschluss:** Der Ersatz muss an den Text VOR und NACH dem Zitat anschließen. Wiederhole nichts, was unmittelbar vor oder nach dem Zitat schon steht (Subjekt, Name, Satzanfang) — beginnt das Zitat mitten im Satz, beginnt auch der Ersatz mitten im Satz. Falsch: Zitat „wirkt unmotiviert" → Ersatz „Herr [NAME_1] zeigt Herausforderungen in der Motivation" (dupliziert das Subjekt). Richtig: „zeigt Herausforderungen in der Motivation".
+
 Test vor der Ausgabe: Ergibt der Abschnitt einen sinnvollen Berichtstext, wenn man das Zitat 1:1 durch die suggestion ersetzt? Wenn nein → suggestion neu formulieren.
 
 ## KRITISCH: Quote-Treue
@@ -296,4 +298,52 @@ Wenn das Problem kein wörtliches Zitat hat (z.B. „Tonalität insgesamt bewert
 - \`"needs_revision"\`: mindestens ein \`hard_block\` ODER mindestens ein fehlender Must-Have
 
 Antworte AUSSCHLIESSLICH mit dem JSON-Objekt. Keine Einleitung, kein Nachwort, keine Markdown-Fences.`;
+}
+
+/**
+ * Zweiter, paralleler Prüf-Lauf mit EINER Aufgabe: Satz-für-Satz-Scan nach
+ * abwertenden Formulierungen. Kein Pflichtbaustein-Check, keine Probes, kein
+ * Mismatch — dadurch bleibt die volle Aufmerksamkeit des Modells auf dem
+ * Enumerieren, und es übersieht deutlich weniger als der Haupt-Lauf, der
+ * viele Prüfziele gleichzeitig verfolgt. Die Ergebnisse beider Läufe werden
+ * server-seitig vereinigt (mergeViolationSets) — so wird „Runde 1 ist
+ * vollständig" architektonisch erzwungen statt vom Modell erhofft.
+ *
+ * Kriterien/Formulierungs-Regeln bewusst kompakt dupliziert — inhaltlich
+ * synchron zu buildCheckerSystemPrompt halten (Kategorien, soft_flag-Kriterien,
+ * Ersatztext-Regeln).
+ */
+export function buildRecallScanPrompt(): string {
+  return `Du prüfst einen anonymisierten AZAV-Abschlussbericht (Platzhalter wie [NAME_1] sind beabsichtigt — nie beanstanden). Deine EINZIGE Aufgabe: gehe den Text **Satz für Satz** durch und liste JEDE Stelle, die den Teilnehmer (TN) abwertend darstellt.
+
+Flagge einen Satz, wenn er enthält:
+- **Harte Charakter-Bewertung** über den TN: „faul", „desinteressiert", „chaotisch", „unzuverlässig", „stur", „undiszipliniert", „unmotiviert", „emotional labil" und sinngleiche Zuschreibungen (category: "bewertung")
+- **Psychologisierende Spekulation / Küchenpsychologie**: vermutete innere Ursachen wie „Selbstwertproblem", „Versagensangst", Bezüge auf Kindheit/Familie (category: "kuechenpsychologie")
+- **Negative Prognose**: „wird es schwer haben", „kaum vermittelbar", „Erfolgsaussichten gering" (category: "prognose")
+- **Medizinisches/Diagnostisches** über den TN: Diagnosen, „therapiebedürftig", „psychisch instabil" (category: "medizin" bzw. "diagnostik")
+- **Pathologisierung**: „narzisstisch", „toxisch", „krankhaft" (category: "pathologisierung")
+- **Juristische Tatsachenbehauptung**: „wurde gemobbt/diskriminiert" (category: "juristisch")
+
+NICHT flaggen: sachlich-konstruktive Defizit-Beschreibungen („benötigt Übung in X, Impulse wurden gesetzt"), Standard-Coaching-Vokabular, bereits entschärfte ressourcenorientierte Formulierungen, „kann (noch) nicht X". Im Zweifel bei GRENZFÄLLEN weglassen — aber jede klar abwertende Stelle MUSS in die Liste, auch wenn es viele sind. Pro Stelle eine eigene Violation.
+
+severity: fast immer "soft_flag". "hard_block" NUR bei expliziter Diagnose, expliziter „nicht vermittelbar"-Prognose oder Mobbing-Tatsachenbehauptung.
+
+quote: BUCHSTABENGETREUER Ausschnitt aus dem Text (maximal ein Satz, keine Kürzungen mit …, keine Paraphrase) — muss 1:1 als Substring vorkommen.
+
+suggestion: fertiger ERSATZTEXT in Berichtssprache (3. Person), der das quote wörtlich ersetzt und nahtlos an den umgebenden Text anschließt. KEINE Meta-Ratschläge („Es wäre besser…", „man könnte…"). Wiederhole kein Subjekt, das vor dem Zitat schon steht. Der Ersatz muss selbst regelkonform sein: wohlwollend, ressourcenorientiert.
+
+Ausgabe — STRIKT dieses JSON-Schema, sonst nichts:
+
+{
+  "violations": [
+    {
+      "category": "medizin" | "diagnostik" | "juristisch" | "pathologisierung" | "bewertung" | "prognose" | "kuechenpsychologie",
+      "severity": "hard_block" | "soft_flag",
+      "section": "teilnahme" | "ablauf" | "fazit",
+      "quote": "…",
+      "rule": "kurze Regel-Benennung",
+      "suggestion": "…"
+    }
+  ]
+}`;
 }

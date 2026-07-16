@@ -402,7 +402,14 @@ function StatusPill({
   return (
     <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
       <div className="text-sm font-semibold text-emerald-900">
-        {isCheck ? "Sprachlich sauber" : "Einreichen möglich"}
+        {/* „Sprachlich sauber" erst bei 0 offenen Hinweisen — mit offenen
+            Hinweisen wäre die Überschrift irreführend (User-Feedback
+            2026-07-16); grün bleibt sie, weil nichts blockiert. */}
+        {hintCount > 0
+          ? "Keine kritischen Verstöße"
+          : isCheck
+            ? "Sprachlich sauber"
+            : "Einreichen möglich"}
       </div>
       <p className="mt-1 text-xs leading-relaxed text-emerald-900">
         {hintCount > 0

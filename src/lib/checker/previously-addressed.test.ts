@@ -98,4 +98,50 @@ describe("markCarriedOver (Konvergenz-Regel gegen Anpassungsrunden-Schleife)", (
     );
     expect(r.violations[0]!.carriedOver).toBeUndefined();
   });
+
+  describe("Section-Regel (unveränderter Abschnitt → keine neuen offenen Funde)", () => {
+    it("markiert JEDES neue Finding in einem unveränderten Abschnitt, auch mit abweichendem Zitat", () => {
+      // Zitat weicht vom Vorrunden-Text ab (würde die Quote-Regel verfehlen),
+      // aber der Abschnitt ist unverändert → Section-Regel greift.
+      const r = markCarriedOver(
+        result([violation({ quote: "ein Zitat das so nicht im Text steht" })]),
+        prevWithQuote,
+        new Set<string>(),
+        prevWithQuote, // aktueller Input identisch zur Vorrunde
+      );
+      expect(r.violations[0]!.carriedOver).toBe(true);
+    });
+
+    it("lässt Findings in GEÄNDERTEN Abschnitten offen (Quote nicht im Vorrunden-Text)", () => {
+      const changed = input({ fazit: `${prevWithQuote.fazit} Neuer angehängter Satz.` });
+      const r = markCarriedOver(
+        result([violation({ quote: "Neuer angehängter Satz" })]),
+        prevWithQuote,
+        new Set<string>(),
+        changed,
+      );
+      expect(r.violations[0]!.carriedOver).toBeUndefined();
+    });
+
+    it("markiert hard_blocks auch in unveränderten Abschnitten NIE", () => {
+      const r = markCarriedOver(
+        result([violation({ quote, severity: "hard_block", category: "medizin" })]),
+        prevWithQuote,
+        new Set<string>(),
+        prevWithQuote,
+      );
+      expect(r.violations[0]!.carriedOver).toBeUndefined();
+    });
+
+    it("Whitespace-Unterschiede zählen nicht als Änderung (normalisierter Vergleich)", () => {
+      const reformatted = input({ fazit: `  ${prevWithQuote.fazit.replace(/ /g, "  ")} ` });
+      const r = markCarriedOver(
+        result([violation({ quote: "irgendein neues Finding im alten Text" })]),
+        prevWithQuote,
+        new Set<string>(),
+        reformatted,
+      );
+      expect(r.violations[0]!.carriedOver).toBe(true);
+    });
+  });
 });

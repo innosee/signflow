@@ -93,11 +93,20 @@ export function markPreviouslyAddressed(
  *     (gleiche Schwelle wie `markPreviouslyAddressed`).
  *
  * Erster Check (`prevInput === null`): nichts wird markiert.
+ *
+ * Zwei Stufen, von hart nach heuristisch:
+ *   1. **Section-Regel** (braucht `currentInput`): Ist der Text eines
+ *      Abschnitts seit der letzten Prüfung UNVERÄNDERT, kann es dort per
+ *      Definition keine neuen offenen Funde geben — jedes neue Finding in
+ *      diesem Abschnitt ist ein Nachschieber, unabhängig vom Zitat.
+ *   2. **Quote-Regel** (für geänderte Abschnitte): das konkrete Zitat lag
+ *      wortgleich schon im Vorrunden-Text und wurde nicht gemeldet.
  */
 export function markCarriedOver(
   result: CheckerResult,
   prevInput: CheckerInput | null,
   prevIds: ReadonlySet<string> | null,
+  currentInput?: CheckerInput | null,
 ): CheckerResult {
   if (!prevInput || !prevIds) return result;
 
@@ -107,11 +116,19 @@ export function markCarriedOver(
     ablauf: normalize(prevInput.ablauf),
     fazit: normalize(prevInput.fazit),
   };
+  // Section-Regel: welche Abschnitte sind seit der letzten Prüfung
+  // unverändert? (Nur wenn der Aufrufer den aktuellen Input mitgibt.)
+  const sectionUnchanged: Record<CheckerSection, boolean> = {
+    teilnahme: !!currentInput && normalize(currentInput.teilnahme) === prevBySection.teilnahme,
+    ablauf: !!currentInput && normalize(currentInput.ablauf) === prevBySection.ablauf,
+    fazit: !!currentInput && normalize(currentInput.fazit) === prevBySection.fazit,
+  };
 
   const violations: Violation[] = result.violations.map((v) => {
     if (v.severity === "hard_block") return v;
     if (v.previouslyAddressed || v.carriedOver) return v;
     if (prevIds.has(v.id)) return v; // bekanntes Finding — bleibt offen
+    if (sectionUnchanged[v.section]) return { ...v, carriedOver: true };
     const normalQuote = normalize(v.quote);
     if (normalQuote.length < 10) return v;
     return prevBySection[v.section].includes(normalQuote)

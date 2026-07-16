@@ -1,8 +1,9 @@
 import { AzureOpenAI } from "openai";
 
 import { quoteJustifiesHardBlock } from "./hard-block-terms";
+import { mergeViolationSets } from "./merge-violations";
 import { stableViolationId } from "./previously-addressed";
-import { buildCheckerSystemPrompt } from "./prompt";
+import { buildCheckerSystemPrompt, buildRecallScanPrompt } from "./prompt";
 import {
   MUST_HAVES_BY_MASSNAHMETYP,
   resolveMassnahmeTyp,
@@ -96,6 +97,68 @@ const VALID_CATEGORIES = new Set<ViolationCategory>([
 
 const VALID_SECTIONS = new Set(["teilnahme", "ablauf", "fazit"]);
 
+/**
+ * Validiert das rohe violations-Array eines Modell-Outputs — geteilt vom
+ * Haupt-Lauf (parseAndValidate) und vom Recall-Scan (parseRecallViolations),
+ * damit beide durch dieselben Leitplanken laufen:
+ *   - inhaltsstabile ID (section::normalize(quote)) statt Positionsindex,
+ *     damit der Review-State Re-Checks überlebt; gleichzeitig Dedup
+ *   - Severity-Leitplanke: hard_block nur, wenn das Modell ihn behauptet
+ *     UND das Zitat einen der wörtlich gelisteten Risiko-Begriffe enthält
+ *     (Prompt-Definition, im Code erzwungen — verhindert Flip-Flops).
+ *     Fail-Default ist soft_flag, nicht hard_block.
+ */
+function parseViolations(raw: unknown): Violation[] {
+  const violationsRaw = Array.isArray(raw) ? raw : [];
+  const seenIds = new Set<string>();
+  return violationsRaw
+    .filter(
+      (v): v is Record<string, unknown> =>
+        !!v &&
+        typeof v === "object" &&
+        VALID_CATEGORIES.has((v as { category: ViolationCategory }).category) &&
+        VALID_SECTIONS.has((v as { section: string }).section),
+    )
+    .map((v) => {
+      const section = v.section as Violation["section"];
+      const quote = typeof v.quote === "string" ? v.quote : "";
+      const severity: Violation["severity"] =
+        v.severity === "hard_block" && quoteJustifiesHardBlock(quote)
+          ? "hard_block"
+          : "soft_flag";
+      return {
+        id: stableViolationId(section, quote),
+        category: v.category as ViolationCategory,
+        severity,
+        section,
+        quote,
+        rule: typeof v.rule === "string" ? v.rule : "",
+        suggestion: typeof v.suggestion === "string" ? v.suggestion : "",
+      };
+    })
+    .filter((v) => {
+      if (seenIds.has(v.id)) return false;
+      seenIds.add(v.id);
+      return true;
+    });
+}
+
+/**
+ * Parst die Antwort des Recall-Scans ({violations: [...]}) — tolerant:
+ * ein kaputter Recall-Output darf den Check nie scheitern lassen, der
+ * Haupt-Lauf trägt das Ergebnis dann allein.
+ */
+function parseRecallViolations(raw: string): Violation[] {
+  try {
+    const stripped = raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+    const data: unknown = JSON.parse(stripped);
+    if (!data || typeof data !== "object") return [];
+    return parseViolations((data as Record<string, unknown>).violations);
+  } catch {
+    return [];
+  }
+}
+
 function parseAndValidate(
   raw: string,
   expectedTopics: ReadonlySet<MustHaveTopic>,
@@ -152,47 +215,7 @@ function parseAndValidate(
       },
   );
 
-  const violationsRaw = Array.isArray(obj.violations) ? obj.violations : [];
-  // Inhaltsstabile ID (section::normalize(quote)) statt Positionsindex, damit
-  // der Review-State über Re-Checks erhalten bleibt. Gleichzeitig Dedup: zwei
-  // identische (Section + Zitat) Treffer kollabieren zu einem — eindeutige
-  // React-Keys + keine doppelten Karten.
-  const seenIds = new Set<string>();
-  const violations: Violation[] = violationsRaw
-    .filter(
-      (v): v is Record<string, unknown> =>
-        !!v &&
-        typeof v === "object" &&
-        VALID_CATEGORIES.has((v as { category: ViolationCategory }).category) &&
-        VALID_SECTIONS.has((v as { section: string }).section),
-    )
-    .map((v) => {
-      const section = v.section as Violation["section"];
-      const quote = typeof v.quote === "string" ? v.quote : "";
-      // Severity-Leitplanke: hard_block nur, wenn das Modell ihn behauptet
-      // UND das Zitat einen der wörtlich gelisteten Risiko-Begriffe enthält
-      // (Prompt-Definition, im Code erzwungen — verhindert Flip-Flops
-      // zwischen Re-Checks). Vorher defaultete fehlende severity sogar auf
-      // hard_block; jetzt ist soft_flag der Fail-Default.
-      const severity: Violation["severity"] =
-        v.severity === "hard_block" && quoteJustifiesHardBlock(quote)
-          ? "hard_block"
-          : "soft_flag";
-      return {
-        id: stableViolationId(section, quote),
-        category: v.category as ViolationCategory,
-        severity,
-        section,
-        quote,
-        rule: typeof v.rule === "string" ? v.rule : "",
-        suggestion: typeof v.suggestion === "string" ? v.suggestion : "",
-      };
-    })
-    .filter((v) => {
-      if (seenIds.has(v.id)) return false;
-      seenIds.add(v.id);
-      return true;
-    });
+  const violations = parseViolations(obj.violations);
 
   const tonalityFeedback =
     typeof obj.tonalityFeedback === "string" && obj.tonalityFeedback.trim().length > 0
@@ -286,25 +309,69 @@ export async function runAzureCheck(input: CheckerInput): Promise<CheckerResult>
   const expectedTopics = new Set<MustHaveTopic>(
     MUST_HAVES_BY_MASSNAHMETYP[massnahmeTyp],
   );
+  const userMessage = buildUserMessage(input);
 
-  const completion = await c.chat.completions.create({
-    model: d,
-    // Determinismus: temperature 0 + fester seed. Azure garantiert keinen
-    // 100%-bit-stabilen Output (Top-P, Server-Batching), reduziert Drift
-    // zwischen Re-Checks aber spürbar — wichtig nach „Alle Verbesserungen
-    // einbinden", damit der Coach nicht bei jedem Klick neue Cosmetics sieht.
-    temperature: 0,
-    seed: 42,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: buildCheckerSystemPrompt(massnahmeTyp) },
-      { role: "user", content: buildUserMessage(input) },
-    ],
-  });
+  // Zwei parallele Läufe (siehe buildRecallScanPrompt): der Haupt-Lauf prüft
+  // alles (Pflichtbausteine, Probes, Mismatch, Violations), der Recall-Scan
+  // enumeriert NUR abwertende Stellen Satz für Satz. Die Vereinigung beider
+  // erzwingt die Vollständigkeit von Runde 1 architektonisch — ein einzelner
+  // Lauf übersieht nachweislich Stellen, und die Konvergenz-Regel im Client
+  // würde diese Lücken sonst dauerhaft zementieren (falsches Grün).
+  // Determinismus je Lauf: temperature 0 + fester seed (Azure garantiert
+  // keinen bit-stabilen Output, reduziert Drift aber spürbar).
+  const [mainSettled, recallSettled] = await Promise.allSettled([
+    c.chat.completions.create({
+      model: d,
+      temperature: 0,
+      seed: 42,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: buildCheckerSystemPrompt(massnahmeTyp) },
+        { role: "user", content: userMessage },
+      ],
+    }),
+    c.chat.completions.create({
+      model: d,
+      temperature: 0,
+      seed: 42,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: buildRecallScanPrompt() },
+        { role: "user", content: userMessage },
+      ],
+    }),
+  ]);
 
-  const raw = completion.choices[0]?.message?.content;
+  // Haupt-Lauf ist Pflicht — ohne ihn gibt es kein Ergebnis.
+  if (mainSettled.status === "rejected") {
+    throw mainSettled.reason instanceof Error
+      ? mainSettled.reason
+      : new Error(String(mainSettled.reason));
+  }
+  const raw = mainSettled.value.choices[0]?.message?.content;
   if (!raw) {
     throw new Error("Azure-Antwort enthielt keinen Inhalt");
   }
-  return parseAndValidate(raw, expectedTopics, massnahmeTyp);
+  const result = parseAndValidate(raw, expectedTopics, massnahmeTyp);
+
+  // Recall-Scan ist Kür — fällt er aus, trägt der Haupt-Lauf allein
+  // (graceful degradation statt kompletter Check-Fehlschlag).
+  let recallViolations: Violation[] = [];
+  if (recallSettled.status === "fulfilled") {
+    const recallRaw = recallSettled.value.choices[0]?.message?.content;
+    if (recallRaw) recallViolations = parseRecallViolations(recallRaw);
+  } else {
+    console.warn("Checker-Recall-Scan fehlgeschlagen:", recallSettled.reason);
+  }
+  if (recallViolations.length === 0) return result;
+
+  const violations = mergeViolationSets(result.violations, recallViolations);
+  // Status neu ableiten — der Recall kann (selten) einen hard_block ergänzen.
+  const hasHardBlock = violations.some((v) => v.severity === "hard_block");
+  const allMustHavesCovered = result.mustHaves.every((m) => m.covered);
+  return {
+    ...result,
+    violations,
+    status: !hasHardBlock && allMustHavesCovered ? "pass" : "needs_revision",
+  };
 }
