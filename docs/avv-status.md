@@ -37,8 +37,8 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 |---|---|---|---|---|
 | **Vercel Inc.** | Hosting | EU (Frankfurt) + US (Sitz) | 🟡 Online-AVV, in Kraft | **Geprüft 2026-07-16:** DPA (vercel.com/legal/dpa) ist automatisch über die Nutzungsbedingungen bindend, keine separate Unterschrift. EU SCCs (2021, Schedule 3) enthalten. To-do: DPA-PDF ablegen + Subprozessoren-Liste security.vercel.com im Blick behalten. |
 | **Neon Inc.** | Datenbank-Hosting | EU (AWS Frankfurt) + US (Sitz) | 📋 Zu prüfen | **2026-07-16:** Legal-URL nach Umzug neon.tech→neon.com aktuell 404 (Databricks-Übernahme), Mechanismus nicht verifizierbar. To-do: in der Neon-Console (Org-Settings) nach DPA suchen oder per Support anfragen; SCCs bestätigen. |
-| **Vercel Inc. (Blob)** | Objekt-Storage (Signaturbilder) | EU + US (Sitz) | 🟡 Über Vercel-DPA gedeckt | **Aktuell produktiv genutzt** (public + random suffix; TODO auf privat-geschützt migrieren, siehe `src/lib/storage.ts`). Gedeckt durch dieselbe Vercel-DPA wie das Hosting (siehe oben). |
-| **Cloudflare, Inc. (R2)** | Objekt-Storage (Option) | EU-Jurisdiction + US (Sitz) | ⚪ Aktuell nicht genutzt | Mögliche Alternative zu Vercel Blob, evtl. später. AVV erst bei tatsächlichem Einsatz einholen (Cloudflare DPA online verfügbar). |
+| **Cloudflare, Inc. (R2 + Turnstile)** | Objekt-Storage (privater EU-Bucket, signierte URLs) + Bot-Schutz auf /register + Warteliste | EU-Jurisdiction + US (Sitz) | ❌ Offen — DPA nötig | **KORREKTUR 2026-07-16 (Audit):** R2 ist in Production AKTIV (R2-Env-Vars seit ~Mai in Prod, `selectStorageProvider` wählt R2). Cloudflare-DPA (`cloudflare.com/cloudflare-customer-dpa`, in die Terms eingebunden — verifizieren + PDF ablegen) ist damit JETZT erforderlich, nicht „erst bei Nutzung". |
+| **Vercel Inc. (Blob)** | Objekt-Storage NUR für Alt-Bestand (Migration nach R2 ausstehend) | EU + US (Sitz) | 🟡 Über Vercel-DPA gedeckt | Bestands-Dateien aus der Zeit vor R2 liegen noch auf public Vercel-Blob-URLs (Random-Suffix). To-do: Migrationsskript bauen + Bestand nach R2 überführen (Audit-Befund P1-2). |
 | **Resend Inc.** | Transaktions-E-Mails | EU + US (Sitz) | 🟡 Online-AVV, in Kraft | **Geprüft 2026-07-16:** DPA (resend.com/legal/dpa) ist automatisch über die Nutzungsbedingungen bindend, keine separate Unterschrift. EU SCCs (Section 6) enthalten. Ausgeführte Version jederzeit im Resend-Dashboard abrufbar. |
 | **Sieben Communications GmbH (seven.io / sms77)** | SMS-Versand | Deutschland | ✅ Signiert (2026-06-05) | Online-Signatur via dashboard.seven.io → Settings → Legal. PDF im seven.io-Kundenkonto dauerhaft abrufbar. ISO 27001 zertifiziertes RZ in Köln, keine SCCs nötig. |
 | **D-Trust GmbH (Bundesdruckerei)** | FES-Zertifikats-Aussteller (geplant) | Deutschland | ⚪ Nicht erforderlich | D-Trust sieht weder PDFs noch deren Inhalte. Reines Cert-Issuance-Verhältnis, AV nach Art. 28 nicht einschlägig. Doku-Hinweis statt AVV in Datenschutzerklärung §4.4. |
@@ -67,10 +67,9 @@ Vercel (+ Blob), Resend, Azure/Microsoft.
 2. **Neon** — DPA-Mechanismus verifizieren: in der Neon-Console (Org-Settings)
    nach der DPA suchen oder per Support anfragen (Legal-URL aktuell 404).
 
-**Nicht nötig, solange nicht genutzt:**
-- **Cloudflare R2** — aktuell Vercel Blob im Einsatz. Erst bei Umstieg auf R2:
-  Cloudflare-DPA unter `cloudflare.com/cloudflare-customer-dpa` (online, in die
-  Terms eingebunden).
+3. **Cloudflare** — DPA verifizieren + PDF ablegen (R2 ist in Prod aktiv,
+   dazu Turnstile auf /register; DPA unter `cloudflare.com/cloudflare-customer-dpa`,
+   in die Terms eingebunden — analog Vercel/Resend vermutlich ohne Unterschrift).
 
 **Sammlung ablegen** — ein privater Doku-Vault (empfohlen: Repo
 `innosee/compliance`, Subordner pro Provider) mit den DPA-/AVV-Kopien.

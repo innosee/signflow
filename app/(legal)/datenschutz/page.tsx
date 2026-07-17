@@ -132,7 +132,15 @@ export default function DatenschutzPage() {
             <li>Kurs- und Sitzungsdaten (Termine, Themen, Unterrichtseinheiten)</li>
             <li>Unterschriftsbilder (Canvas-Eingabe, als Bilddatei gespeichert)</li>
             <li>
-              Signatur-Metadaten (IP-Adresse, Zeitstempel, Rolle) als Audit-Log
+              Signatur-Metadaten (IP-Adresse, Zeitstempel, Rolle) als Audit-Log;
+              diese Metadaten werden zur Beweissicherung der einfachen
+              elektronischen Signatur auch als Audit-Trail auf dem finalen
+              Nachweis-Dokument (PDF) ausgewiesen
+            </li>
+            <li>
+              Unterschriftsbilder und finale PDF-Nachweise werden in einem
+              privaten EU-Objektspeicher abgelegt; der Zugriff erfolgt
+              ausschließlich über kurzlebige signierte URLs
             </li>
             <li>
               Bei SMS-Zustellung zusätzlich: Mobilnummer (E.164), Vorname zur
@@ -215,8 +223,14 @@ export default function DatenschutzPage() {
             </li>
             <li>Sozialdaten im Kontext der Arbeitsförderung nach SGB III</li>
             <li>
-              Nach Einreichung: ausschließlich regelkonforme Berichtstexte ohne
-              besondere Kategorien (harter Freigabe-Gate)
+              Vor der Einreichung werden als sensibel erkannte Stellen
+              (mögliche Angaben besonderer Kategorien) automatisch markiert und
+              müssen entweder entfernt oder — im Fall eines Fehlalarms — mit
+              einer dokumentierten Begründung gekennzeichnet werden; diese
+              Begründung wird der Bildungsträgerin zur inhaltlichen Prüfung
+              angezeigt. Die abschließende Verantwortung für die Freiheit der
+              eingereichten Berichte von Art.-9-Daten liegt beim Coach und der
+              prüfenden Bildungsträgerin.
             </li>
           </ul>
         </Subsection>
@@ -304,8 +318,14 @@ export default function DatenschutzPage() {
             </Placeholder>
           </li>
           <li>
-            Audit-Log-Einträge: in der Regel 12 Monate, soweit keine längere
-            gesetzliche Aufbewahrungspflicht besteht
+            Audit-Log-Einträge: signaturbezogene Ereignisse (Unterschriften,
+            Freigaben) für die Dauer der Aufbewahrung der zugehörigen
+            Nachweise, da sie deren Beweiswert tragen.{" "}
+            <Placeholder>
+              Löschroutine für nicht-signaturbezogene Audit-Einträge festlegen
+              (Empfehlung: 12 Monate) und technisch umsetzen; danach hier
+              konkretisieren.
+            </Placeholder>
           </li>
           <li>
             Versandprotokolle des SMS-Dienstleisters (Mobilnummer,
@@ -364,7 +384,37 @@ export default function DatenschutzPage() {
         </p>
       </Section>
 
-      <Section title="10. Cookies">
+      <Section title="10. Reichweitenmessung und Bot-Schutz">
+        <Subsection title="10.1 Cookielose Reichweitenmessung">
+          <p>
+            Zur anonymen Messung der Nutzung (Seitenaufrufe) setzen wir eine
+            selbst betriebene, cookielose Analytik ein, die auf unserer eigenen
+            Hosting-Infrastruktur (Vercel) läuft. Es werden keine Cookies
+            gesetzt, keine geräteübergreifenden Profile gebildet und keine
+            Daten an Werbe- oder Tracking-Netzwerke weitergegeben. Auf den
+            Signatur-Seiten der Teilnehmer:innen (Magic-Link-Bereich) ist die
+            Messung vollständig deaktiviert. Suchbegriffe (z.B. Namen in der
+            Kundensuche) werden nie übertragen. Rechtsgrundlage ist unser
+            berechtigtes Interesse an der bedarfsgerechten Weiterentwicklung
+            der Anwendung (Art. 6 Abs. 1 lit. f DSGVO).
+          </p>
+        </Subsection>
+        <Subsection title="10.2 Bot-Schutz (Cloudflare Turnstile)">
+          <p>
+            Zum Schutz der Registrierungs- und Wartelisten-Formulare vor
+            automatisiertem Missbrauch setzen wir Cloudflare Turnstile ein
+            (Cloudflare, Inc.). Beim Laden dieser Formulare wird eine
+            Verbindung zu Cloudflare aufgebaut; dabei werden technisch bedingt
+            die IP-Adresse und Browser-Informationen an Cloudflare übermittelt,
+            um zwischen menschlichen Nutzer:innen und Bots zu unterscheiden.
+            Turnstile setzt auf unserer Domain keine eigenen Cookies.
+            Rechtsgrundlage ist unser berechtigtes Interesse am Schutz der
+            Plattform vor Missbrauch (Art. 6 Abs. 1 lit. f DSGVO).
+          </p>
+        </Subsection>
+      </Section>
+
+      <Section title="11. Cookies">
         <p>
           Wir setzen ausschließlich technisch notwendige Cookies zur
           Aufrechterhaltung der Sitzung angemeldeter Nutzer:innen ein. Details
@@ -379,7 +429,7 @@ export default function DatenschutzPage() {
         </p>
       </Section>
 
-      <Section title="11. Automatisierte Entscheidungsfindung">
+      <Section title="12. Automatisierte Entscheidungsfindung">
         <p>
           Eine automatisierte Entscheidungsfindung einschließlich Profiling nach
           Art. 22 DSGVO findet nicht statt. Die Regelprüfung im Abschlussbericht-
@@ -388,7 +438,7 @@ export default function DatenschutzPage() {
         </p>
       </Section>
 
-      <Section title="12. Änderungen dieser Erklärung">
+      <Section title="13. Änderungen dieser Erklärung">
         <p>
           Wir passen diese Datenschutzerklärung bei Änderungen der Verarbeitung
           oder der rechtlichen Rahmenbedingungen an. Maßgeblich ist die jeweils
