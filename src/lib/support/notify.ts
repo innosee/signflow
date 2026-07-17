@@ -3,6 +3,7 @@ import "server-only";
 import { sendEmail } from "@/lib/email";
 
 import type { SupportMessage } from "./azure-chat";
+import { scrubMessages, scrubPii } from "./scrub-pii";
 
 export type EscalationPayload = {
   coachName: string;
@@ -154,9 +155,18 @@ async function postWebhook(p: EscalationPayload): Promise<void> {
 export async function notifySupportEscalation(
   payload: EscalationPayload,
 ): Promise<void> {
+  // Transcript + Notiz vor dem Versand PII-scrubben (Datenschutz-Audit
+  // 2026-07, P1-1) — Teilnehmerdaten gehören weder in die Resend-Mail noch in
+  // den Slack/Teams-Webhook. Der Coach bleibt über coachName/coachEmail
+  // erreichbar. Begründung + Grenzen in scrub-pii.ts.
+  const scrubbed: EscalationPayload = {
+    ...payload,
+    messages: scrubMessages(payload.messages),
+    note: payload.note === undefined ? undefined : scrubPii(payload.note),
+  };
   const [emailResult] = await Promise.allSettled([
-    sendEscalationEmail(payload),
-    postWebhook(payload),
+    sendEscalationEmail(scrubbed),
+    postWebhook(scrubbed),
   ]);
   if (emailResult.status === "rejected") {
     throw emailResult.reason instanceof Error
