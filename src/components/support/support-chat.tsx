@@ -119,6 +119,11 @@ export function SupportChat() {
             </button>
           </header>
 
+          <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[11px] leading-snug text-amber-800">
+            Datenschutz: Bitte keine Klarnamen, Kunden- oder Telefonnummern von
+            Teilnehmern eingeben.
+          </p>
+
           <div
             ref={scrollRef}
             className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
