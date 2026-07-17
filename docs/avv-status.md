@@ -4,6 +4,16 @@ Interne Tracking-Liste über den Stand der AVVs nach Art. 28 DSGVO für alle
 Auftragsverarbeiter, die im Signflow-Betrieb personenbezogene Daten im
 Auftrag der innosee GmbH (bzw. der jeweiligen Bildungsträger) verarbeiten.
 
+**Zuletzt geprüft: 2026-07-16.**
+- **Vercel (Hosting + Blob)** und **Resend**: DPA gilt automatisch über die
+  Nutzungsbedingungen (SCCs enthalten), keine Unterschrift nötig → erledigt.
+- **Neon**: Legal-URL nach neon.tech→neon.com-Umzug 404, Mechanismus offen → prüfen/anfragen.
+- **IONOS, Azure/Microsoft**: DPAs noch offen (im jeweiligen Portal abschließen).
+- **seven.io**: signiert (05.06.).
+- Storage-Realität korrigiert (Vercel Blob aktiv, R2 aktuell nicht genutzt).
+- FES/PSW: gesondert klären, sobald `FES_MODE=live` (Bridge-Modus → kein
+  Datenfluss zu D-Trust/PSW).
+
 **Diese Datei ist NICHT öffentlich.** Sie wandert ggf. in einen privaten
 Doku-Bereich, wenn das Repo später öffentlich wird. Bis dahin liegt sie
 hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
@@ -24,10 +34,11 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 
 | Provider | Rolle | Region | Status | Anmerkung |
 |---|---|---|---|---|
-| **Vercel Inc.** | Hosting | EU (Frankfurt) + US (Sitz) | ❌ Offen | Online-DPA über Vercel-Dashboard akzeptieren; SCCs für US-Sitz prüfen |
-| **Neon Inc.** | Datenbank-Hosting | EU (AWS Frankfurt) + US (Sitz) | ❌ Offen | Online-DPA über Neon-Konsole; SCCs für US-Sitz prüfen |
-| **Cloudflare, Inc.** | Objekt-Storage (R2) | EU-Jurisdiction + US (Sitz) | ❌ Offen | Cloudflare DPA online verfügbar; SCCs prüfen |
-| **Resend Inc.** | Transaktions-E-Mails | EU + US (Sitz) | ❌ Offen | Online-DPA über Resend-Dashboard |
+| **Vercel Inc.** | Hosting | EU (Frankfurt) + US (Sitz) | 🟡 Online-AVV, in Kraft | **Geprüft 2026-07-16:** DPA (vercel.com/legal/dpa) ist automatisch über die Nutzungsbedingungen bindend, keine separate Unterschrift. EU SCCs (2021, Schedule 3) enthalten. To-do: DPA-PDF ablegen + Subprozessoren-Liste security.vercel.com im Blick behalten. |
+| **Neon Inc.** | Datenbank-Hosting | EU (AWS Frankfurt) + US (Sitz) | 📋 Zu prüfen | **2026-07-16:** Legal-URL nach Umzug neon.tech→neon.com aktuell 404 (Databricks-Übernahme), Mechanismus nicht verifizierbar. To-do: in der Neon-Console (Org-Settings) nach DPA suchen oder per Support anfragen; SCCs bestätigen. |
+| **Vercel Inc. (Blob)** | Objekt-Storage (Signaturbilder) | EU + US (Sitz) | 🟡 Über Vercel-DPA gedeckt | **Aktuell produktiv genutzt** (public + random suffix; TODO auf privat-geschützt migrieren, siehe `src/lib/storage.ts`). Gedeckt durch dieselbe Vercel-DPA wie das Hosting (siehe oben). |
+| **Cloudflare, Inc. (R2)** | Objekt-Storage (Option) | EU-Jurisdiction + US (Sitz) | ⚪ Aktuell nicht genutzt | Mögliche Alternative zu Vercel Blob, evtl. später. AVV erst bei tatsächlichem Einsatz einholen (Cloudflare DPA online verfügbar). |
+| **Resend Inc.** | Transaktions-E-Mails | EU + US (Sitz) | 🟡 Online-AVV, in Kraft | **Geprüft 2026-07-16:** DPA (resend.com/legal/dpa) ist automatisch über die Nutzungsbedingungen bindend, keine separate Unterschrift. EU SCCs (Section 6) enthalten. Ausgeführte Version jederzeit im Resend-Dashboard abrufbar. |
 | **Sieben Communications GmbH (seven.io / sms77)** | SMS-Versand | Deutschland | ✅ Signiert (2026-06-05) | Online-Signatur via dashboard.seven.io → Settings → Legal. PDF im seven.io-Kundenkonto dauerhaft abrufbar. ISO 27001 zertifiziertes RZ in Köln, keine SCCs nötig. |
 | **D-Trust GmbH (Bundesdruckerei)** | FES-Zertifikats-Aussteller (geplant) | Deutschland | ⚪ Nicht erforderlich | D-Trust sieht weder PDFs noch deren Inhalte. Reines Cert-Issuance-Verhältnis, AV nach Art. 28 nicht einschlägig. Doku-Hinweis statt AVV in Datenschutzerklärung §4.4. |
 
@@ -44,16 +55,26 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 |---|---|---|---|---|
 | **GitHub, Inc.** | Source-Hosting (kein Production-Datenverkehr) | US | ⚪ Nicht erforderlich | Quellcode + Issues — keine TN-/Coach-Daten. AVV nur relevant wenn produktive Logs/Daten dort landen würden, was nicht der Fall ist. |
 
-## Nächste Schritte
+## Nächste Schritte (Stand 2026-07-16)
 
-1. **Vercel + Neon + Cloudflare + Resend** Online-DPAs akzeptieren —
-   alle vier haben dafür ein Self-Service-Verfahren in den jeweiligen
-   Dashboards. Sammelvorgang, kalkuliere ~30 Minuten.
-2. **IONOS + Azure**: AVV-Status bei IONOS prüfen (Kunden-Portal),
-   Microsoft-DPA über Azure-Subscription akzeptieren.
-3. **Sammlung ablegen** — empfohlen: ein einziger Doku-Vault (z.B.
-   Vercel-Drive, oder ein privates Repo `innosee/compliance` mit
-   Subordnern pro Provider) mit den signierten PDF-Kopien.
+**Erledigt (gilt automatisch über die Terms, SCCs enthalten):** Vercel (+ Blob),
+Resend. Nur noch die DPA-PDFs für die Akte sichern.
+
+**Noch offen:**
+1. **Neon** — DPA-Mechanismus verifizieren: in der Neon-Console (Org-Settings)
+   nach der DPA suchen oder per Support anfragen (Legal-URL aktuell 404).
+2. **IONOS** AVV im Kunden-Portal abschließen (liegt standardmäßig vor).
+3. **Microsoft/Azure** DPA über die Azure-Subscription bestätigen (gilt bei
+   Azure meist automatisch mit dem Abo; einmal verifizieren).
+4. **Sammlung ablegen** — ein einziger Doku-Vault (z.B. privates Repo
+   `innosee/compliance` mit Subordnern pro Provider) mit den DPA-/AVV-Kopien.
+
+**Nicht jetzt:**
+- **Cloudflare R2** — erst wenn produktiv genutzt (aktuell Vercel Blob).
+- **FES via PSW Group / D-Trust** — erst mit `FES_MODE=live`. Im Bridge-Modus
+  ist FES gemockt, es fließen keine Daten zu PSW/D-Trust. Beim Live-Schalten:
+  klären, ob PSW als reiner Zertifikats-/Siegel-Lieferant überhaupt ein
+  AV-Verhältnis begründet (self-hosted PAdES → PDF verlässt die Infra nie).
 
 ## Verbindung zur Datenschutzerklärung
 
