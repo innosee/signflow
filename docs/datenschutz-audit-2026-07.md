@@ -25,8 +25,14 @@ Browser-Storage, Retention, Zugriffsschutz, Logging) + Abgleich mit der
    24 h TTL) — der Bestand aus der Vercel-Blob-Zeit ist weiterhin
    `access: "public"` (Schutz nur durch nicht erratbare Random-Suffix-URLs).
    Das in `storage.ts` referenzierte Migrationsskript
-   (`scripts/migrate-blobs-to-r2.mjs`) existiert nicht.
-   **Empfehlung:** Migrationsskript bauen + ausführen, danach Blob-Store leeren.
+   (`scripts/migrate-blobs-to-r2.mjs`) existiert inzwischen (Dry-Run-Default,
+   Refuse-Guards, idempotent; Runbook im Skript-Header). Staging-Dry-Run
+   verifiziert. **Blocker für den Execute-Lauf:** die `R2_*`-Env-Vars sind in
+   Vercel als „Sensitive" markiert und lassen sich nicht pullen — die Creds
+   müssen manuell bereitgestellt werden (Cloudflare-Dashboard bzw. Ablage,
+   siehe `scripts/test-r2-upload.mjs`).
+   **Empfehlung:** Skript auf Staging mit `--execute` durchspielen, dann
+   Prod-Lauf (nach Backup) inkl. `--delete-blobs`, danach Blob-Store leeren.
 
 3. **Retention ist textlich versprochen, aber technisch nicht umgesetzt.**
    Kein Cron, keine Löschroutinen: abgelaufene `participant_access_tokens`
