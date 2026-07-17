@@ -44,7 +44,8 @@ function effectiveChannel(
 // der Zugriff zusätzlich durch gehashten Token, kurs-scoped Bindung, aktive
 // Bestätigung + Zeitstempel + IP + Audit-Log je Signatur abgesichert ist
 // (Begründung gehört ins VVT/Datenschutzerklärung). Einzige Source of Truth der
-// TTL — speist Sign-Link UND Preview-Freigabe.
+// TTL — speist Sign-Link UND Preview-Freigabe. Abgelaufene Zeilen räumt der
+// tägliche Cron 30 Tage nach Ablauf ab (src/lib/retention.ts).
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
 
 function newToken(): string {
