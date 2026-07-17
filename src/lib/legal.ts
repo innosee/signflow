@@ -15,7 +15,7 @@ export const legal = {
   productName: "Signflow",
   domain: "signflow.coach",
   // Stand der zuletzt inhaltlich geprüften Rechtstexte (Entwurf).
-  lastUpdated: "30. Juni 2026",
+  lastUpdated: "16. Juli 2026",
 
   company: {
     name: "innosee GmbH",
@@ -49,7 +49,8 @@ export const legal = {
   subprocessors: [
     {
       name: "Vercel Inc.",
-      purpose: "Hosting der Anwendung",
+      purpose:
+        "Hosting der Anwendung; außerdem Objekt-Storage für Bestands-Dateien aus der früheren Speicherlösung (Vercel Blob), die schrittweise in den privaten Objektspeicher überführt werden",
       region: "EU (Frankfurt), Unternehmenssitz USA — SCCs",
     },
     {
@@ -60,7 +61,7 @@ export const legal = {
     {
       name: "Cloudflare, Inc.",
       purpose:
-        "Objekt-Storage (R2) für Unterschriftsbilder, Logos und gesiegelte PDFs; privater Bucket, Zugriff nur über kurzlebige signierte URLs",
+        "Objekt-Storage (R2) für Unterschriftsbilder, Logos und finale PDF-Nachweise; privater Bucket, Zugriff nur über kurzlebige signierte URLs. Zusätzlich Bot-Schutz (Turnstile) auf Registrierungs- und Wartelisten-Formularen",
       region:
         "EU-Jurisdiction (Frankfurt/Amsterdam), Unternehmenssitz USA — SCCs",
     },
@@ -84,7 +85,7 @@ export const legal = {
     {
       name: "Microsoft Ireland Operations Ltd. (Azure OpenAI)",
       purpose:
-        "Regelprüfung auf anonymisiertem Text (Abschlussbericht-Checker) sowie KI-gestützte Compliance-Prüfung der stichwortartigen Coach-Einträge in der Anwesenheitsliste (ANW-Check)",
+        "Regelprüfung auf anonymisiertem Text (Abschlussbericht-Checker), KI-gestützte Compliance-Prüfung der stichwortartigen Coach-Einträge in der Anwesenheitsliste (ANW-Check) sowie Beantwortung von Support-Anfragen im Coach-Bereich (Chat-Eingaben; bitte dort keine Klarnamen oder Kunden-Nummern eingeben)",
       region: "EU (Sweden Central oder Germany West Central) — SCCs",
     },
   ],

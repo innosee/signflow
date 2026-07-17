@@ -32,9 +32,19 @@ export default function CookiesPage() {
           Einwilligung erforderlich, weshalb wir keinen Consent-Banner anzeigen.
         </p>
         <p>
-          Tracking- oder Marketing-Cookies, Werbe-Pixel, Analyse-Dienste oder
-          eingebundene Inhalte Dritter, die Cookies setzen könnten, verwenden wir
-          nicht.
+          Tracking- oder Marketing-Cookies, Werbe-Pixel oder eingebundene
+          Inhalte Dritter, die Cookies setzen könnten, verwenden wir nicht. Zur
+          Reichweitenmessung nutzen wir ausschließlich eine selbst betriebene,
+          cookielose Analytik ohne Profilbildung; der auf Registrierungs-
+          Formularen eingesetzte Bot-Schutz (Cloudflare Turnstile) setzt auf
+          unserer Domain ebenfalls keine eigenen Cookies. Details dazu in der{" "}
+          <Link
+            href="/datenschutz"
+            className="text-zinc-900 underline underline-offset-4 hover:text-zinc-700"
+          >
+            Datenschutzerklärung
+          </Link>
+          , Abschnitt 10.
         </p>
       </section>
 
