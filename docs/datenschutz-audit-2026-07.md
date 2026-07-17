@@ -36,6 +36,13 @@ Browser-Storage, Retention, Zugriffsschutz, Logging) + Abgleich mit der
    **Empfehlung:** Vercel-Cron einführen: (a) Token-Rows >30 Tage nach Ablauf
    löschen, (b) Audit-Log-Policy festlegen (signaturbezogene Events = wie
    Nachweise aufbewahren, Rest z.B. 12 Monate) + umsetzen.
+   **✅ Behoben (2026-07-17):** täglicher Vercel-Cron (`vercel.json` →
+   `/api/cron/cleanup`, `CRON_SECRET`-geschützt) löscht Token-Rows 30 Tage
+   nach `expires_at` sowie nicht-signaturbezogene `audit_log`-Einträge nach
+   12 Monaten. Abgrenzung der signaturbezogenen Actions (Allowlist +
+   Compile-Time-Vollständigkeitscheck): `src/lib/retention.ts`. §7 der
+   Datenschutzerklärung entsprechend konkretisiert. Restpunkt „verwaiste
+   Storage-Blobs" bleibt offen (hängt an der Blob→R2-Migration, P1-2).
 
 ### 🟡 P2 — mittelfristig
 
