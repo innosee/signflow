@@ -8,7 +8,8 @@ Auftrag der innosee GmbH (bzw. der jeweiligen Bildungsträger) verarbeiten.
 - **Vercel (Hosting + Blob)** und **Resend**: DPA gilt automatisch über die
   Nutzungsbedingungen (SCCs enthalten), keine Unterschrift nötig → erledigt.
 - **Neon**: Legal-URL nach neon.tech→neon.com-Umzug 404, Mechanismus offen → prüfen/anfragen.
-- **IONOS, Azure/Microsoft**: DPAs noch offen (im jeweiligen Portal abschließen).
+- **Azure/Microsoft**: DPA gilt automatisch über die Product Terms (SCCs enthalten) → erledigt, nur PDF ablegen.
+- **IONOS**: AVV muss aktiv abgeschlossen werden (Mein Konto → Datenschutz & Privatsphäre) → noch offen.
 - **seven.io**: signiert (05.06.).
 - Storage-Realität korrigiert (Vercel Blob aktiv, R2 aktuell nicht genutzt).
 - FES/PSW: gesondert klären, sobald `FES_MODE=live` (Bridge-Modus → kein
@@ -46,8 +47,8 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 
 | Provider | Rolle | Region | Status | Anmerkung |
 |---|---|---|---|---|
-| **IONOS SE** | Compute-VM + AI Model Hub (Anonymisierung) | Deutschland | ❌ Offen | AVV liegt bei IONOS standardmäßig vor; im Kunden-Portal akzeptieren |
-| **Microsoft Ireland Operations Ltd. (Azure OpenAI)** | Regelprüfung auf anonymisiertem Text | EU (Sweden Central / Germany West Central) + US (MS Corp) | ❌ Offen | Microsoft Products and Services DPA + EU Standard Contractual Clauses |
+| **IONOS SE** | Compute-VM + AI Model Hub (Anonymisierung) | Deutschland | ❌ Offen — aktiver Abschluss nötig | **So beziehen (geprüft 2026-07-16):** Im IONOS-Konto anmelden → **Menü → Mein Konto → Kachel „Datenschutz & Privatsphäre"** → AVV abschließen. Kostenlos. Muss aktiv abgeschlossen werden (nicht automatisch). |
+| **Microsoft Ireland Operations Ltd. (Azure OpenAI)** | Regelprüfung auf anonymisiertem Text | EU (Sweden Central / Germany West Central) + US (MS Corp) | 🟡 Über Product Terms in Kraft | **Geprüft 2026-07-16:** Der „Microsoft Products and Services DPA" gilt **automatisch** über die Product Terms mit dem Azure-Abo, keine separate Unterschrift. EU SCCs enthalten. To-do: aktuelle Version bei **microsoft.com/licensing/docs** herunterladen + für die Akte ablegen. |
 
 ### Sonstige (Operations / Tooling)
 
@@ -57,17 +58,22 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 
 ## Nächste Schritte (Stand 2026-07-16)
 
-**Erledigt (gilt automatisch über die Terms, SCCs enthalten):** Vercel (+ Blob),
-Resend. Nur noch die DPA-PDFs für die Akte sichern.
+**Erledigt (gilt automatisch über die Terms, SCCs enthalten, nur PDF ablegen):**
+Vercel (+ Blob), Resend, Azure/Microsoft.
 
-**Noch offen:**
-1. **Neon** — DPA-Mechanismus verifizieren: in der Neon-Console (Org-Settings)
+**Noch aktiv abzuschließen:**
+1. **IONOS** — im IONOS-Konto: Mein Konto → Kachel „Datenschutz & Privatsphäre"
+   → AVV abschließen (kostenlos, aktiver Schritt).
+2. **Neon** — DPA-Mechanismus verifizieren: in der Neon-Console (Org-Settings)
    nach der DPA suchen oder per Support anfragen (Legal-URL aktuell 404).
-2. **IONOS** AVV im Kunden-Portal abschließen (liegt standardmäßig vor).
-3. **Microsoft/Azure** DPA über die Azure-Subscription bestätigen (gilt bei
-   Azure meist automatisch mit dem Abo; einmal verifizieren).
-4. **Sammlung ablegen** — ein einziger Doku-Vault (z.B. privates Repo
-   `innosee/compliance` mit Subordnern pro Provider) mit den DPA-/AVV-Kopien.
+
+**Nicht nötig, solange nicht genutzt:**
+- **Cloudflare R2** — aktuell Vercel Blob im Einsatz. Erst bei Umstieg auf R2:
+  Cloudflare-DPA unter `cloudflare.com/cloudflare-customer-dpa` (online, in die
+  Terms eingebunden).
+
+**Sammlung ablegen** — ein privater Doku-Vault (empfohlen: Repo
+`innosee/compliance`, Subordner pro Provider) mit den DPA-/AVV-Kopien.
 
 **Nicht jetzt:**
 - **Cloudflare R2** — erst wenn produktiv genutzt (aktuell Vercel Blob).
