@@ -9,7 +9,7 @@ Auftrag der innosee GmbH (bzw. der jeweiligen Bildungsträger) verarbeiten.
   Nutzungsbedingungen (SCCs enthalten), keine Unterschrift nötig → erledigt.
 - **Neon**: Legal-URL nach neon.tech→neon.com-Umzug 404, Mechanismus offen → prüfen/anfragen.
 - **Azure/Microsoft**: DPA gilt automatisch über die Product Terms (SCCs enthalten) → erledigt, nur PDF ablegen.
-- **IONOS (Cloud-Konto!)**: AVV per AGB eingebunden; Nachweis (PDF + Support-Bestätigung) ausstehend — siehe Provider-Zeile.
+- **IONOS (Cloud-Konto!)**: AVV per AGB eingebunden, AVV- + TOM-PDF am 2026-07-17 abgelegt → erledigt.
 - **seven.io**: signiert (05.06.).
 - Storage-Realität korrigiert (Vercel Blob aktiv, R2 aktuell nicht genutzt).
 - FES/PSW: gesondert klären, sobald `FES_MODE=live` (Bridge-Modus → kein
@@ -47,7 +47,7 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 
 | Provider | Rolle | Region | Status | Anmerkung |
 |---|---|---|---|---|
-| **IONOS SE** | Compute-VM + AI Model Hub (Anonymisierung) | Deutschland | 📋 Per AGB eingebunden — Nachweis ausstehend | **Korrektur 2026-07-16: Wir haben ein reines IONOS-Cloud-Konto** (DCD), NICHT das klassische Mein-IONOS — dort gibt es die „AVV abschließen"-Kachel nicht. Bei IONOS Cloud ist die AVV per Verweis in die AGB Teil des Vertrags (IONOS als Auftragsverarbeiter „auf Weisung des Kunden"). **Nachweis-Weg:** (1) AVV-PDF von `ionos.de/terms-gtc/avv` + Cloud-Security-Doku von `cloud.ionos.com/protection` herunterladen und in die DSGVO-Akte legen; (2) beim IONOS-Cloud-Support schriftliche Bestätigung einholen, dass die AVV nach Art. 28 DSGVO unter unserer Cloud-Vertragsnummer in Kraft ist und die genutzten Produkte (Compute-VM/Anonymizer, AI Model Hub) abdeckt — idealerweise gegengezeichnete Ausfertigung. Formulierungsvorschlag: „Bitte bestätigen Sie den Abschluss/die Geltung der Auftragsverarbeitungsvereinbarung nach Art. 28 DSGVO für Vertrag <Nr.> und nennen Sie die abgedeckten Produkte; idealerweise als gegengezeichnete Ausfertigung." **Relevanz:** Diese VM ist der Anonymizer-Proxy, über den die PII läuft, bevor sie zu Azure geht — die AVV trägt die gesamte Checker-Datenschutz-Architektur. |
+| **IONOS SE** | Compute-VM + AI Model Hub (Anonymisierung) | Deutschland | 🟡 Per AGB eingebunden — Nachweis abgelegt (2026-07-17) | **Korrektur 2026-07-16: Wir haben ein reines IONOS-Cloud-Konto** (DCD), NICHT das klassische Mein-IONOS — dort gibt es die „AVV abschließen"-Kachel nicht. Bei IONOS Cloud ist die AVV per Verweis in die AGB Teil des Vertrags (IONOS als Auftragsverarbeiter „auf Weisung des Kunden"). **Nachweis (erledigt 2026-07-17):** AVV-Vertragstext + TOM nach Art. 32 als PDF in der Compliance-Ablage (`ionos/IONOS-AVV.pdf`, `ionos/IONOS-TOM-Art32.pdf`). Damit gilt die AVV wie bei den übrigen Providern als vertraglich eingebunden und belegt. **Optional** (nicht erforderlich, nur für zusätzliche Aktensicherheit): beim Cloud-Support eine schriftliche Geltungs-Bestätigung für die eigene Vertragsnummer anfordern. **Relevanz:** Diese VM ist der Anonymizer-Proxy, über den die PII läuft, bevor sie zu Azure geht — die AVV trägt die gesamte Checker-Datenschutz-Architektur. |
 | **Microsoft Ireland Operations Ltd. (Azure OpenAI)** | Regelprüfung auf anonymisiertem Text | EU (Sweden Central / Germany West Central) + US (MS Corp) | 🟡 Über Product Terms in Kraft | **Geprüft 2026-07-16:** Der „Microsoft Products and Services DPA" gilt **automatisch** über die Product Terms mit dem Azure-Abo, keine separate Unterschrift. EU SCCs enthalten. To-do: aktuelle Version bei **microsoft.com/licensing/docs** herunterladen + für die Akte ablegen. |
 
 ### Sonstige (Operations / Tooling)
@@ -58,20 +58,28 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 
 ## Nächste Schritte (Stand 2026-07-16)
 
-**Erledigt (gilt automatisch über die Terms, SCCs enthalten, nur PDF ablegen):**
-Vercel (+ Blob), Resend, Azure/Microsoft.
+## Compliance-Ablage
 
-**Noch aktiv zu erledigen:**
-1. **IONOS (Cloud-Konto)** — kein UI-Klick möglich: AVV-PDF von
-   `ionos.de/terms-gtc/avv` + Doku von `cloud.ionos.com/protection` sichern und
-   beim Cloud-Support die schriftliche Geltungs-Bestätigung für unsere
-   Cloud-Vertragsnummer einholen (Details + Formulierung in der Provider-Zeile).
+Die Nachweis-Dokumente liegen **außerhalb dieses Repos** (sie gehören nicht in
+den Produktcode): lokal unter `~/Documents/innosee-compliance/avv/`, ein
+Ordner je Provider + README mit Quellen und Abrufdatum. Von dort in ein
+privates Repo `innosee/compliance` oder einen zugriffsbeschränkten
+Firmen-Cloudordner überführen (Backup nicht vergessen).
+
+**Abgelegt am 2026-07-17:** IONOS (AVV + TOM Art. 32, echte PDFs), Vercel,
+Resend, Cloudflare (jeweils HTML-Snapshot der DPA-Seite).
+
+**Erledigt (gilt automatisch über die Terms, SCCs enthalten):**
+Vercel (+ Blob), Resend, Cloudflare, IONOS.
+
+**Noch zu erledigen:**
+1. **Azure/Microsoft** — DPA-PDF manuell von `microsoft.com/licensing/docs`
+   herunterladen (JS-Viewer, kein Direktlink per Skript) und in
+   `azure-microsoft/` ablegen. Gilt automatisch über die Product Terms.
 2. **Neon** — DPA-Mechanismus verifizieren: in der Neon-Console (Org-Settings)
    nach der DPA suchen oder per Support anfragen (Legal-URL aktuell 404).
-
-3. **Cloudflare** — DPA verifizieren + PDF ablegen (R2 ist in Prod aktiv,
-   dazu Turnstile auf /register; DPA unter `cloudflare.com/cloudflare-customer-dpa`,
-   in die Terms eingebunden — analog Vercel/Resend vermutlich ohne Unterschrift).
+3. **seven.io** — die 2026-06-05 signierte AVV aus dem Kundenkonto exportieren
+   (Dashboard → Settings → Legal) und ablegen.
 
 **Sammlung ablegen** — ein privater Doku-Vault (empfohlen: Repo
 `innosee/compliance`, Subordner pro Provider) mit den DPA-/AVV-Kopien.
