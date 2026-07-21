@@ -45,6 +45,7 @@ export type AuditAction =
   | "bildungstraeger.deactivate"
   | "bildungstraeger.onboard"
   | "document.created"
+  | "document.released"
   | "document.coach_signed"
   | "document.participant_signed"
   | "document.deleted";

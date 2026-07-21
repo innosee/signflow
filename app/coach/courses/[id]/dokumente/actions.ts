@@ -16,11 +16,11 @@ import {
   getDocumentConfig,
   isDocumentType,
   MASTER_FIELD_LABELS,
+  MASTER_FIELD_ORDER,
   missingMasterData,
   missingRequiredFields,
   prefillFormData,
   type DocumentTypeId,
-  type ParticipantMasterField,
 } from "@/lib/documents/config";
 import {
   isMassnahmeTyp,
@@ -137,39 +137,19 @@ export async function createDocument(formData: FormData): Promise<void> {
   redirect(`/coach/courses/${courseId}/dokumente/${inserted.id}`);
 }
 
-const MASTER_FIELDS: ParticipantMasterField[] = [
-  "vorname",
-  "nachname",
-  "strasse",
-  "plz",
-  "ort",
-  "geburtsdatum",
-  "geburtsort",
-  "phone",
-  "festnetz",
-];
+type OwnedDocument = NonNullable<Awaited<ReturnType<typeof loadOwnedDocument>>>;
 
 /**
- * Speichert Draft: Formularfelder (→ documents.form_data) UND die erweiterten
- * Teilnehmer-Stammdaten (→ participants, einmal erfasst, wiederverwendbar) in
- * einem Rutsch. Nur im Draft-Status — ein signiertes Dokument ist eingefroren.
+ * Persistiert Formularfelder (→ documents.form_data) UND die erweiterten
+ * Teilnehmer-Stammdaten (→ participants, einmal erfasst, wiederverwendbar).
+ * Nur im Draft-Status. Gibt die frisch gespeicherte `form_data` zurück, damit
+ * ein direkt danach laufender Freigabe-Schritt gegen den AKTUELLEN Stand prüft
+ * (kein „erst speichern"-Fallstrick).
  */
-export async function saveDocumentDraft(
-  _prev: ActionState,
+async function persistDraft(
+  doc: OwnedDocument,
   formData: FormData,
-): Promise<ActionState> {
-  const session = await requireSigningEnabled();
-  assertNotImpersonating(session);
-  const coachId = session.user.id;
-
-  const documentId = String(formData.get("documentId") ?? "").trim();
-  const doc = await loadOwnedDocument(documentId, coachId);
-  if (!doc) return { error: "Dokument nicht gefunden." };
-  if (doc.status !== "draft") {
-    return { error: "Signiertes Dokument kann nicht mehr bearbeitet werden." };
-  }
-
-  // Formularfelder
+): Promise<Record<string, string>> {
   const cfg = getDocumentConfig(doc.type as DocumentTypeId);
   const nextForm: Record<string, string> = {
     ...((doc.formData ?? {}) as Record<string, string>),
@@ -179,9 +159,8 @@ export async function saveDocumentDraft(
     if (raw != null) nextForm[field.key] = String(raw).trim();
   }
 
-  // Teilnehmer-Stammdaten (nur wenn das Formular sie überhaupt anzeigt)
   const patch: Record<string, string | null> = {};
-  for (const f of MASTER_FIELDS) {
+  for (const f of MASTER_FIELD_ORDER) {
     const raw = formData.get(f);
     if (raw == null) continue;
     const v = String(raw).trim();
@@ -192,7 +171,7 @@ export async function saveDocumentDraft(
     await tx
       .update(schema.documents)
       .set({ formData: nextForm })
-      .where(eq(schema.documents.id, documentId));
+      .where(eq(schema.documents.id, doc.id));
     if (Object.keys(patch).length > 0) {
       await tx
         .update(schema.participants)
@@ -201,17 +180,20 @@ export async function saveDocumentDraft(
     }
   });
 
-  revalidatePath(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
-  return { success: true };
+  return nextForm;
 }
 
 /**
- * Coach unterschreibt das Dokument (immer zuerst — deckt „erango zuerst" bei
- * F04/F08 ab). Friert die Feldwerte + Teilnehmer-Stammdaten als Snapshot ein
- * und setzt den Status auf `active`. Danach ist das Dokument für die
- * Teilnehmer-Signatur bereit.
+ * Ein Editor-Submit. `intent=save` speichert nur (Entwurf). `intent=release`
+ * speichert ebenfalls und gibt das Dokument danach frei: Pflichtprüfung →
+ * Snapshot einfrieren → Status `active`. Bei Formularen mit Coach-Unterschrift
+ * (nur STV) wird zusätzlich die Coach-Signatur gesetzt; sonst reicht die
+ * Freigabe (nur der Teilnehmer unterschreibt).
+ *
+ * Weil IMMER zuerst persistiert wird, kann die Pflichtprüfung nicht mehr an
+ * ungespeicherten Eingaben scheitern.
  */
-export async function signDocumentAsCoach(
+export async function submitDocumentEditor(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
@@ -220,31 +202,33 @@ export async function signDocumentAsCoach(
   const coachId = session.user.id;
 
   const documentId = String(formData.get("documentId") ?? "").trim();
-  const confirmed = formData.get("confirm") === "on";
-  if (!confirmed) return { error: "Bitte aktiv bestätigen." };
-
+  const intent = String(formData.get("intent") ?? "save");
   const doc = await loadOwnedDocument(documentId, coachId);
   if (!doc) return { error: "Dokument nicht gefunden." };
   if (doc.status !== "draft") {
-    return { error: "Dieses Dokument wurde bereits vom Coach signiert." };
+    return { error: "Dieses Dokument ist bereits freigegeben." };
   }
   const type = doc.type as DocumentTypeId;
+  const cfg = getDocumentConfig(type);
 
-  // Coach-Unterschrift (einmalig hinterlegt) laden.
-  const [coach] = await db
-    .select({ signatureUrl: schema.users.signatureUrl })
-    .from(schema.users)
-    .where(eq(schema.users.id, coachId))
-    .limit(1);
-  if (!coach?.signatureUrl) {
-    return {
-      error:
-        'Du hast noch keine Unterschrift hinterlegt. Lege sie unter „Unterschrift" an.',
-    };
+  const nextForm = await persistDraft(doc, formData);
+
+  const revalidate = () => {
+    revalidatePath(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
+    revalidatePath(`/coach/courses/${doc.courseId}`);
+  };
+
+  if (intent !== "release") {
+    revalidate();
+    return { success: true };
   }
-  const coachSignatureUrl: string = coach.signatureUrl;
 
-  // Teilnehmer-Stammdaten für Pflichtprüfung + Snapshot laden.
+  // --- Freigabe ---
+  if (formData.get("confirm") !== "on") {
+    return { error: "Bitte aktiv bestätigen." };
+  }
+
+  // Teilnehmer-Stammdaten (frisch, nach persistDraft) für Pflichtprüfung + Snapshot.
   const [p] = await db
     .select({
       name: schema.participants.name,
@@ -253,7 +237,6 @@ export async function signDocumentAsCoach(
       strasse: schema.participants.strasse,
       plz: schema.participants.plz,
       ort: schema.participants.ort,
-      geburtsdatum: schema.participants.geburtsdatum,
       geburtsort: schema.participants.geburtsort,
       phone: schema.participants.phone,
       festnetz: schema.participants.festnetz,
@@ -264,7 +247,6 @@ export async function signDocumentAsCoach(
     .limit(1);
   if (!p) return { error: "Kunde nicht gefunden." };
 
-  // Harte Hürden: Pflicht-Stammdaten + Pflicht-Formularfelder.
   const missingMaster = missingMasterData(type, p);
   if (missingMaster.length > 0) {
     return {
@@ -273,7 +255,7 @@ export async function signDocumentAsCoach(
         .join(", ")}.`,
     };
   }
-  const missingFields = missingRequiredFields(type, doc.formData ?? {});
+  const missingFields = missingRequiredFields(type, nextForm);
   if (missingFields.length > 0) {
     return {
       error: `Bitte zuerst die Pflichtfelder ausfüllen: ${missingFields
@@ -282,20 +264,36 @@ export async function signDocumentAsCoach(
     };
   }
 
+  // Coach-Signatur nur bei Formularen, die sie vorsehen (STV).
+  let coachSignatureUrl: string | null = null;
+  if (cfg.signers.coach) {
+    const [coach] = await db
+      .select({ signatureUrl: schema.users.signatureUrl })
+      .from(schema.users)
+      .where(eq(schema.users.id, coachId))
+      .limit(1);
+    if (!coach?.signatureUrl) {
+      return {
+        error:
+          'Du hast noch keine Unterschrift hinterlegt. Lege sie unter „Unterschrift" an.',
+      };
+    }
+    coachSignatureUrl = coach.signatureUrl;
+  }
+
   const ipAddress =
     (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ??
     "unknown";
 
   // Snapshot der Stammdaten in form_data einfrieren (siehe loadDocumentSheet).
   const snapshot: Record<string, string> = {
-    ...((doc.formData ?? {}) as Record<string, string>),
+    ...nextForm,
     tn_name: p.name,
     tn_vorname: p.vorname ?? "",
     tn_nachname: p.nachname ?? "",
     tn_strasse: p.strasse ?? "",
     tn_plz: p.plz ?? "",
     tn_ort: p.ort ?? "",
-    tn_geburtsdatum: p.geburtsdatum ?? "",
     tn_geburtsort: p.geburtsort ?? "",
     tn_phone: p.phone ?? "",
     tn_festnetz: p.festnetz ?? "",
@@ -304,21 +302,22 @@ export async function signDocumentAsCoach(
 
   try {
     await db.transaction(async (tx) => {
-      // Re-Check innerhalb der TX gegen Race (Doppel-Signatur).
       const [fresh] = await tx
         .select({ status: schema.documents.status })
         .from(schema.documents)
         .where(eq(schema.documents.id, documentId))
         .limit(1);
-      if (!fresh || fresh.status !== "draft") throw new Error("ALREADY_SIGNED");
+      if (!fresh || fresh.status !== "draft") throw new Error("ALREADY_ACTIVE");
 
-      await tx.insert(schema.documentSignatures).values({
-        documentId,
-        signerType: "coach",
-        coachId,
-        signatureUrl: coachSignatureUrl,
-        ipAddress,
-      });
+      if (coachSignatureUrl) {
+        await tx.insert(schema.documentSignatures).values({
+          documentId,
+          signerType: "coach",
+          coachId,
+          signatureUrl: coachSignatureUrl,
+          ipAddress,
+        });
+      }
 
       await tx
         .update(schema.documents)
@@ -329,7 +328,9 @@ export async function signDocumentAsCoach(
         {
           actorType: "coach",
           actorId: coachId,
-          action: "document.coach_signed",
+          action: coachSignatureUrl
+            ? "document.coach_signed"
+            : "document.released",
           resourceType: "document",
           resourceId: documentId,
           metadata: { type },
@@ -340,15 +341,14 @@ export async function signDocumentAsCoach(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (message === "ALREADY_SIGNED") {
-      return { error: "Dieses Dokument wurde bereits signiert." };
+    if (message === "ALREADY_ACTIVE") {
+      return { error: "Dieses Dokument wurde bereits freigegeben." };
     }
-    console.error("signDocumentAsCoach failed:", err);
-    return { error: "Signieren fehlgeschlagen. Bitte erneut versuchen." };
+    console.error("submitDocumentEditor(release) failed:", err);
+    return { error: "Freigabe fehlgeschlagen. Bitte erneut versuchen." };
   }
 
-  revalidatePath(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
-  revalidatePath(`/coach/courses/${doc.courseId}`);
+  revalidate();
   return { success: true };
 }
 

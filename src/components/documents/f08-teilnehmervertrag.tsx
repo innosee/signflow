@@ -9,12 +9,9 @@ import type { ReactNode } from "react";
 
 /**
  * F 08 — Teilnehmervertrag / Anmeldung AVGS. Persönliche Stammdaten +
- * Maßnahmedaten + Vertragsklauseln + zwei Unterschriften (erango zuerst).
+ * Maßnahmedaten + Vertragsklauseln + Teilnehmer-Unterschrift.
  */
 export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
-  const p = data.participant;
-  const f = data.formData;
-
   return (
     <DocumentFrame
       formNumber="F 08"
@@ -22,6 +19,25 @@ export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
       title="Teilnehmervertrag / Anmeldung I AVGS"
       logoUrl={data.branding.logoUrl}
     >
+      <F08Body data={data} />
+      <SignatureLine
+        role="Teilnehmer:in"
+        ort={data.formData.ort}
+        signature={data.signatures.participant}
+      />
+    </DocumentFrame>
+  );
+}
+
+/**
+ * Rumpf des Teilnehmervertrags (ohne Rahmen/Unterschrift) — wird auch vom
+ * kombinierten TNV+DS-Dokument genutzt.
+ */
+export function F08Body({ data }: { data: DocumentSheetData }) {
+  const p = data.participant;
+  const f = data.formData;
+  return (
+    <>
       <p className="doc-small">
         <strong>Vertragspartner</strong> sind erango GmbH, Ekkehardstraße 12b,
         78224 Singen, vertreten durch die jeweilige Niederlassung, und
@@ -35,7 +51,6 @@ export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
         label="PLZ, Ort:"
         value={[p.plz, p.ort].filter(Boolean).join(" ")}
       />
-      <DocField label="Geburtsdatum:" value={formatDate(p.geburtsdatum)} />
       <DocField label="Geburtsort:" value={p.geburtsort} />
       <DocField label="Festnetznummer:" value={p.festnetz} />
       <DocField label="Mobilfunknummer:" value={p.phone} />
@@ -124,18 +139,7 @@ export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
           </strong>
         </p>
       </div>
-
-      <SignatureLine
-        role="Teilnehmer:in"
-        ort={f.ort}
-        signature={data.signatures.participant}
-      />
-      <SignatureLine
-        role="erango Mitarbeiter:in"
-        ort={f.ort}
-        signature={data.signatures.coach}
-      />
-    </DocumentFrame>
+    </>
   );
 }
 
