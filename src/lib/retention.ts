@@ -66,6 +66,11 @@ export const SIGNATURE_RELATED_AUDIT_ACTIONS = [
   "session.topic_corrected",
   "session.deleted",
   "course.delete",
+  // Kunde-Dokumente (F04/F08/F21): die Signier-Events sind Beweis-relevant;
+  // das Löschen belegt, was mit einem (ggf. coach-signierten) Dokument geschah.
+  "document.coach_signed",
+  "document.participant_signed",
+  "document.deleted",
 ] as const satisfies readonly AuditAction[];
 
 /**
@@ -89,6 +94,8 @@ export const DELETABLE_AUDIT_ACTIONS = [
   "bildungstraeger.onboard",
   "course.bewilligt.set",
   "course.bewilligt.unset",
+  // Anlegen eines Kunde-Dokuments = operatives Lebenszyklus-Ereignis
+  "document.created",
 ] as const satisfies readonly AuditAction[];
 
 type ClassifiedAction =
