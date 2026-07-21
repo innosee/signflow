@@ -8,7 +8,7 @@ import { courseVisibleToCoach } from "@/lib/course-access";
 import { isFutureSessionDate } from "@/lib/dates";
 import { getFeiertag } from "@/lib/feiertage";
 import { isSmsEnabled } from "@/lib/sms";
-import { wochenUnter2 } from "@/lib/termine-pro-woche";
+import { innereWochenUnter2, randWochenUnter2 } from "@/lib/termine-pro-woche";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ReviewThread } from "@/components/review-thread";
@@ -212,11 +212,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     );
   // „2 Termine/Woche": Anzahl Wochen mit nur einem geleisteten regulären UE —
   // dezenter Hinweis im Abschluss-Panel (Flag wird beim Abschluss gesetzt).
-  const unter2Wochen = wochenUnter2(
-    sessions
-      .filter((s) => s.status === "completed" && !s.isErstgespraech)
-      .map((s) => s.sessionDate),
-  ).length;
+  // Nur ECHTE innere Lücken zählen als Verstoß; Anfangs-/Schlusswochen mit nur
+  // 1 Termin sind ein rein informativer Randwochen-Hinweis (`randWochen`).
+  const regulaereTerminDaten = sessions
+    .filter((s) => s.status === "completed" && !s.isErstgespraech)
+    .map((s) => s.sessionDate);
+  const unter2Wochen = innereWochenUnter2(regulaereTerminDaten).length;
+  const randWochen = randWochenUnter2(regulaereTerminDaten).length;
 
   // Freigabe-Status pro Teilnehmer: Map<participantId, approvedAt>.
   // Wird unten für das "Abschluss"-Panel gebraucht, damit der Coach auf
@@ -636,6 +638,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 letzterTermin={letzterTermin}
                 bewilligungsende={course.endDate}
                 unter2Wochen={unter2Wochen}
+                randWochen={randWochen}
               />
             )}
           </Step>

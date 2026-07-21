@@ -41,3 +41,49 @@ export function wochenUnter2(dates: string[]): string[] {
   }
   return [...counts.entries()].filter(([, n]) => n < 2).map(([k]) => k);
 }
+
+/** Nach ISO-Wochen gruppierte Termin-Zählung + sortierte Wochen-Keys. */
+function weekCounts(dates: string[]): {
+  counts: Map<string, number>;
+  sorted: string[];
+} {
+  const counts = new Map<string, number>();
+  for (const d of dates) {
+    const k = isoWeekKey(d);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  // isoWeekKey ("YYYY-Www", nullgepolstert) sortiert lexikografisch = chronologisch.
+  return { counts, sorted: [...counts.keys()].sort() };
+}
+
+/**
+ * „Innere" Wochen mit weniger als 2 Terminen — die ERSTE und LETZTE reguläre
+ * Termin-Woche werden ausgenommen. Angebrochene Anfangs-/Schlusswochen (z.B.
+ * Wrap-up-Woche mit nur 1 Termin, weil alle UE geleistet waren) sind KEIN
+ * Intensitäts-Verstoß; nur echte Lücken *mitten* in der Maßnahme zählen.
+ * Bei ≤2 belegten Wochen gibt es keine inneren Wochen ⇒ nie ein Verstoß.
+ */
+export function innereWochenUnter2(dates: string[]): string[] {
+  const { counts, sorted } = weekCounts(dates);
+  if (sorted.length <= 2) return [];
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  return [...counts.entries()]
+    .filter(([k, n]) => n < 2 && k !== first && k !== last)
+    .map(([k]) => k);
+}
+
+/**
+ * Randwochen (erste/letzte belegte Woche) mit nur 1 Termin — für den rein
+ * informativen, nicht-persistenten Coach-Hinweis („Schluss-/Anfangswoche hatte
+ * nur 1 Termin, beim Maßnahme-Ende normal"). Kein Verstoß, nicht auf der ANW.
+ */
+export function randWochenUnter2(dates: string[]): string[] {
+  const { counts, sorted } = weekCounts(dates);
+  if (sorted.length === 0) return [];
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  return sorted.filter(
+    (k) => (k === first || k === last) && (counts.get(k) ?? 0) < 2,
+  );
+}

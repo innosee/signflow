@@ -27,14 +27,17 @@ export function MarkAbgeschlossenButton({
   letzterTermin,
   bewilligungsende,
   unter2Wochen = 0,
+  randWochen = 0,
 }: {
   courseId: string;
   geleisteteUe: number;
   bewilligteUe: number;
   letzterTermin: string | null;
   bewilligungsende: string | null;
-  /** Anzahl Wochen mit <2 geleisteten UE — dezenter Hinweis. */
+  /** Anzahl ECHTER innerer Wochen mit <2 Terminen — wird auf der ANW vermerkt. */
   unter2Wochen?: number;
+  /** Anfangs-/Schlusswochen mit nur 1 Termin — rein informativ, kein Verstoß. */
+  randWochen?: number;
 }) {
   const [state, action, pending] = useActionState<
     MarkAbgeschlossenState,
@@ -121,6 +124,13 @@ export function MarkAbgeschlossenButton({
           <p className="text-zinc-500">
             {unter2Wochen} Woche{unter2Wochen === 1 ? "" : "n"} mit weniger als 2
             Terminen — wird auf dem Nachweis vermerkt.
+          </p>
+        )}
+        {randWochen > 0 && (
+          <p className="text-zinc-400">
+            Hinweis: Anfangs-/Schlusswoche mit nur 1 Termin (z. B. Wrap-up, weil
+            alle UE geleistet waren) — kein Verstoß, wird <strong>nicht</strong>{" "}
+            auf dem Nachweis vermerkt.
           </p>
         )}
       </div>
