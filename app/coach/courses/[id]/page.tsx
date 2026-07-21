@@ -662,7 +662,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   resubmit={course.reviewStatus === "changes_requested"}
                   disabled={
                     !allSessionsCompleted ||
-                    !allApproved ||
                     !course.anwCheckPassedAt ||
                     !course.abgeschlossenAt
                   }
@@ -673,11 +672,19 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         ? "ANW-Compliance-Check muss durchlaufen sein"
                         : !course.abgeschlossenAt
                           ? "Maßnahme muss als abgeschlossen markiert sein"
-                          : !allApproved
-                            ? "Der Kunde hat den Nachweis noch nicht freigegeben"
-                            : undefined
+                          : undefined
                   }
                 />
+              )}
+            {!impersonating &&
+              course.reviewStatus !== "approved" &&
+              course.reviewStatus !== "pending" &&
+              !allApproved && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  Hinweis: Die Teilnehmer-Gesamt-Freigabe steht noch aus. Das ist
+                  derzeit optional und blockiert das Einreichen nicht — sie wird
+                  erst mit der FES-Versiegelung wieder verpflichtend.
+                </p>
               )}
             {course.reviewStatus === "approved" && finalDoc?.pdfUrl && (
               <a
