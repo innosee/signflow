@@ -137,6 +137,8 @@ export const documentType = pgEnum("document_type", [
   "f04_ds",
   "f08_tnv",
   "f21_stv",
+  // Kombiniertes Dokument: Teilnehmervertrag + Datenschutz in einem.
+  "tnv_ds_merge",
 ]);
 /**
  * Lebenszyklus eines Kunde-Dokuments:

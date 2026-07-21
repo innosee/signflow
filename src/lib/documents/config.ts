@@ -5,15 +5,26 @@
  * Server-Prefill als auch der Client-Editor (Coach) dieselben Feld-Definitionen
  * nutzen. Der statische Rechtstext der Formulare lebt in den Template-
  * Komponenten (`src/components/documents/*`); hier stehen nur die editier- und
- * vorbefüllbaren Felder plus die pro Dokument geforderten Teilnehmer-Stammdaten.
+ * vorbefüllbaren Felder, die Signatur-Konfiguration und die pro Dokument
+ * geforderten Teilnehmer-Stammdaten.
  *
  * Neues Formular ergänzen: Enum-Wert (`document_type`) + Config-Eintrag hier +
  * Template-Komponente + Prefill-Zweig.
  */
 
-export type DocumentTypeId = "f04_ds" | "f08_tnv" | "f21_stv";
+export type DocumentTypeId =
+  | "f04_ds"
+  | "f08_tnv"
+  | "f21_stv"
+  | "tnv_ds_merge";
 
-export const DOCUMENT_TYPE_IDS: DocumentTypeId[] = ["f04_ds", "f08_tnv", "f21_stv"];
+// Reihenfolge in der Auswahl-Liste: STV, TNV, DS, kombiniertes TNV+DS.
+export const DOCUMENT_TYPE_IDS: DocumentTypeId[] = [
+  "f21_stv",
+  "f08_tnv",
+  "f04_ds",
+  "tnv_ds_merge",
+];
 
 export type DocFieldType = "text" | "textarea" | "select" | "date";
 
@@ -23,7 +34,7 @@ export type DocField = {
   label: string;
   type: DocFieldType;
   options?: { value: string; label: string }[];
-  /** Muss beim Coach-Signieren gefüllt sein, sonst wird die Signatur blockiert. */
+  /** Muss beim Freigeben/Signieren gefüllt sein, sonst wird es blockiert. */
   required?: boolean;
   placeholder?: string;
   hint?: string;
@@ -32,6 +43,9 @@ export type DocField = {
 /**
  * Erweiterte Teilnehmer-Stammdaten (Spalten in `participants`). `phone` =
  * Mobilfunknummer (bestehende Spalte), `festnetz` = separate Festnetznummer.
+ * Geburtsdatum ist bewusst NICHT dabei — erango hat es bei AVGS-TN praktisch nie
+ * vorliegen (Abstimmung 2026-07-21). Die DB-Spalte bleibt, wird aber nicht
+ * mehr erfasst/angezeigt.
  */
 export type ParticipantMasterField =
   | "vorname"
@@ -39,7 +53,6 @@ export type ParticipantMasterField =
   | "strasse"
   | "plz"
   | "ort"
-  | "geburtsdatum"
   | "geburtsort"
   | "phone"
   | "festnetz";
@@ -50,11 +63,22 @@ export const MASTER_FIELD_LABELS: Record<ParticipantMasterField, string> = {
   strasse: "Straße / Hausnummer",
   plz: "PLZ",
   ort: "Ort",
-  geburtsdatum: "Geburtsdatum",
   geburtsort: "Geburtsort",
   phone: "Mobilfunknummer",
   festnetz: "Festnetznummer",
 };
+
+/** Reihenfolge der Stammdaten-Felder im Editor. */
+export const MASTER_FIELD_ORDER: ParticipantMasterField[] = [
+  "vorname",
+  "nachname",
+  "strasse",
+  "plz",
+  "ort",
+  "geburtsort",
+  "phone",
+  "festnetz",
+];
 
 export type DocumentConfig = {
   id: DocumentTypeId;
@@ -70,6 +94,13 @@ export type DocumentConfig = {
   fields: DocField[];
   /** Für dieses Dokument verpflichtende Teilnehmer-Stammdaten. */
   requiredMasterData: ParticipantMasterField[];
+  /**
+   * Wer unterschreibt. Der Teilnehmer signiert immer. `coach: true` bedeutet,
+   * dass zusätzlich der Coach/erango unterschreibt (nur bei der STV) — dann
+   * signiert der Coach zuerst. Bei `coach: false` (DS, TNV, Merge) gibt der
+   * Coach das Dokument nur zur Teilnehmer-Unterschrift frei.
+   */
+  signers: { coach: boolean };
 };
 
 const F04: DocumentConfig = {
@@ -79,19 +110,46 @@ const F04: DocumentConfig = {
   fullTitle: "Datenschutzerklärung",
   description:
     "Datenschutzhinweise nach Art. 13/14 DSGVO für Teilnehmer:innen von AVGS-Einzelcoachings.",
-  // Reiner Rechtstext + zwei Unterschriften. Ort wird vorbefüllt, Datum ergibt
-  // sich aus dem Signatur-Zeitstempel — kein weiteres Coach-Freitextfeld.
   fields: [
     {
       key: "ort",
       label: "Ort (für die Unterschriftszeile)",
       type: "text",
-      required: true,
       placeholder: "z.B. Singen",
     },
   ],
   requiredMasterData: [],
+  signers: { coach: false },
 };
+
+// Maßnahme-/Vertragsfelder der TNV — auch vom Merge genutzt.
+const TNV_FIELDS: DocField[] = [
+  {
+    key: "massnahme",
+    label: "Maßnahme",
+    type: "text",
+    required: true,
+    placeholder: "z.B. Karrierecoaching (EKC)",
+  },
+  { key: "ort", label: "Ort (Durchführung)", type: "text", required: true },
+  {
+    key: "anzahlUe",
+    label: "Anzahl UE",
+    type: "text",
+    required: true,
+    placeholder: "z.B. 80",
+  },
+  {
+    key: "ueProWoche",
+    label: "UE pro Woche",
+    type: "text",
+    required: true,
+    placeholder: "min. 2 Termine/Woche á … UE",
+  },
+  // Beginn/Ende sind oft noch nicht bekannt → nicht verpflichtend.
+  { key: "beginn", label: "Beginn", type: "date" },
+  { key: "voraussEnde", label: "vorauss. Ende", type: "date" },
+];
 
 const F08: DocumentConfig = {
   id: "f08_tnv",
@@ -100,58 +158,10 @@ const F08: DocumentConfig = {
   fullTitle: "Teilnehmervertrag / Anmeldung I AVGS",
   description:
     "Verbindliche Anmeldung zur AVGS-Maßnahme inkl. Stamm- und Maßnahmedaten.",
-  fields: [
-    {
-      key: "massnahme",
-      label: "Maßnahme",
-      type: "text",
-      required: true,
-      placeholder: "z.B. Karrierecoaching (EKC)",
-    },
-    {
-      key: "ort",
-      label: "Ort (Durchführung)",
-      type: "text",
-      required: true,
-    },
-    {
-      key: "anzahlUe",
-      label: "Anzahl UE",
-      type: "text",
-      required: true,
-      placeholder: "z.B. 80",
-    },
-    {
-      key: "ueProWoche",
-      label: "UE pro Woche",
-      type: "text",
-      required: true,
-      placeholder: "min. 2 Termine/Woche á … UE",
-    },
-    {
-      key: "beginn",
-      label: "Beginn",
-      type: "date",
-      required: true,
-    },
-    {
-      key: "voraussEnde",
-      label: "vorauss. Ende",
-      type: "date",
-      required: true,
-    },
-  ],
-  // F 08 ist das einzige Formular mit vollständigen Personendaten. Geburtsort +
-  // Festnetz bleiben optional (siehe Abstimmung mit erango).
-  requiredMasterData: [
-    "vorname",
-    "nachname",
-    "strasse",
-    "plz",
-    "ort",
-    "geburtsdatum",
-    "phone",
-  ],
+  fields: TNV_FIELDS,
+  // Reduziert auf das, was erango realistisch immer hat.
+  requiredMasterData: ["vorname", "nachname"],
+  signers: { coach: false },
 };
 
 const F21: DocumentConfig = {
@@ -193,17 +203,31 @@ const F21: DocumentConfig = {
       key: "ort",
       label: "Ort (für die Unterschriftszeile)",
       type: "text",
-      required: true,
       placeholder: "z.B. Singen",
     },
   ],
   requiredMasterData: [],
+  // Einzige Variante mit Coach-Unterschrift.
+  signers: { coach: true },
+};
+
+const TNV_DS_MERGE: DocumentConfig = {
+  id: "tnv_ds_merge",
+  formNumber: "F 08 + F 04",
+  label: "Teilnehmervertrag + Datenschutz",
+  fullTitle: "Teilnehmervertrag / Anmeldung I AVGS + Datenschutzerklärung",
+  description:
+    "Kombiniertes Dokument: Teilnehmervertrag und Datenschutzerklärung in einem, eine Unterschrift.",
+  fields: TNV_FIELDS,
+  requiredMasterData: ["vorname", "nachname"],
+  signers: { coach: false },
 };
 
 const CONFIGS: Record<DocumentTypeId, DocumentConfig> = {
   f04_ds: F04,
   f08_tnv: F08,
   f21_stv: F21,
+  tnv_ds_merge: TNV_DS_MERGE,
 };
 
 export function getDocumentConfig(type: DocumentTypeId): DocumentConfig {
@@ -231,6 +255,17 @@ export type PrefillInput = {
   endDate: string | null;
 };
 
+function tnvPrefill(input: PrefillInput): Record<string, string> {
+  return {
+    massnahme: input.massnahmeLabel,
+    ort: input.durchfuehrungsort || "",
+    anzahlUe: input.anzahlBewilligteUe ? String(input.anzahlBewilligteUe) : "",
+    ueProWoche: "min. 2 Termine/Woche",
+    beginn: input.startDate ?? "",
+    voraussEnde: input.endDate ?? "",
+  };
+}
+
 /**
  * Deterministischer Prefill der `form_data` aus Kurs-/Maßnahmedaten. Keine KI —
  * nur bekannte Werte aus dem Kurs. Leere Werte bleiben leer (Coach füllt sie).
@@ -243,14 +278,8 @@ export function prefillFormData(
     case "f04_ds":
       return { ort: input.durchfuehrungsort || "" };
     case "f08_tnv":
-      return {
-        massnahme: input.massnahmeLabel,
-        ort: input.durchfuehrungsort || "",
-        anzahlUe: input.anzahlBewilligteUe ? String(input.anzahlBewilligteUe) : "",
-        ueProWoche: "min. 2 Termine/Woche",
-        beginn: input.startDate ?? "",
-        voraussEnde: input.endDate ?? "",
-      };
+    case "tnv_ds_merge":
+      return tnvPrefill(input);
     case "f21_stv":
       return {
         eckdaten: "",
@@ -270,7 +299,7 @@ export type ParticipantMasterData = Partial<
 
 /**
  * Liefert die für dieses Dokument fehlenden Pflicht-Stammdaten (leere Liste =
- * vollständig). Wird beim Coach-Signieren als harte Hürde ausgewertet.
+ * vollständig). Wird beim Freigeben/Signieren als harte Hürde ausgewertet.
  */
 export function missingMasterData(
   type: DocumentTypeId,

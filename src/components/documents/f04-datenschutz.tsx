@@ -7,8 +7,7 @@ import { participantDisplayName } from "@/components/documents/util";
 
 /**
  * F 04 — Datenschutzerklärung (Art. 13/14 DSGVO). Reiner Rechtstext + Name +
- * zwei Unterschriften (Teilnehmer:in + erango). Signatur-Reihenfolge: erango
- * zuerst (app-seitig erzwungen), Layout wie im Original.
+ * Teilnehmer-Unterschrift (keine erango-Unterschrift, siehe Abstimmung).
  */
 export function F04Datenschutz({ data }: { data: DocumentSheetData }) {
   const ort = data.formData.ort ?? "";
@@ -20,6 +19,29 @@ export function F04Datenschutz({ data }: { data: DocumentSheetData }) {
       subtitle="Datenschutzhinweise nach Art. 13/14 DSGVO für Teilnehmer:innen von AVGS-Einzelcoachings (§ 45 SGB III, Nr. 1, 4, 5)"
       logoUrl={data.branding.logoUrl}
     >
+      <F04Body />
+      <div className="doc-field" style={{ marginTop: "5mm" }}>
+        <span className="doc-field-label">Name, Vorname (Teilnehmende:r):</span>
+        <span className="doc-field-value">
+          {participantDisplayName(data.participant)}
+        </span>
+      </div>
+      <SignatureLine
+        role="Teilnehmende:r (m/w/d)"
+        ort={ort}
+        signature={data.signatures.participant}
+      />
+    </DocumentFrame>
+  );
+}
+
+/**
+ * Rechtstext der Datenschutzerklärung (ohne Rahmen/Name/Unterschrift) — wird
+ * auch vom kombinierten TNV+DS-Dokument genutzt.
+ */
+export function F04Body() {
+  return (
+    <>
       <div className="doc-small">
         <p>
           Im Folgenden informieren wir Sie über unsere Verarbeitungen Ihrer
@@ -135,27 +157,11 @@ export function F04Datenschutz({ data }: { data: DocumentSheetData }) {
         </p>
       </div>
 
-      <div className="doc-field" style={{ marginTop: "5mm" }}>
-        <span className="doc-field-label">Name, Vorname (Teilnehmende:r):</span>
-        <span className="doc-field-value">{participantDisplayName(data.participant)}</span>
-      </div>
-
-      <SignatureLine
-        role="Teilnehmende:r (m/w/d)"
-        ort={ort}
-        signature={data.signatures.participant}
-      />
-      <SignatureLine
-        role="erango Mitarbeitende:r (m/w/d)"
-        ort={ort}
-        signature={data.signatures.coach}
-      />
-
       <p className="doc-small" style={{ marginTop: "4mm" }}>
         <strong>Hinweis auf Haus- und Hygieneordnung</strong> (kein Bestandteil
         dieser Datenschutzhinweise): Für die Teilnahme gelten unsere Haus- und
         Hygieneordnung in der jeweils aktuellen Fassung.
       </p>
-    </DocumentFrame>
+    </>
   );
 }
