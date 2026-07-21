@@ -1796,20 +1796,13 @@ export async function requestBildungstraegerReview(
     return { error: "Mindestens eine Session ist noch nicht vollständig signiert." };
   }
 
-  // Approval-Gate (1:1): der eine Kunde muss freigegeben haben.
-  const [approval] = await db
-    .select({ id: schema.participantApprovals.id })
-    .from(schema.participantApprovals)
-    .where(
-      and(
-        eq(schema.participantApprovals.courseId, ownedCourseId),
-        eq(schema.participantApprovals.participantId, course.participantId),
-      ),
-    )
-    .limit(1);
-  if (!approval) {
-    return { error: "Der Kunde hat den Nachweis noch nicht freigegeben." };
-  }
+  // Teilnehmer-Gesamt-Freigabe (participant_approvals) ist im aktuellen Flow
+  // KEIN Blocker mehr, nur ein Hinweis (User-Entscheidung 2026-07-21). Die
+  // Einzel-Termin-Signaturen (Sessions-Gate oben) tragen die Beweiskraft; eine
+  // separate Schluss-Freigabe scheitert real gerade an früh ausscheidenden
+  // Teilnehmern (Job gefunden → Magic-Link wird nicht mehr geöffnet), obwohl
+  // alle Unterschriften vorliegen. Die Freigabe-Erfassung bleibt im Datenmodell
+  // erhalten — sie wird mit FES_MODE=live wieder zum harten Gate.
 
   // Submit-Notiz zusammenbauen: Begründung/Anmerkung voranstellen, die weichen
   // Umstände als Hinweise, optionale Coach-Notiz anhängen.
