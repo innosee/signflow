@@ -1,9 +1,10 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import type { DocumentTypeId } from "@/lib/documents/config";
 import { sendParticipantMagicLink, sendParticipantPreview } from "@/lib/email";
 import {
   composeMagicLinkSms,
@@ -271,6 +272,18 @@ export type ResolvedToken = {
      */
     status: "pending" | "coach_signed" | "completed";
   }>;
+  /**
+   * Kunde-Dokumente (digitalisierte erango-Formulare), die der Coach zur
+   * Unterschrift freigegeben hat (`status = 'active'`) bzw. bereits
+   * abgeschlossen sind. Drafts (Coach füllt noch aus) werden dem Teilnehmer
+   * NICHT gezeigt.
+   */
+  documents: Array<{
+    id: string;
+    type: DocumentTypeId;
+    status: "active" | "completed";
+    hasParticipantSignature: boolean;
+  }>;
 };
 
 /**
@@ -373,6 +386,43 @@ export async function resolveParticipantToken(
     )
     .limit(1);
 
+  // Kunde-Dokumente: nur die vom Coach freigegebenen (active) oder bereits
+  // abgeschlossenen (completed) — Drafts bleiben dem Teilnehmer verborgen.
+  const docRows = await db
+    .select({
+      id: schema.documents.id,
+      type: schema.documents.type,
+      status: schema.documents.status,
+    })
+    .from(schema.documents)
+    .where(
+      and(
+        eq(schema.documents.courseId, head.courseId),
+        isNull(schema.documents.deletedAt),
+        inArray(schema.documents.status, ["active", "completed"]),
+      ),
+    )
+    .orderBy(asc(schema.documents.createdAt));
+
+  const signedDocIds = new Set(
+    docRows.length
+      ? (
+          await db
+            .select({ documentId: schema.documentSignatures.documentId })
+            .from(schema.documentSignatures)
+            .where(
+              and(
+                inArray(
+                  schema.documentSignatures.documentId,
+                  docRows.map((d) => d.id),
+                ),
+                eq(schema.documentSignatures.signerType, "participant"),
+              ),
+            )
+        ).map((r) => r.documentId)
+      : [],
+  );
+
   return {
     tokenId: head.tokenId,
     courseId: head.courseId,
@@ -391,6 +441,12 @@ export async function resolveParticipantToken(
       isErstgespraech: s.isErstgespraech,
       hasParticipantSignature: signedSessionIds.has(s.id),
       status: s.status,
+    })),
+    documents: docRows.map((d) => ({
+      id: d.id,
+      type: d.type as DocumentTypeId,
+      status: d.status as "active" | "completed",
+      hasParticipantSignature: signedDocIds.has(d.id),
     })),
   };
 }

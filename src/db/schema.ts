@@ -123,6 +123,35 @@ export const courseReviewNoteKind = pgEnum("course_review_note_kind", [
  * nur `updated_at` läuft hoch.
  */
 export const berStatus = pgEnum("ber_status", ["draft", "submitted"]);
+/**
+ * Typ eines vom Bildungsträger digitalisierten Formulars („Kunde-Dokumente").
+ * Jeder Wert entspricht einer erango-Vorlage, die als HTML-as-Source-of-Truth
+ * nachgebaut ist (identische Screen-/Print-Ansicht, A4-PDF via Puppeteer):
+ *   - `f04_ds`  = F 04 Datenschutzerklärung (Art. 13/14 DSGVO)
+ *   - `f08_tnv` = F 08 Teilnehmervertrag / Anmeldung AVGS
+ *   - `f21_stv` = F 21 Strategievereinbarung
+ * Neue Formulare werden hier ergänzt (+ eine Template-Komponente + ein
+ * Config-Eintrag in `src/lib/documents/config.ts`).
+ */
+export const documentType = pgEnum("document_type", [
+  "f04_ds",
+  "f08_tnv",
+  "f21_stv",
+]);
+/**
+ * Lebenszyklus eines Kunde-Dokuments:
+ *   - `draft`     = Coach füllt die Felder noch aus, keine Signatur, editierbar
+ *   - `active`    = Coach hat unterschrieben → Feldwerte eingefroren (Snapshot in
+ *                   `documents.form_data`), wartet auf die Teilnehmer-Signatur
+ *   - `completed` = beide Unterschriften (Coach + Teilnehmer) liegen vor
+ * Coach-first für alle Typen (deckt „erango zuerst" bei F04/F08 ab; bei F21 ist
+ * die Reihenfolge egal, coach-first also zulässig).
+ */
+export const documentStatus = pgEnum("document_status", [
+  "draft",
+  "active",
+  "completed",
+]);
 
 /**
  * Mandant (Bildungsträger-Organisation). Single-Tenant war der Stand bis
@@ -625,6 +654,26 @@ export const participants = pgTable("participants", {
    * Migrationen aus dem Bestand sollen nicht an Format-Strenge scheitern.
    */
   phone: text("phone"),
+  /**
+   * Erweiterte Stammdaten für die Kunde-Dokumente (v.a. F 08 Teilnehmervertrag).
+   * ALLE nullable: der Kunde wird weiterhin nur mit Name + E-Mail (+ Kunden-Nr)
+   * angelegt — die Adress-/Personendaten werden erst dann verlangt, wenn ein
+   * Dokument sie braucht (Pflicht auf Dokument-Ebene, nicht bei der Anlage,
+   * siehe `src/lib/documents/config.ts`). Einmal erfasst → für alle weiteren
+   * Dokumente vorbefüllt.
+   *
+   * `name` bleibt das bestehende Anzeige-Feld (voller Name). `vorname`/`nachname`
+   * sind zusätzlich, weil F 08 Vor- und Nachname getrennt ausweist. `phone`
+   * (oben) dient als Mobilfunknummer, `festnetz` ist die separate Festnetznummer.
+   */
+  vorname: text("vorname"),
+  nachname: text("nachname"),
+  strasse: text("strasse"),
+  plz: text("plz"),
+  ort: text("ort"),
+  geburtsdatum: date("geburtsdatum"),
+  geburtsort: text("geburtsort"),
+  festnetz: text("festnetz"),
   signatureUrl: text("signature_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -865,6 +914,103 @@ export const participantApprovals = pgTable(
       t.participantId,
     ),
     index("participant_approvals_course_idx").on(t.courseId),
+  ],
+);
+
+/**
+ * Ein vom Bildungsträger digitalisiertes erango-Formular, das per einfacher
+ * Signatur (Canvas + Zeitstempel + Audit) unterschrieben wird. Hängt 1:1 an
+ * einem Kurs (= Kunde), damit Felder aus den Kurs-/Teilnehmerdaten vorbefüllt
+ * werden können. Das finale PDF wird — wie der Stundennachweis — on-demand aus
+ * derselben HTML-Komponente gerendert (kein gespeichertes Binary).
+ *
+ * `formData` ist der Snapshot der ausgefüllten Feldwerte (vom Coach getippte
+ * Freitexte + der zum Sign-Zeitpunkt gültige Prefill). Ab Status `active`
+ * (Coach hat signiert) unveränderlich — ein unterschriebenes Dokument darf sich
+ * inhaltlich nicht mehr ändern. Struktur je `type` in
+ * `src/lib/documents/config.ts`.
+ */
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    // Denormalisiert (1:1 zum Kurs), damit Teilnehmer-Queries/Sign-Flow ohne
+    // Join auf courses auskommen und die Bindung explizit im Audit steht.
+    participantId: uuid("participant_id")
+      .notNull()
+      .references(() => participants.id, { onDelete: "restrict" }),
+    type: documentType("type").notNull(),
+    status: documentStatus("status").notNull().default("draft"),
+    formData: jsonb("form_data")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    /** Coach (users.id), der das Dokument angelegt hat. */
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("documents_course_idx").on(t.courseId),
+    index("documents_participant_idx").on(t.participantId),
+  ],
+);
+
+/**
+ * Signaturen eines Kunde-Dokuments. Genau zwei pro Dokument möglich: eine
+ * `coach`- und eine `participant`-Zeile (Unique auf (document_id, signer_type)).
+ * Analog zu `signatures`, aber dokument- statt session-scoped. Coach-first für
+ * alle Typen; sobald beide Zeilen existieren, setzt der Sign-Flow
+ * `documents.status = 'completed'`.
+ */
+export const documentSignatures = pgTable(
+  "document_signatures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    signerType: signerType("signer_type").notNull(),
+    /** Nur bei Coach-Signaturen gesetzt (wer unterschrieben hat). */
+    coachId: uuid("coach_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    /** Nur bei Teilnehmer-Signaturen gesetzt. */
+    participantId: uuid("participant_id").references(() => participants.id, {
+      onDelete: "restrict",
+    }),
+    signatureUrl: text("signature_url").notNull(),
+    signedAt: timestamp("signed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ipAddress: text("ip_address").notNull(),
+  },
+  (t) => [
+    // Genau eine Coach- und eine Teilnehmer-Signatur pro Dokument.
+    uniqueIndex("document_signatures_doc_signer_uq").on(
+      t.documentId,
+      t.signerType,
+    ),
+    index("document_signatures_document_idx").on(t.documentId),
+    // Coach-Signatur trägt coach_id (kein participant_id); Teilnehmer-Signatur
+    // trägt participant_id (kein coach_id).
+    check(
+      "document_signatures_signer_consistency",
+      sql`(${t.signerType} = 'coach' AND ${t.coachId} IS NOT NULL AND ${t.participantId} IS NULL)
+         OR (${t.signerType} = 'participant' AND ${t.participantId} IS NOT NULL AND ${t.coachId} IS NULL)`,
+    ),
   ],
 );
 

@@ -7,6 +7,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { resolveParticipantToken } from "@/lib/participant-tokens";
 import { isFutureSessionDate } from "@/lib/dates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 import { classifyApprovalGate } from "@/lib/sign-state";
@@ -338,6 +339,117 @@ export async function approveFinalDocument(
       return { error: "Du hast den Nachweis bereits freigegeben." };
     }
     throw err;
+  }
+
+  revalidatePath(`/sign/${token}`);
+  return undefined;
+}
+
+export type DocSignState = { error?: string } | undefined;
+
+/**
+ * Teilnehmer unterschreibt ein vom Coach freigegebenes Kunde-Dokument
+ * (Status `active`). Wie beim Termin: aktive Bestätigung + Zeitstempel + IP,
+ * die einmal angelegte Unterschrift wird als Snapshot übernommen. Sobald der
+ * Teilnehmer signiert, ist das Dokument abgeschlossen (Coach hat vorher
+ * signiert — Voraussetzung für Status `active`).
+ */
+export async function submitDocumentSignature(
+  _prev: DocSignState,
+  formData: FormData,
+): Promise<DocSignState> {
+  const token = String(formData.get("token") ?? "");
+  const documentId = String(formData.get("documentId") ?? "");
+  const confirmed = formData.get("confirm") === "on";
+  if (!token || !documentId) return { error: "Token oder Dokument fehlt." };
+  if (!confirmed) return { error: "Bitte aktiv bestätigen." };
+
+  const resolved = await resolveParticipantToken(token);
+  if (!resolved) {
+    return { error: "Dieser Link ist abgelaufen oder ungültig." };
+  }
+  if (!resolved.participantSignatureUrl) {
+    return { error: "Bitte lege zuerst deine Unterschrift an." };
+  }
+  const participantSignatureUrl: string = resolved.participantSignatureUrl;
+
+  const h = await headers();
+  const ipAddress = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const userAgent = h.get("user-agent");
+
+  try {
+    await db.transaction(async (tx) => {
+      const [doc] = await tx
+        .select({
+          id: schema.documents.id,
+          status: schema.documents.status,
+          type: schema.documents.type,
+        })
+        .from(schema.documents)
+        .where(
+          and(
+            eq(schema.documents.id, documentId),
+            eq(schema.documents.courseId, resolved.courseId),
+            isNull(schema.documents.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!doc) throw new Error("NOT_FOUND");
+      if (doc.status !== "active") throw new Error("NOT_SIGNABLE");
+
+      const [existing] = await tx
+        .select({ id: schema.documentSignatures.id })
+        .from(schema.documentSignatures)
+        .where(
+          and(
+            eq(schema.documentSignatures.documentId, documentId),
+            eq(schema.documentSignatures.signerType, "participant"),
+          ),
+        )
+        .limit(1);
+      if (existing) throw new Error("ALREADY_SIGNED");
+
+      await tx.insert(schema.documentSignatures).values({
+        documentId,
+        signerType: "participant",
+        participantId: resolved.participantId,
+        signatureUrl: participantSignatureUrl,
+        ipAddress,
+      });
+
+      await tx
+        .update(schema.documents)
+        .set({ status: "completed", completedAt: new Date() })
+        .where(eq(schema.documents.id, documentId));
+
+      await logAudit(
+        {
+          actorType: "participant",
+          actorId: resolved.participantId,
+          action: "document.participant_signed",
+          resourceType: "document",
+          resourceId: documentId,
+          metadata: { type: doc.type },
+          ipAddress,
+          userAgent,
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "NOT_FOUND") return { error: "Dokument nicht gefunden." };
+    if (message === "NOT_SIGNABLE") {
+      return {
+        error:
+          "Dieses Dokument ist gerade nicht zur Unterschrift bereit. Bitte lade die Seite neu.",
+      };
+    }
+    if (message === "ALREADY_SIGNED") {
+      return { error: "Du hast dieses Dokument bereits unterschrieben." };
+    }
+    console.error("submitDocumentSignature failed:", err);
+    return { error: "Unterschrift fehlgeschlagen. Bitte erneut versuchen." };
   }
 
   revalidatePath(`/sign/${token}`);
