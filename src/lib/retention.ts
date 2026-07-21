@@ -66,8 +66,10 @@ export const SIGNATURE_RELATED_AUDIT_ACTIONS = [
   "session.topic_corrected",
   "session.deleted",
   "course.delete",
-  // Kunde-Dokumente (F04/F08/F21): die Signier-Events sind Beweis-relevant;
-  // das Löschen belegt, was mit einem (ggf. coach-signierten) Dokument geschah.
+  // Kunde-Dokumente (F04/F08/F21/Merge): die Freigabe/Signier-Events sind
+  // Beweis-relevant (Coach friert Inhalt ein bzw. signiert); das Löschen belegt,
+  // was mit einem freigegebenen/signierten Dokument geschah.
+  "document.released",
   "document.coach_signed",
   "document.participant_signed",
   "document.deleted",
