@@ -7,6 +7,7 @@ import { Stundennachweis } from "@/components/stundennachweis";
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { loadStundennachweisSheet } from "@/lib/sheet-data";
+import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
 
 import { ReviewDecisionButtons } from "../review-decision-buttons";
 
@@ -110,6 +111,17 @@ export default async function BildungstraegerReviewDetailPage({
 
   const isPending = course.reviewStatus === "pending";
 
+  // „< 2 Termine/Woche"-Hinweis konsistent zur ANW: nur ECHTE innere Lücken,
+  // live berechnet (nicht der gespeicherte Flag) — so verschwinden Alt-False-
+  // Positives (Rand-/Wrap-up-Wochen) auch hier ohne Daten-Migration.
+  const hatInnereLuecke = sheet
+    ? innereWochenUnter2(
+        sheet.sessions
+          .filter((s) => !s.isErstgespraech)
+          .map((s) => s.sessionDate),
+      ).length > 0
+    : false;
+
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
       <header className="flex items-baseline justify-between gap-4">
@@ -168,7 +180,7 @@ export default async function BildungstraegerReviewDetailPage({
           </div>
         )}
 
-        {course.flagUnter2Termine && (
+        {hatInnereLuecke && (
           <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             Hinweis: In Teilen der Maßnahme lagen weniger als 2 Termine pro Woche.
           </div>

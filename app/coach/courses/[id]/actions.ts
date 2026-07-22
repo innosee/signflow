@@ -7,7 +7,7 @@ import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { abschlussStatus } from "@/lib/abschluss-status";
-import { wochenUnter2 } from "@/lib/termine-pro-woche";
+import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
 import { logAudit } from "@/lib/audit";
 import { getFeiertag } from "@/lib/feiertage";
 import { sendReviewRequestedToBildungstraeger } from "@/lib/email";
@@ -1681,7 +1681,10 @@ export async function markCourseAbgeschlossen(
   const regulaereUeDaten = completedSessions
     .filter((s) => !s.isErstgespraech)
     .map((s) => s.sessionDate);
-  const unter2Termine = wochenUnter2(regulaereUeDaten).length > 0;
+  // Nur ECHTE innere Lücken flaggen — angebrochene Anfangs-/Schlusswochen
+  // (z.B. Wrap-up-Woche mit 1 Termin, weil alle UE geleistet) sind kein
+  // Verstoß. Konsistent zur ANW-Anzeige (stundennachweis.tsx).
+  const unter2Termine = innereWochenUnter2(regulaereUeDaten).length > 0;
 
   // Zwei unabhängige Achsen — Begründung Pflicht NUR bei UE-Unterschreitung.
   const st = abschlussStatus({

@@ -15,6 +15,7 @@ import {
   EIGNUNG_RATINGS,
   type Eignungsanalyse,
 } from "@/lib/eignung";
+import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
 
 export type StundennachweisSheet = {
   /**
@@ -139,6 +140,15 @@ export function Stundennachweis(props: StundennachweisSheet) {
   const geleisteteUe = sessions
     .filter((s) => !s.isErstgespraech)
     .reduce((sum, s) => sum + Number.parseFloat(s.anzahlUe), 0);
+
+  // „< 2 Termine/Woche" nur bei ECHTEN inneren Lücken deklarieren — live aus
+  // den Terminen berechnet, NICHT aus dem gespeicherten `flagUnter2Termine`.
+  // So verschwinden Alt-False-Positives (Rand-/Wrap-up-Woche mit 1 Termin)
+  // ohne Daten-Migration, echte innere Lücken bleiben auf der ANW sichtbar.
+  const hatInnereLuecke =
+    innereWochenUnter2(
+      sessions.filter((s) => !s.isErstgespraech).map((s) => s.sessionDate),
+    ).length > 0;
 
   return (
     <>
@@ -321,7 +331,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
           </section>
         )}
 
-        {(course.flagUnter2Termine ||
+        {(hatInnereLuecke ||
           course.flagVorzeitigesEnde ||
           course.flagUeUnterschritten ||
           course.begruendungText ||
@@ -330,7 +340,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
             <h2>Ergänzende Angaben</h2>
             <ul>
               <li>
-                <Checkbox checked={course.flagUnter2Termine} />
+                <Checkbox checked={hatInnereLuecke} />
                 Weniger als 2 Termine pro Woche
               </li>
               <li>
