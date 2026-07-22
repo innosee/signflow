@@ -56,10 +56,14 @@ const SECTION_TITLES = [
   },
 ];
 
-function Paragraphs({ text }: { text: string }) {
-  // `(?:\r?\n){2,}` matched sowohl Unix- als auch Windows-Zeilenenden;
-  // der Alt-Ausdruck `\r\n{2,}` hätte CRLF-Absätze nicht korrekt erkannt.
-  const paras = text
+function Paragraphs({ text }: { text: string | null | undefined }) {
+  // Null-sicher: das Schema führt `teilnahme/ablauf/fazit` heute als
+  // `notNull().default("")`, aber eine Legacy-Bericht-Zeile von VOR dieser
+  // Constraint kann `null` enthalten. Ein ungeschütztes `null.split()` würde
+  // die (server-gerenderte) Print-Seite werfen lassen → Puppeteer fängt ein
+  // KOMPLETT WEISSES PDF ab (kein 404, kein Login). `?? ""` macht daraus
+  // sauber den Platzhalter unten.
+  const paras = (text ?? "")
     .split(/(?:\r?\n){2,}/)
     .map((p) => p.trim())
     .filter(Boolean);
@@ -139,9 +143,10 @@ export function BerDocument({
           <tr>
             <th scope="row">Fehlzeiten:</th>
             <td>
-              <span className="ber-checkbox" aria-hidden>
-                {meta?.keineFehlzeiten ? "☒" : "☐"}
-              </span>{" "}
+              <span
+                className={`ber-checkbox${meta?.keineFehlzeiten ? " checked" : ""}`}
+                aria-hidden
+              />{" "}
               keine Fehlzeiten
             </td>
           </tr>
@@ -243,6 +248,10 @@ const berCss = `
   padding: 15mm 15mm 18mm 15mm;
   font-size: 10pt;
   line-height: 1.45;
+  /* Puppeteer/Print-Engines drucken Hintergrundfarben sonst nicht → die grauen
+     Inhalts-Boxen (#fafafa) und die CSS-Checkbox-Füllung würden fehlen. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
 }
 .ber-header {
   display: flex;
@@ -311,12 +320,26 @@ const berCss = `
   color: #18181b;
 }
 .ber-checkbox {
+  /* CSS-gezeichnet statt Unicode-Glyph (☒/☐): der headless-Chromium-Font auf
+     Vercel (@sparticuz/chromium) hat die Ballot-Box-Zeichen nicht → sie kamen
+     im PDF leer raus. Border + gefüllter Kern rendern font-unabhängig.
+     Siehe Memory pdf_no_unicode_symbols / Stundennachweis. */
   display: inline-block;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 11pt;
-  line-height: 1;
-  vertical-align: middle;
+  width: 3mm;
+  height: 3mm;
+  border: 0.4mm solid #18181b;
+  box-sizing: border-box;
+  vertical-align: -0.4mm;
   margin-right: 1.5mm;
+  position: relative;
+}
+.ber-checkbox.checked::after {
+  content: "";
+  position: absolute;
+  inset: 0.5mm;
+  background: #18181b;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 .ber-override-note {
   margin: -2mm 0 6mm 0;
