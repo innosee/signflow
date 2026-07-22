@@ -49,6 +49,8 @@ export default async function DocumentPrintPage({ params }: Props) {
         </Link>
         <a
           href={`/api/coach/documents/${docId}/pdf`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
         >
           PDF herunterladen
