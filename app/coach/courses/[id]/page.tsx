@@ -600,6 +600,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   <a
                     key={p.id}
                     href={`/api/courses/${course.id}/participants/${p.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 transition hover:bg-zinc-50"
                     title={`Anwesenheitsnachweis (ANW) als PDF für ${p.name} herunterladen`}
                   >

@@ -50,6 +50,8 @@ export default async function PrintSheetPage({ params }: Props) {
         <div className="print-toolbar-actions">
           <a
             href={`/api/courses/${courseId}/participants/${participantId}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
           >
             PDF herunterladen

@@ -98,6 +98,8 @@ export default async function CoachDocumentPage({ params }: Props) {
           </Link>
           <a
             href={`/api/coach/documents/${docId}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
           >
             PDF
