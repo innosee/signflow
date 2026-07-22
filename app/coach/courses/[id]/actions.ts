@@ -99,7 +99,10 @@ function validateSessionFormFields(formData: FormData):
   const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
 
   if (!sessionDate) return { ok: false, error: "Datum fehlt." };
-  if (!topic) return { ok: false, error: "Themen / Inhalte fehlen." };
+  // Themen/Inhalte dürfen beim Anlegen/Bearbeiten LEER bleiben: Coaches legen
+  // Termine oft vor Coachingstart an und tragen die Inhalte erst nach dem
+  // jeweiligen Termin nach (über „Inhalt korrigieren"). Die Vollständigkeit
+  // wird stattdessen an der ANW-Prüfung erzwungen (siehe requireTopicsFilled).
   if (modus !== "praesenz" && modus !== "online") {
     return { ok: false, error: "Modus muss Präsenz oder Online sein." };
   }
@@ -1450,6 +1453,44 @@ export type AnwCheckState =
  * `project_checker_konkretheit` etabliert das Pattern für KI-Checks
  * im Signflow-Stack.
  */
+function deDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return d && m && y ? `${d}.${m}.${y}` : iso;
+}
+
+/**
+ * Gate für die ANW-Prüfung: jeder nicht-gelöschte Termin muss Themen/Inhalte
+ * tragen. Seit Themen beim Anlegen leer bleiben dürfen (Coaches tragen sie erst
+ * nach dem Termin nach), ist DIES die Stelle, an der Vollständigkeit erzwungen
+ * wird. Gibt eine fertige Fehlermeldung zurück (mit den fehlenden Datumsangaben)
+ * oder null. Wird von `runAnwCheckAction` UND `acknowledgeAnwCheckAction`
+ * genutzt — sonst wäre der Gate über den Acknowledge-Pfad umgehbar.
+ */
+async function topicsGateError(courseId: string): Promise<string | null> {
+  const rows = await db
+    .select({
+      sessionDate: schema.sessions.sessionDate,
+      topic: schema.sessions.topic,
+    })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, courseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .orderBy(asc(schema.sessions.sessionDate));
+  const missing = rows
+    .filter((r) => !r.topic || !r.topic.trim())
+    .map((r) => deDate(r.sessionDate));
+  if (missing.length === 0) return null;
+  return (
+    "Bitte zuerst die Themen/Inhalte für alle Termine ausfüllen — es fehlen " +
+    `noch: ${missing.join(", ")}. Du kannst sie je Termin über „Inhalt ` +
+    'korrigieren" nachtragen.'
+  );
+}
+
 export async function runAnwCheckAction(
   _prev: AnwCheckState,
   formData: FormData,
@@ -1464,6 +1505,11 @@ export async function runAnwCheckAction(
 
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Vollständigkeits-Gate: alle Termine brauchen Inhalte (Themen dürfen beim
+  // Anlegen leer bleiben, aber nicht bis in die ANW-Prüfung).
+  const topicError = await topicsGateError(ownedCourseId);
+  if (topicError) return { error: topicError };
 
   // Tenant-Name + Kurs-Maßnahmentyp holen. `courses` hat keinen eigenen
   // `tenantId` — der Mandant wird über den Coach (users.tenantId) abgeleitet,
@@ -1568,6 +1614,11 @@ export async function acknowledgeAnwCheckAction(
   if (!courseId) return { error: "Kurs fehlt." };
   const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
   if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Gleicher Vollständigkeits-Gate wie beim eigentlichen Check — sonst ließe
+  // sich die Inhalts-Pflicht über den „trotzdem freigeben"-Button umgehen.
+  const topicError = await topicsGateError(ownedCourseId);
+  if (topicError) return { error: topicError };
 
   const warningsCount =
     Number.parseInt(String(formData.get("warningsCount") ?? "0"), 10) || 0;

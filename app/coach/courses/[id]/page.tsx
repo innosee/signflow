@@ -455,7 +455,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       )}
                     </div>
                     <div className="flex-1 space-y-1.5">
-                      <p className="text-zinc-700">{s.topic}</p>
+                      {s.topic.trim() ? (
+                        <p className="text-zinc-700">{s.topic}</p>
+                      ) : (
+                        <p className="italic text-amber-700">
+                          — Inhalt noch nicht erfasst —
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                         <SessionStatusBadge
                           status={s.status}
