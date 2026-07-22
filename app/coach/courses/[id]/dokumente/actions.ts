@@ -159,9 +159,12 @@ async function persistDraft(
     if (raw != null) nextForm[field.key] = String(raw).trim();
   }
 
+  // Stammdaten-Inputs tragen den `m_`-Namensraum (siehe document-editor.tsx),
+  // damit ein Formularfeld mit gleichem Schlüssel (z.B. `ort`) sie nicht
+  // überschreibt.
   const patch: Record<string, string | null> = {};
   for (const f of MASTER_FIELD_ORDER) {
-    const raw = formData.get(f);
+    const raw = formData.get(`m_${f}`);
     if (raw == null) continue;
     const v = String(raw).trim();
     patch[f] = v === "" ? null : v;

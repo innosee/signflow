@@ -85,7 +85,10 @@ export function DocumentEditor({
                   </span>
                   <input
                     type="text"
-                    name={f}
+                    // Namensraum `m_` verhindert Kollision mit Formularfeldern,
+                    // die denselben Schlüssel tragen können (z.B. `ort`:
+                    // Wohnort in den Stammdaten vs. Durchführungsort im Formular).
+                    name={`m_${f}`}
                     defaultValue={master[f] ?? ""}
                     className="mt-1 w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
                   />
