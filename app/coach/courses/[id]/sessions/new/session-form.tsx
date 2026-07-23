@@ -230,16 +230,20 @@ export function SessionForm({
 
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-zinc-800">
-            Themen / Inhalte <span className="text-red-600">*</span>
+            Themen / Inhalte
           </span>
           <textarea
             name="topic"
-            required
             rows={4}
             defaultValue={state?.values?.topic ?? ""}
             placeholder="z.B. Lebenslauf-Feedback, Bewerbungstraining, Zielklärung"
             className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
           />
+          <span className="block text-xs text-zinc-500">
+            Kann leer bleiben und später über &bdquo;Inhalt korrigieren&ldquo;
+            nachgetragen werden. Für die ANW-Prüfung müssen aber alle Termine
+            Inhalte haben.
+          </span>
         </label>
 
       </section>
