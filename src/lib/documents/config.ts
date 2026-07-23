@@ -95,10 +95,13 @@ export type DocumentConfig = {
   /** Für dieses Dokument verpflichtende Teilnehmer-Stammdaten. */
   requiredMasterData: ParticipantMasterField[];
   /**
-   * Wer unterschreibt. Der Teilnehmer signiert immer. `coach: true` bedeutet,
-   * dass zusätzlich der Coach/erango unterschreibt (nur bei der STV) — dann
-   * signiert der Coach zuerst. Bei `coach: false` (DS, TNV, Merge) gibt der
-   * Coach das Dokument nur zur Teilnehmer-Unterschrift frei.
+   * Wer unterschreibt. Der Teilnehmer signiert immer. `coach: true` = zusätzlich
+   * unterschreibt die erango-Seite (Coach), und zwar ZUERST (Freigabe =
+   * Coach-Signatur, dann Teilnehmer). Aktuell bei ALLEN Varianten true — die
+   * erango-Formulare tragen alle eine zweite Unterschrift. Der ANGEZEIGTE Titel
+   * dieser Unterschrift unterscheidet sich je Formular (STV: „Coach";
+   * DS/TNV/Merge: „erango Mitarbeiter:in") und steckt in der jeweiligen
+   * Template-Komponente, nicht hier.
    */
   signers: { coach: boolean };
 };
@@ -119,7 +122,7 @@ const F04: DocumentConfig = {
     },
   ],
   requiredMasterData: [],
-  signers: { coach: false },
+  signers: { coach: true },
 };
 
 // Maßnahme-/Vertragsfelder der TNV — auch vom Merge genutzt.
@@ -161,7 +164,7 @@ const F08: DocumentConfig = {
   fields: TNV_FIELDS,
   // Reduziert auf das, was erango realistisch immer hat.
   requiredMasterData: ["vorname", "nachname"],
-  signers: { coach: false },
+  signers: { coach: true },
 };
 
 const F21: DocumentConfig = {
@@ -220,7 +223,7 @@ const TNV_DS_MERGE: DocumentConfig = {
     "Kombiniertes Dokument: Teilnehmervertrag und Datenschutzerklärung in einem, eine Unterschrift.",
   fields: TNV_FIELDS,
   requiredMasterData: ["vorname", "nachname"],
-  signers: { coach: false },
+  signers: { coach: true },
 };
 
 const CONFIGS: Record<DocumentTypeId, DocumentConfig> = {

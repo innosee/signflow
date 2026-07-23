@@ -27,7 +27,19 @@ import {
   MASSNAHME_TYP_LABEL,
 } from "@/lib/massnahme-typ";
 
-type ActionState = { error?: string; success?: boolean } | undefined;
+type ActionState =
+  | {
+      error?: string;
+      success?: boolean;
+      /**
+       * Abgeschickte Roh-Eingaben (Feldname → Wert), die der Editor bei einem
+       * Fehler als defaultValue zurückspielt — sonst setzt React 19 das
+       * Formular auf die alten Werte zurück und Getipptes geht verloren
+       * (AGENTS.md / docs/forms-server-actions.md).
+       */
+      values?: Record<string, string>;
+    }
+  | undefined;
 
 /**
  * Lädt einen Kurs (+ Kunde-Daten) für den Coach — sichtbar via Kompetenzteam
@@ -214,6 +226,17 @@ export async function submitDocumentEditor(
   const type = doc.type as DocumentTypeId;
   const cfg = getDocumentConfig(type);
 
+  // Roh-Eingaben für das Werte-Echo bei Fehler (kein Form-Reset).
+  const submitted: Record<string, string> = {};
+  for (const field of cfg.fields) {
+    const v = formData.get(field.key);
+    if (v != null) submitted[field.key] = String(v);
+  }
+  for (const f of MASTER_FIELD_ORDER) {
+    const v = formData.get(`m_${f}`);
+    if (v != null) submitted[`m_${f}`] = String(v);
+  }
+
   const nextForm = await persistDraft(doc, formData);
 
   const revalidate = () => {
@@ -228,7 +251,7 @@ export async function submitDocumentEditor(
 
   // --- Freigabe ---
   if (formData.get("confirm") !== "on") {
-    return { error: "Bitte aktiv bestätigen." };
+    return { error: "Bitte aktiv bestätigen.", values: submitted };
   }
 
   // Teilnehmer-Stammdaten (frisch, nach persistDraft) für Pflichtprüfung + Snapshot.
@@ -248,7 +271,7 @@ export async function submitDocumentEditor(
     .from(schema.participants)
     .where(eq(schema.participants.id, doc.participantId))
     .limit(1);
-  if (!p) return { error: "Kunde nicht gefunden." };
+  if (!p) return { error: "Kunde nicht gefunden.", values: submitted };
 
   const missingMaster = missingMasterData(type, p);
   if (missingMaster.length > 0) {
@@ -256,6 +279,7 @@ export async function submitDocumentEditor(
       error: `Bitte zuerst die Pflicht-Stammdaten ausfüllen: ${missingMaster
         .map((f) => MASTER_FIELD_LABELS[f])
         .join(", ")}.`,
+      values: submitted,
     };
   }
   const missingFields = missingRequiredFields(type, nextForm);
@@ -264,6 +288,7 @@ export async function submitDocumentEditor(
       error: `Bitte zuerst die Pflichtfelder ausfüllen: ${missingFields
         .map((f) => f.label)
         .join(", ")}.`,
+      values: submitted,
     };
   }
 
@@ -279,6 +304,7 @@ export async function submitDocumentEditor(
       return {
         error:
           'Du hast noch keine Unterschrift hinterlegt. Lege sie unter „Unterschrift" an.',
+        values: submitted,
       };
     }
     coachSignatureUrl = coach.signatureUrl;
@@ -348,7 +374,10 @@ export async function submitDocumentEditor(
       return { error: "Dieses Dokument wurde bereits freigegeben." };
     }
     console.error("submitDocumentEditor(release) failed:", err);
-    return { error: "Freigabe fehlgeschlagen. Bitte erneut versuchen." };
+    return {
+      error: "Freigabe fehlgeschlagen. Bitte erneut versuchen.",
+      values: submitted,
+    };
   }
 
   revalidate();

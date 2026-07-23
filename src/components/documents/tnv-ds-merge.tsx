@@ -38,6 +38,11 @@ export function TnvDsMerge({ data }: { data: DocumentSheetData }) {
         ort={data.formData.ort}
         signature={data.signatures.participant}
       />
+      <SignatureLine
+        role="erango Mitarbeiter:in"
+        ort={data.formData.ort}
+        signature={data.signatures.coach}
+      />
     </DocumentFrame>
   );
 }
