@@ -7,7 +7,7 @@ import { participantDisplayName } from "@/components/documents/util";
 
 /**
  * F 04 — Datenschutzerklärung (Art. 13/14 DSGVO). Reiner Rechtstext + Name +
- * Teilnehmer-Unterschrift (keine erango-Unterschrift, siehe Abstimmung).
+ * zwei Unterschriften (Teilnehmer:in + erango Mitarbeiter:in; erango zuerst).
  */
 export function F04Datenschutz({ data }: { data: DocumentSheetData }) {
   const ort = data.formData.ort ?? "";
@@ -30,6 +30,11 @@ export function F04Datenschutz({ data }: { data: DocumentSheetData }) {
         role="Teilnehmende:r (m/w/d)"
         ort={ort}
         signature={data.signatures.participant}
+      />
+      <SignatureLine
+        role="erango Mitarbeitende:r (m/w/d)"
+        ort={ort}
+        signature={data.signatures.coach}
       />
     </DocumentFrame>
   );

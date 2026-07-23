@@ -9,7 +9,8 @@ import type { ReactNode } from "react";
 
 /**
  * F 08 — Teilnehmervertrag / Anmeldung AVGS. Persönliche Stammdaten +
- * Maßnahmedaten + Vertragsklauseln + Teilnehmer-Unterschrift.
+ * Maßnahmedaten + Vertragsklauseln + zwei Unterschriften (Teilnehmer:in +
+ * erango Mitarbeiter:in; erango zuerst).
  */
 export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
   return (
@@ -24,6 +25,11 @@ export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
         role="Teilnehmer:in"
         ort={data.formData.ort}
         signature={data.signatures.participant}
+      />
+      <SignatureLine
+        role="erango Mitarbeiter:in"
+        ort={data.formData.ort}
+        signature={data.signatures.coach}
       />
     </DocumentFrame>
   );

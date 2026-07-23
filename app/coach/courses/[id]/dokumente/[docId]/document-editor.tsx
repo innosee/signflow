@@ -44,10 +44,8 @@ export function DocumentEditor({
       <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
         <p className="font-medium text-zinc-900">
           {status === "completed"
-            ? "✓ Abgeschlossen — von Teilnehmer:in unterschrieben."
-            : coachSigns
-              ? "Vom Coach signiert — wartet auf die Teilnehmer-Unterschrift."
-              : "Freigegeben — wartet auf die Teilnehmer-Unterschrift."}
+            ? "✓ Abgeschlossen — von beiden Seiten unterschrieben."
+            : "Von dir unterschrieben & freigegeben — wartet auf die Teilnehmer-Unterschrift."}
         </p>
         <p className="mt-1 text-zinc-600">
           {participantSigned
@@ -60,6 +58,11 @@ export function DocumentEditor({
 
   const requiresMaster = cfg.requiredMasterData.length > 0;
   const showMaster = requiresMaster || type === "f08_tnv" || type === "tnv_ds_merge";
+
+  // Bei Fehler gibt die Action die abgeschickten Werte zurück (`state.values`),
+  // damit React 19 das Formular nicht auf die alten defaultValues zurücksetzt
+  // und getippte Eingaben verschwinden (siehe AGENTS.md / docs/forms-server-actions).
+  const echo = state?.values ?? {};
 
   return (
     <form action={action} className="space-y-5">
@@ -89,7 +92,7 @@ export function DocumentEditor({
                     // die denselben Schlüssel tragen können (z.B. `ort`:
                     // Wohnort in den Stammdaten vs. Durchführungsort im Formular).
                     name={`m_${f}`}
-                    defaultValue={master[f] ?? ""}
+                    defaultValue={echo[`m_${f}`] ?? master[f] ?? ""}
                     className="mt-1 w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
                   />
                 </label>
@@ -116,14 +119,14 @@ export function DocumentEditor({
               {field.type === "textarea" ? (
                 <textarea
                   name={field.key}
-                  defaultValue={formData[field.key] ?? ""}
+                  defaultValue={echo[field.key] ?? formData[field.key] ?? ""}
                   rows={4}
                   className="mt-1 w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
                 />
               ) : field.type === "select" ? (
                 <select
                   name={field.key}
-                  defaultValue={formData[field.key] ?? ""}
+                  defaultValue={echo[field.key] ?? formData[field.key] ?? ""}
                   className="mt-1 w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
                 >
                   {field.options?.map((o) => (
@@ -136,7 +139,7 @@ export function DocumentEditor({
                 <input
                   type={field.type === "date" ? "date" : "text"}
                   name={field.key}
-                  defaultValue={formData[field.key] ?? ""}
+                  defaultValue={echo[field.key] ?? formData[field.key] ?? ""}
                   placeholder={field.placeholder}
                   className="mt-1 w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
                 />
