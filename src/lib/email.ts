@@ -220,6 +220,78 @@ export async function sendParticipantEmailChangedToCoach(params: {
   });
 }
 
+/**
+ * Betreiber-Alert bei einem Zustell-Problem, das Resend NACH der Annahme
+ * meldet (Bounce, Spam-Beschwerde, verzögerte Zustellung). Diese Fälle
+ * erzeugen KEINEN Sende-Fehler im normalen Flow — die einzige Quelle ist der
+ * Resend-Webhook. Geht an den Betreiber-Posteingang, nicht an Coach/TN.
+ *
+ * Enthält bewusst die betroffene Empfänger-Adresse (TN-PII) — der Betreiber
+ * ist Verantwortlicher und muss wissen, WER nichts bekommen hat, um zu
+ * reagieren (anderer Kanal / Adresse korrigieren).
+ */
+export async function sendDeliveryFailureAlert(params: {
+  /** Menschlich lesbares Label des Ereignisses, z.B. "Bounce". */
+  eventLabel: string;
+  /** Roher Resend-Event-Typ, z.B. "email.bounced". */
+  eventType: string;
+  /** Betroffene Empfänger-Adresse(n). */
+  recipient: string;
+  /** Betreff der ursprünglichen Mail, falls im Event enthalten. */
+  originalSubject?: string;
+  /** Zusatz-Detail (Bounce-Grund o.ä.), best-effort. */
+  detail?: string;
+  /** Resend-Message-ID zum Nachschlagen im Dashboard. */
+  emailId?: string;
+  /** Zeitpunkt laut Event. */
+  occurredAt: string;
+}): Promise<void> {
+  const to =
+    process.env.RESEND_ALERT_EMAIL ??
+    process.env.SUPPORT_ESCALATION_EMAIL ??
+    "info@innosee.de";
+
+  const rows: Array<[string, string]> = [
+    ["Ereignis", `${params.eventLabel} (${params.eventType})`],
+    ["Empfänger", params.recipient],
+    ...(params.originalSubject
+      ? ([["Betreff", params.originalSubject]] as Array<[string, string]>)
+      : []),
+    ...(params.detail
+      ? ([["Detail", params.detail]] as Array<[string, string]>)
+      : []),
+    ...(params.emailId
+      ? ([["Resend-ID", params.emailId]] as Array<[string, string]>)
+      : []),
+    ["Zeitpunkt", params.occurredAt],
+  ];
+
+  const rowsHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 12px 4px 0; color:#888; vertical-align:top; white-space:nowrap;">${esc(
+          k,
+        )}</td><td style="padding:4px 0; color:#111; word-break:break-word;">${esc(
+          v,
+        )}</td></tr>`,
+    )
+    .join("");
+
+  const body = `
+    <p>Eine E-Mail konnte einem Teilnehmer <strong>nicht zugestellt</strong> werden. Resend hat das nach der Annahme gemeldet — im normalen Ablauf sieht der Coach davon nichts.</p>
+    <table style="border-collapse:collapse; font-size:14px; margin:16px 0;">${rowsHtml}</table>
+    <p style="font-size:12px; color:#888;">Prüfe den Fall im Resend-Dashboard und reagiere ggf. (anderer Kanal / Adresse korrigieren).</p>
+  `;
+
+  await sendEmail({
+    to,
+    // Plaintext-Feld → kein HTML-Escaping.
+    subject: `Zustellproblem: ${params.eventLabel} an ${params.recipient}`,
+    html: renderLayout("Zustellproblem (Resend)", body),
+    text: rows.map(([k, v]) => `${k}: ${v}`).join("\n"),
+  });
+}
+
 export async function sendParticipantMagicLink(params: {
   to: string;
   participantName: string;
