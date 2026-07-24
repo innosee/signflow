@@ -85,14 +85,21 @@ export default async function ParticipantSignPage({ params }: Props) {
     })),
   );
 
-  // Preview-Modus: Dokument final (Gate "ready") und der Teilnehmer hat noch
-  // nicht freigegeben → er sieht das vollständige Dokument pixel-identisch zum
-  // späteren PDF + einen Freigabe-Button (CLAUDE.md Schritt 8).
+  // Preview-Modus: Stundennachweis final (Gate "ready") und der Teilnehmer hat
+  // noch nicht freigegeben → er sieht den vollständigen Nachweis pixel-identisch
+  // zum späteren PDF + einen Freigabe-Button (CLAUDE.md Schritt 8).
+  //
+  // Offene Kunde-Dokumente haben Vorrang: solange noch ein freigegebenes
+  // Dokument auf die Teilnehmer-Unterschrift wartet, NICHT in den Preview-Modus
+  // wechseln — sonst würde die Vollbild-Vorschau (early return unten) die
+  // Dokumente ausblenden und der Teilnehmer käme nicht an sie heran. Erst wenn
+  // alle Dokumente signiert sind, erscheint die Stundennachweis-Freigabe.
   const inPreviewMode =
     hasSignature &&
     resolved.sessions.length > 0 &&
     approvalGate === "ready" &&
-    !resolved.hasApproved;
+    !resolved.hasApproved &&
+    openDocs.length === 0;
 
   if (inPreviewMode) {
     const sheet = await loadStundennachweisSheet({
