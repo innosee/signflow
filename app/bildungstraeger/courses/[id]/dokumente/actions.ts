@@ -7,10 +7,10 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
-import { courseVisibleToCoach } from "@/lib/course-access";
 import {
   assertNotImpersonating,
-  requireSigningEnabled,
+  getTenantId,
+  requireBildungstraeger,
 } from "@/lib/dal";
 import {
   isDocumentOwnedBy,
@@ -31,21 +31,16 @@ type ActionState =
   | {
       error?: string;
       success?: boolean;
-      /**
-       * Abgeschickte Roh-Eingaben (Feldname → Wert), die der Editor bei einem
-       * Fehler als defaultValue zurückspielt — sonst setzt React 19 das
-       * Formular auf die alten Werte zurück und Getipptes geht verloren
-       * (AGENTS.md / docs/forms-server-actions.md).
-       */
+      /** Werte-Echo bei Fehler (kein React-19-Form-Reset, siehe AGENTS.md). */
       values?: Record<string, string>;
     }
   | undefined;
 
 /**
- * Lädt einen Kurs (+ Kunde-Daten) für den Coach — sichtbar via Kompetenzteam
- * (Lead ODER zugewiesen). Gibt `null`, wenn der Coach keinen Zugriff hat.
+ * Lädt einen Kurs (+ Kunde-Daten) tenant-gescoped für den Bildungsträger — der
+ * Kunde (participant) trägt die tenant_id, das ist die verlässliche Isolation.
  */
-async function loadOwnedCourse(courseId: string, coachId: string) {
+async function loadTenantCourse(courseId: string, tenantId: string) {
   const [row] = await db
     .select({
       id: schema.courses.id,
@@ -58,19 +53,23 @@ async function loadOwnedCourse(courseId: string, coachId: string) {
       title: schema.courses.title,
     })
     .from(schema.courses)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courses.participantId),
+    )
     .where(
       and(
         eq(schema.courses.id, courseId),
         isNull(schema.courses.deletedAt),
-        courseVisibleToCoach(coachId),
+        eq(schema.participants.tenantId, tenantId),
       ),
     )
     .limit(1);
   return row ?? null;
 }
 
-/** Lädt ein Dokument samt Kurs-Zugriffsprüfung für den Coach. */
-async function loadOwnedDocument(documentId: string, coachId: string) {
+/** Lädt ein Dokument tenant-gescoped für den Bildungsträger. */
+async function loadTenantDocument(documentId: string, tenantId: string) {
   const [row] = await db
     .select({
       id: schema.documents.id,
@@ -82,12 +81,16 @@ async function loadOwnedDocument(documentId: string, coachId: string) {
     })
     .from(schema.documents)
     .innerJoin(schema.courses, eq(schema.courses.id, schema.documents.courseId))
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.documents.participantId),
+    )
     .where(
       and(
         eq(schema.documents.id, documentId),
         isNull(schema.documents.deletedAt),
         isNull(schema.courses.deletedAt),
-        courseVisibleToCoach(coachId),
+        eq(schema.participants.tenantId, tenantId),
       ),
     )
     .limit(1);
@@ -95,28 +98,25 @@ async function loadOwnedDocument(documentId: string, coachId: string) {
 }
 
 /**
- * Legt ein neues Kunde-Dokument an (Status `draft`) und leitet direkt zum
- * Editor weiter. Der Coach verwaltet **nur** die Strategievereinbarung (STV);
- * die BT-Dokumente (Datenschutz/Teilnehmervertrag/Merge) legt der
- * Bildungsträger an.
+ * Legt ein neues BT-Dokument an (Datenschutz/Teilnehmervertrag/Merge) und
+ * leitet zum Editor. Die STV verwaltet der Coach — hier hart abgelehnt.
  */
 export async function createDocument(formData: FormData): Promise<void> {
-  const session = await requireSigningEnabled();
+  const session = await requireBildungstraeger();
   assertNotImpersonating(session);
-  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
 
   const courseId = String(formData.get("courseId") ?? "").trim();
   const type = String(formData.get("type") ?? "").trim();
   if (!courseId || !isDocumentType(type)) {
-    redirect(`/coach/courses/${courseId}`);
+    redirect(`/bildungstraeger/courses/${courseId}/dokumente`);
   }
-  // Coach darf nur eigene (STV) Dokumente anlegen.
-  if (!isDocumentOwnedBy(type as DocumentTypeId, "coach")) {
-    redirect(`/coach/courses/${courseId}`);
+  if (!isDocumentOwnedBy(type as DocumentTypeId, "bildungstraeger")) {
+    redirect(`/bildungstraeger/courses/${courseId}/dokumente`);
   }
 
-  const course = await loadOwnedCourse(courseId, coachId);
-  if (!course) redirect(`/coach/courses/${courseId}`);
+  const course = await loadTenantCourse(courseId, tenantId);
+  if (!course) redirect(`/bildungstraeger/courses`);
 
   const massnahmeLabel = isMassnahmeTyp(course.massnahmeTyp)
     ? MASSNAHME_TYP_LABEL[course.massnahmeTyp]
@@ -138,39 +138,39 @@ export async function createDocument(formData: FormData): Promise<void> {
       type: type as DocumentTypeId,
       status: "draft",
       formData: prefill,
-      createdBy: coachId,
+      createdBy: session.user.id,
     })
     .returning({ id: schema.documents.id });
 
   await logAudit({
-    actorType: "coach",
-    actorId: coachId,
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
     action: "document.created",
     resourceType: "document",
     resourceId: inserted.id,
     metadata: { type, courseId },
   });
 
-  revalidatePath(`/coach/courses/${courseId}`);
-  redirect(`/coach/courses/${courseId}/dokumente/${inserted.id}`);
+  revalidatePath(`/bildungstraeger/courses/${courseId}/dokumente`);
+  redirect(`/bildungstraeger/courses/${courseId}/dokumente/${inserted.id}`);
 }
 
 /**
- * Ein Editor-Submit (Coach). Delegiert Persist/Freigabe an den rollen-
- * übergreifenden Kern (`submitDocument`); als zweite Signatur dient die
- * persönliche Coach-Unterschrift.
+ * Ein Editor-Submit (Bildungsträger). Delegiert Persist/Freigabe an den
+ * rollen-übergreifenden Kern; als zweite Signatur dient die geteilte
+ * Organisations-Unterschrift (`tenants.signature_url`).
  */
 export async function submitDocumentEditor(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSigningEnabled();
+  const session = await requireBildungstraeger();
   assertNotImpersonating(session);
-  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
 
   const documentId = String(formData.get("documentId") ?? "").trim();
   const intent = String(formData.get("intent") ?? "save");
-  const doc = await loadOwnedDocument(documentId, coachId);
+  const doc = await loadTenantDocument(documentId, tenantId);
   if (!doc) return { error: "Dokument nicht gefunden." };
 
   const type = doc.type as DocumentTypeId;
@@ -190,15 +190,15 @@ export async function submitDocumentEditor(
     },
     formData,
     intent,
-    actor: { type: "coach", userId: coachId },
+    actor: { type: "bildungstraeger", userId: session.user.id },
     ipAddress,
     resolveOrgSignature: async () => {
-      const [coach] = await db
-        .select({ signatureUrl: schema.users.signatureUrl })
-        .from(schema.users)
-        .where(eq(schema.users.id, coachId))
+      const [tenant] = await db
+        .select({ signatureUrl: schema.tenants.signatureUrl })
+        .from(schema.tenants)
+        .where(eq(schema.tenants.id, tenantId))
         .limit(1);
-      return coach?.signatureUrl ?? null;
+      return tenant?.signatureUrl ?? null;
     },
   });
 
@@ -208,27 +208,27 @@ export async function submitDocumentEditor(
       : { error: outcome.message };
   }
 
-  revalidatePath(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
-  revalidatePath(`/coach/courses/${doc.courseId}`);
+  revalidatePath(
+    `/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`,
+  );
+  revalidatePath(`/bildungstraeger/courses/${doc.courseId}/dokumente`);
   return { success: true };
 }
 
-/** Soft-Delete eines Dokuments (nur eigene STV, nur solange nicht abgeschlossen). */
+/** Soft-Delete eines BT-Dokuments (nur solange nicht abgeschlossen). */
 export async function deleteDocument(formData: FormData): Promise<void> {
-  const session = await requireSigningEnabled();
+  const session = await requireBildungstraeger();
   assertNotImpersonating(session);
-  const coachId = session.user.id;
+  const tenantId = getTenantId(session);
 
   const documentId = String(formData.get("documentId") ?? "").trim();
-  const doc = await loadOwnedDocument(documentId, coachId);
-  if (!doc) redirect(`/coach/courses`);
-  // Coach darf nur eigene (STV) Dokumente löschen — BT-Docs sieht er read-only.
-  if (!isDocumentOwnedBy(doc.type as DocumentTypeId, "coach")) {
-    redirect(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
+  const doc = await loadTenantDocument(documentId, tenantId);
+  if (!doc) redirect(`/bildungstraeger/courses`);
+  if (!isDocumentOwnedBy(doc.type as DocumentTypeId, "bildungstraeger")) {
+    redirect(`/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`);
   }
   if (doc.status === "completed") {
-    // Abgeschlossene Dokumente bleiben erhalten (Nachweis).
-    redirect(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
+    redirect(`/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`);
   }
 
   await db
@@ -237,14 +237,14 @@ export async function deleteDocument(formData: FormData): Promise<void> {
     .where(eq(schema.documents.id, documentId));
 
   await logAudit({
-    actorType: "coach",
-    actorId: coachId,
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
     action: "document.deleted",
     resourceType: "document",
     resourceId: documentId,
     metadata: { type: doc.type },
   });
 
-  revalidatePath(`/coach/courses/${doc.courseId}`);
-  redirect(`/coach/courses/${doc.courseId}`);
+  revalidatePath(`/bildungstraeger/courses/${doc.courseId}/dokumente`);
+  redirect(`/bildungstraeger/courses/${doc.courseId}/dokumente`);
 }

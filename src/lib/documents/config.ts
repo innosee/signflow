@@ -26,6 +26,16 @@ export const DOCUMENT_TYPE_IDS: DocumentTypeId[] = [
   "tnv_ds_merge",
 ];
 
+/**
+ * Wer ein Dokument anlegt, ausfüllt und (auf der erango-Seite) signiert:
+ * - `bildungstraeger` = Datenschutz (F04), Teilnehmervertrag (F08),
+ *   TNV+DS-Merge. Die zweite Signaturzeile ist die geteilte
+ *   Organisations-Unterschrift („erango Mitarbeiter:in").
+ * - `coach` = Strategievereinbarung (F21). Zweite Zeile = Coach-Unterschrift.
+ * Die jeweils andere Rolle sieht die Dokumente nur read-only (+ PDF-Download).
+ */
+export type DocumentOwner = "bildungstraeger" | "coach";
+
 export type DocFieldType = "text" | "textarea" | "select" | "date";
 
 export type DocField = {
@@ -90,16 +100,20 @@ export type DocumentConfig = {
   fullTitle: string;
   /** Ein-Satz-Beschreibung für die Auswahl. */
   description: string;
+  /** Wer das Dokument verwaltet/signiert (die jeweils andere Rolle: read-only). */
+  owner: DocumentOwner;
   /** Vom Coach ausgefüllte Felder (Snapshot in `documents.form_data`). */
   fields: DocField[];
   /** Für dieses Dokument verpflichtende Teilnehmer-Stammdaten. */
   requiredMasterData: ParticipantMasterField[];
   /**
    * Wer unterschreibt. Der Teilnehmer signiert immer. `coach: true` = zusätzlich
-   * unterschreibt die erango-Seite (Coach), und zwar ZUERST (Freigabe =
-   * Coach-Signatur, dann Teilnehmer). Aktuell bei ALLEN Varianten true — die
-   * erango-Formulare tragen alle eine zweite Unterschrift. Der ANGEZEIGTE Titel
-   * dieser Unterschrift unterscheidet sich je Formular (STV: „Coach";
+   * unterschreibt die erango-Seite ZUERST (Freigabe = erango-Signatur, dann
+   * Teilnehmer). Aktuell bei ALLEN Varianten true — die erango-Formulare tragen
+   * alle eine zweite Unterschrift. Die QUELLE dieser Signatur hängt am `owner`:
+   * bei `coach` die persönliche Coach-Unterschrift (`users.signature_url`), bei
+   * `bildungstraeger` die geteilte Org-Unterschrift (`tenants.signature_url`).
+   * Der ANGEZEIGTE Titel unterscheidet sich je Formular (STV: „Coach";
    * DS/TNV/Merge: „erango Mitarbeiter:in") und steckt in der jeweiligen
    * Template-Komponente, nicht hier.
    */
@@ -113,6 +127,7 @@ const F04: DocumentConfig = {
   fullTitle: "Datenschutzerklärung",
   description:
     "Datenschutzhinweise nach Art. 13/14 DSGVO für Teilnehmer:innen von AVGS-Einzelcoachings.",
+  owner: "bildungstraeger",
   fields: [
     {
       key: "ort",
@@ -161,6 +176,7 @@ const F08: DocumentConfig = {
   fullTitle: "Teilnehmervertrag / Anmeldung I AVGS",
   description:
     "Verbindliche Anmeldung zur AVGS-Maßnahme inkl. Stamm- und Maßnahmedaten.",
+  owner: "bildungstraeger",
   fields: TNV_FIELDS,
   // Reduziert auf das, was erango realistisch immer hat.
   requiredMasterData: ["vorname", "nachname"],
@@ -174,6 +190,7 @@ const F21: DocumentConfig = {
   fullTitle: "Strategievereinbarung",
   description:
     "Individuelle Ziel- und Arbeitsvereinbarung zwischen Teilnehmer:in und Coach.",
+  owner: "coach",
   fields: [
     {
       key: "eckdaten",
@@ -221,6 +238,7 @@ const TNV_DS_MERGE: DocumentConfig = {
   fullTitle: "Teilnehmervertrag / Anmeldung I AVGS + Datenschutzerklärung",
   description:
     "Kombiniertes Dokument: Teilnehmervertrag und Datenschutzerklärung in einem, eine Unterschrift.",
+  owner: "bildungstraeger",
   fields: TNV_FIELDS,
   requiredMasterData: ["vorname", "nachname"],
   signers: { coach: true },
@@ -244,6 +262,23 @@ export function isDocumentType(value: string): value is DocumentTypeId {
 /** Alle Konfigurationen in fester Reihenfolge (für Auswahl-Listen). */
 export function allDocumentConfigs(): DocumentConfig[] {
   return DOCUMENT_TYPE_IDS.map((id) => CONFIGS[id]);
+}
+
+/**
+ * Konfigurationen, die die angegebene Rolle verwaltet (anlegen/ausfüllen/
+ * signieren) — in fester Reihenfolge. Für die Anlegen-Auswahl der jeweiligen
+ * Seite (Coach: nur STV; Bildungsträger: DS/TNV/Merge).
+ */
+export function documentConfigsForOwner(owner: DocumentOwner): DocumentConfig[] {
+  return allDocumentConfigs().filter((c) => c.owner === owner);
+}
+
+/** Ob die angegebene Rolle diesen Dokumenttyp verwalten (nicht nur ansehen) darf. */
+export function isDocumentOwnedBy(
+  type: DocumentTypeId,
+  owner: DocumentOwner,
+): boolean {
+  return CONFIGS[type].owner === owner;
 }
 
 // --- Prefill ---------------------------------------------------------------

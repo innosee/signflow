@@ -1,8 +1,9 @@
 import Link from "next/link";
 
 import {
-  allDocumentConfigs,
+  documentConfigsForOwner,
   getDocumentConfig,
+  isDocumentOwnedBy,
   type DocumentTypeId,
 } from "@/lib/documents/config";
 import { createDocument } from "./dokumente/actions";
@@ -48,9 +49,10 @@ export function DocumentsSection({
       <div className="border-b border-zinc-300 px-6 py-4">
         <h2 className="text-lg font-semibold">Dokumente</h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Digitalisierte erango-Formulare (Datenschutz, Teilnehmervertrag,
-          Strategievereinbarung). Du füllst sie aus und unterschreibst; die
-          Teilnehmer:in signiert sie über ihren Magic-Link.
+          Digitalisierte erango-Formulare. Du verwaltest die
+          Strategievereinbarung (F21); Datenschutz und Teilnehmervertrag legt
+          der Bildungsträger an (für dich nur Ansicht + PDF). Die Teilnehmer:in
+          signiert alle über ihren Magic-Link.
         </p>
       </div>
 
@@ -69,8 +71,13 @@ export function DocumentsSection({
                 href={`/coach/courses/${courseId}/dokumente/${doc.id}`}
                 className="flex items-center justify-between gap-3 px-6 py-3 transition hover:bg-zinc-50"
               >
-                <span className="text-sm font-medium text-zinc-900">
+                <span className="flex items-center gap-2 text-sm font-medium text-zinc-900">
                   {cfg.formNumber} · {cfg.label}
+                  {!isDocumentOwnedBy(doc.type, "coach") && (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-normal text-zinc-500">
+                      Bildungsträger · nur Ansicht
+                    </span>
+                  )}
                 </span>
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}
@@ -89,10 +96,10 @@ export function DocumentsSection({
             <input type="hidden" name="courseId" value={courseId} />
             <select
               name="type"
-              defaultValue="f08_tnv"
+              defaultValue="f21_stv"
               className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
             >
-              {allDocumentConfigs().map((c) => (
+              {documentConfigsForOwner("coach").map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.formNumber} · {c.label}
                 </option>

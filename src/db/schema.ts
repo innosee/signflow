@@ -170,6 +170,17 @@ export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
+  /**
+   * Geteilte Organisations-Unterschrift des Bildungsträgers (Object-Key/URL,
+   * wie `users.signature_url`). EINE pro Tenant — der Bildungsträger legt sie
+   * einmalig unter `/bildungstraeger/signature` an. Sie erscheint als zweite
+   * Signaturzeile („erango Mitarbeiter:in") auf den BT-Dokumenten (F04/F08/
+   * Merge); der signierende BT-User steht separat in
+   * `document_signatures.coach_id` (Actor ≠ Bild). Ohne hinterlegte
+   * Unterschrift kann der BT ein Dokument nicht freigeben. `null` = noch nicht
+   * gesetzt.
+   */
+  signatureUrl: text("signature_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
