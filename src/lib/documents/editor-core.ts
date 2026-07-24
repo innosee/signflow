@@ -42,24 +42,23 @@ export type SubmitOutcome =
   | { status: "released" }
   | { status: "error"; message: string; echo: boolean };
 
+const CONTROL_FIELDS = new Set(["documentId", "intent", "confirm"]);
+
 /**
- * Roh-Eingaben (Formularfelder + `m_`-Stammdaten) für das Werte-Echo bei
- * Fehler — sonst setzt React 19 das Formular auf die alten Werte zurück und
- * getippter Text geht verloren (AGENTS.md / docs/forms-server-actions.md).
+ * Roh-Eingaben für das Werte-Echo bei Fehler — sonst setzt React 19 das
+ * Formular auf die alten Werte zurück und getippter Text geht verloren
+ * (AGENTS.md / docs/forms-server-actions.md). Bewusst **generisch** (alle
+ * String-Felder außer den Steuerfeldern), damit es auch dann greift, wenn der
+ * Dokumenttyp noch nicht bekannt ist (z.B. „Dokument nicht gefunden" VOR dem
+ * Laden). Deckt Formularfelder (`field.key`) und `m_`-Stammdaten ab.
  */
-export function collectSubmittedValues(
-  type: DocumentTypeId,
+export function collectAllFormValues(
   formData: FormData,
 ): Record<string, string> {
-  const cfg = getDocumentConfig(type);
   const submitted: Record<string, string> = {};
-  for (const field of cfg.fields) {
-    const v = formData.get(field.key);
-    if (v != null) submitted[field.key] = String(v);
-  }
-  for (const f of MASTER_FIELD_ORDER) {
-    const v = formData.get(`m_${f}`);
-    if (v != null) submitted[`m_${f}`] = String(v);
+  for (const [key, value] of formData.entries()) {
+    if (CONTROL_FIELDS.has(key)) continue;
+    if (typeof value === "string") submitted[key] = value;
   }
   return submitted;
 }
