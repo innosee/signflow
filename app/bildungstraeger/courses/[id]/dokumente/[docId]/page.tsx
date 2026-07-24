@@ -3,16 +3,16 @@ import { notFound } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { DocumentSheet } from "@/components/documents/document-sheet";
+import { DocumentEditor } from "@/components/documents/document-editor";
 import { db, schema } from "@/db";
-import { courseVisibleToCoach } from "@/lib/course-access";
-import { requireSigningEnabled } from "@/lib/dal";
+import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import {
   getDocumentConfig,
   isDocumentOwnedBy,
   type DocumentTypeId,
 } from "@/lib/documents/config";
 import { loadDocumentSheet } from "@/lib/documents/data";
-import { DocumentEditor } from "@/components/documents/document-editor";
+
 import { submitDocumentEditor } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +27,9 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Abgeschlossen",
 };
 
-export default async function CoachDocumentPage({ params }: Props) {
-  const session = await requireSigningEnabled();
+export default async function BildungstraegerDocumentPage({ params }: Props) {
+  const session = await requireBildungstraeger();
+  const tenantId = getTenantId(session);
   const { id: courseId, docId } = await params;
 
   const [row] = await db
@@ -43,7 +44,6 @@ export default async function CoachDocumentPage({ params }: Props) {
       strasse: schema.participants.strasse,
       plz: schema.participants.plz,
       ort: schema.participants.ort,
-      geburtsdatum: schema.participants.geburtsdatum,
       geburtsort: schema.participants.geburtsort,
       phone: schema.participants.phone,
       festnetz: schema.participants.festnetz,
@@ -60,7 +60,7 @@ export default async function CoachDocumentPage({ params }: Props) {
         eq(schema.documents.courseId, courseId),
         isNull(schema.documents.deletedAt),
         isNull(schema.courses.deletedAt),
-        courseVisibleToCoach(session.user.id),
+        eq(schema.participants.tenantId, tenantId),
       ),
     )
     .limit(1);
@@ -69,27 +69,27 @@ export default async function CoachDocumentPage({ params }: Props) {
   const sheet = await loadDocumentSheet(docId);
   if (!sheet) notFound();
 
-  const [coach] = await db
-    .select({ signatureUrl: schema.users.signatureUrl })
-    .from(schema.users)
-    .where(eq(schema.users.id, session.user.id))
+  const [tenant] = await db
+    .select({ signatureUrl: schema.tenants.signatureUrl })
+    .from(schema.tenants)
+    .where(eq(schema.tenants.id, tenantId))
     .limit(1);
 
   const type = row.type as DocumentTypeId;
   const cfg = getDocumentConfig(type);
-  // Der Coach verwaltet nur die STV; BT-Dokumente (Datenschutz/Teilnehmer-
-  // vertrag/Merge) sieht er nur read-only + PDF.
-  const canEdit = isDocumentOwnedBy(type, "coach");
+  // Der Bildungsträger verwaltet DS/TNV/Merge; die STV (Coach) sieht er nur
+  // read-only + PDF.
+  const canEdit = isDocumentOwnedBy(type, "bildungstraeger");
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link
-            href={`/coach/courses/${courseId}`}
+            href={`/bildungstraeger/courses/${courseId}/dokumente`}
             className="text-sm text-zinc-600 underline-offset-2 hover:underline"
           >
-            ← zurück zum Kurs
+            ← zurück zu Dokumente
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-zinc-900">
             {cfg.formNumber} · {cfg.label}
@@ -100,13 +100,13 @@ export default async function CoachDocumentPage({ params }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href={`/coach/courses/${courseId}/dokumente/${docId}/print`}
+            href={`/bildungstraeger/courses/${courseId}/dokumente/${docId}/print`}
             className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50"
           >
             Druckansicht
           </Link>
           <a
-            href={`/api/coach/documents/${docId}/pdf`}
+            href={`/api/bildungstraeger/documents/${docId}/pdf`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
@@ -135,20 +135,18 @@ export default async function CoachDocumentPage({ params }: Props) {
                 festnetz: row.festnetz ?? "",
               }}
               participantSigned={!!sheet.signatures.participant}
-              hasSignerSignature={!!coach?.signatureUrl}
+              hasSignerSignature={!!tenant?.signatureUrl}
               submitAction={submitDocumentEditor}
-              role="coach"
-              signatureHref="/coach/signature"
+              role="bildungstraeger"
+              signatureHref="/bildungstraeger/signature"
             />
           ) : (
             <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
-              <p className="font-medium text-zinc-900">
-                Verwaltet vom Bildungsträger
-              </p>
+              <p className="font-medium text-zinc-900">Verwaltet vom Coach</p>
               <p className="mt-1 text-zinc-600">
-                Dieses Dokument ({cfg.formNumber} · {cfg.label}) wird vom
-                Bildungsträger ausgefüllt und unterschrieben. Du kannst es hier
-                nur ansehen und als PDF herunterladen.
+                Dieses Dokument ({cfg.formNumber} · {cfg.label}) wird vom Coach
+                ausgefüllt und unterschrieben. Du kannst es hier nur ansehen und
+                als PDF herunterladen.
               </p>
             </div>
           )}

@@ -1,0 +1,296 @@
+import "server-only";
+
+import { eq } from "drizzle-orm";
+
+import { db, schema } from "@/db";
+import { logAudit } from "@/lib/audit";
+import {
+  getDocumentConfig,
+  MASTER_FIELD_LABELS,
+  MASTER_FIELD_ORDER,
+  missingMasterData,
+  missingRequiredFields,
+  type DocumentOwner,
+  type DocumentTypeId,
+} from "@/lib/documents/config";
+
+/**
+ * Rollen-übergreifender Kern des Dokument-Editors (Speichern + Freigeben).
+ *
+ * Coach- und Bildungsträger-Server-Actions unterscheiden sich nur in Auth,
+ * Zugriffs-Scope (courseVisibleToCoach vs. tenant) und der Quelle der zweiten
+ * („erango-Seite") Signatur — der eigentliche Persist-/Freigabe-/Snapshot-/
+ * Audit-Ablauf ist identisch und lebt hier, damit er nicht driftet. Die Routen
+ * bleiben dünn: Auth → Dokument scope-sicher laden → `submitDocument` → je nach
+ * Ergebnis revalidieren.
+ */
+
+export type EditableDocument = {
+  id: string;
+  courseId: string;
+  participantId: string;
+  type: DocumentTypeId;
+  status: "draft" | "active" | "completed";
+  formData: Record<string, unknown> | null;
+};
+
+/** Wer handelt. `userId` landet als konkreter Signatur-Actor im Audit/Row. */
+export type DocActor = { type: DocumentOwner; userId: string };
+
+export type SubmitOutcome =
+  | { status: "saved" }
+  | { status: "released" }
+  | { status: "error"; message: string; echo: boolean };
+
+/**
+ * Roh-Eingaben (Formularfelder + `m_`-Stammdaten) für das Werte-Echo bei
+ * Fehler — sonst setzt React 19 das Formular auf die alten Werte zurück und
+ * getippter Text geht verloren (AGENTS.md / docs/forms-server-actions.md).
+ */
+export function collectSubmittedValues(
+  type: DocumentTypeId,
+  formData: FormData,
+): Record<string, string> {
+  const cfg = getDocumentConfig(type);
+  const submitted: Record<string, string> = {};
+  for (const field of cfg.fields) {
+    const v = formData.get(field.key);
+    if (v != null) submitted[field.key] = String(v);
+  }
+  for (const f of MASTER_FIELD_ORDER) {
+    const v = formData.get(`m_${f}`);
+    if (v != null) submitted[`m_${f}`] = String(v);
+  }
+  return submitted;
+}
+
+/**
+ * Persistiert Formularfelder (→ documents.form_data) UND die erweiterten
+ * Teilnehmer-Stammdaten (→ participants). Nur im Draft. Gibt die frisch
+ * gespeicherte `form_data` zurück, damit ein direkt danach laufender
+ * Freigabe-Schritt gegen den AKTUELLEN Stand prüft.
+ */
+async function persistDraft(
+  doc: EditableDocument,
+  formData: FormData,
+): Promise<Record<string, string>> {
+  const cfg = getDocumentConfig(doc.type);
+  const nextForm: Record<string, string> = {
+    ...((doc.formData ?? {}) as Record<string, string>),
+  };
+  for (const field of cfg.fields) {
+    const raw = formData.get(field.key);
+    if (raw != null) nextForm[field.key] = String(raw).trim();
+  }
+
+  // Stammdaten-Inputs tragen den `m_`-Namensraum, damit ein Formularfeld mit
+  // gleichem Schlüssel (z.B. `ort`) sie nicht überschreibt.
+  const patch: Record<string, string | null> = {};
+  for (const f of MASTER_FIELD_ORDER) {
+    const raw = formData.get(`m_${f}`);
+    if (raw == null) continue;
+    const v = String(raw).trim();
+    patch[f] = v === "" ? null : v;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.documents)
+      .set({ formData: nextForm })
+      .where(eq(schema.documents.id, doc.id));
+    if (Object.keys(patch).length > 0) {
+      await tx
+        .update(schema.participants)
+        .set(patch)
+        .where(eq(schema.participants.id, doc.participantId));
+    }
+  });
+
+  return nextForm;
+}
+
+/**
+ * Ein Editor-Submit. `intent=save` speichert nur (Entwurf). `intent=release`
+ * speichert ebenfalls und gibt danach frei: Pflichtprüfung → Snapshot
+ * einfrieren → Status `active` + Signatur der erango-Seite (Coach- bzw.
+ * Org-Unterschrift). Weil IMMER zuerst persistiert wird, kann die Pflichtprüfung
+ * nicht mehr an ungespeicherten Eingaben scheitern.
+ *
+ * `resolveOrgSignature` liefert lazy die zweite Signatur (nur bei Freigabe
+ * ausgewertet): Coach-Unterschrift (`users.signature_url`) bzw. geteilte
+ * Org-Unterschrift (`tenants.signature_url`). `null` = keine hinterlegt → harte
+ * Hürde. Der `actor.type` muss dem `owner` des Dokumenttyps entsprechen (die
+ * jeweils andere Rolle sieht das Dokument nur read-only) — Defense-in-Depth
+ * zusätzlich zu den Routen-Vorprüfungen.
+ */
+export async function submitDocument(params: {
+  doc: EditableDocument;
+  formData: FormData;
+  intent: string;
+  actor: DocActor;
+  ipAddress: string;
+  resolveOrgSignature: () => Promise<string | null>;
+}): Promise<SubmitOutcome> {
+  const { doc, formData, intent, actor, ipAddress } = params;
+  const cfg = getDocumentConfig(doc.type);
+
+  if (cfg.owner !== actor.type) {
+    return {
+      status: "error",
+      message: "Für dieses Dokument bist du nicht berechtigt.",
+      echo: false,
+    };
+  }
+  if (doc.status !== "draft") {
+    return {
+      status: "error",
+      message: "Dieses Dokument ist bereits freigegeben.",
+      echo: false,
+    };
+  }
+
+  const nextForm = await persistDraft(doc, formData);
+
+  if (intent !== "release") {
+    return { status: "saved" };
+  }
+
+  // --- Freigabe ---
+  if (formData.get("confirm") !== "on") {
+    return { status: "error", message: "Bitte aktiv bestätigen.", echo: true };
+  }
+
+  // Teilnehmer-Stammdaten (frisch, nach persistDraft) für Pflichtprüfung + Snapshot.
+  const [p] = await db
+    .select({
+      name: schema.participants.name,
+      vorname: schema.participants.vorname,
+      nachname: schema.participants.nachname,
+      strasse: schema.participants.strasse,
+      plz: schema.participants.plz,
+      ort: schema.participants.ort,
+      geburtsort: schema.participants.geburtsort,
+      phone: schema.participants.phone,
+      festnetz: schema.participants.festnetz,
+      email: schema.participants.email,
+    })
+    .from(schema.participants)
+    .where(eq(schema.participants.id, doc.participantId))
+    .limit(1);
+  if (!p) {
+    return { status: "error", message: "Kunde nicht gefunden.", echo: true };
+  }
+
+  const missingMaster = missingMasterData(doc.type, p);
+  if (missingMaster.length > 0) {
+    return {
+      status: "error",
+      message: `Bitte zuerst die Pflicht-Stammdaten ausfüllen: ${missingMaster
+        .map((f) => MASTER_FIELD_LABELS[f])
+        .join(", ")}.`,
+      echo: true,
+    };
+  }
+  const missingFields = missingRequiredFields(doc.type, nextForm);
+  if (missingFields.length > 0) {
+    return {
+      status: "error",
+      message: `Bitte zuerst die Pflichtfelder ausfüllen: ${missingFields
+        .map((f) => f.label)
+        .join(", ")}.`,
+      echo: true,
+    };
+  }
+
+  // Zweite Signatur (erango-Seite) — nur bei Formularen, die sie vorsehen.
+  let orgSignatureUrl: string | null = null;
+  if (cfg.signers.coach) {
+    orgSignatureUrl = await params.resolveOrgSignature();
+    if (!orgSignatureUrl) {
+      return {
+        status: "error",
+        message:
+          actor.type === "bildungstraeger"
+            ? "Es ist noch keine Bildungsträger-Unterschrift hinterlegt. Lege sie unter „Unterschrift“ an, dann kannst du freigeben."
+            : "Du hast noch keine Unterschrift hinterlegt. Lege sie unter „Unterschrift“ an.",
+        echo: true,
+      };
+    }
+  }
+
+  // Snapshot der Stammdaten in form_data einfrieren (siehe loadDocumentSheet).
+  const snapshot: Record<string, string> = {
+    ...nextForm,
+    tn_name: p.name,
+    tn_vorname: p.vorname ?? "",
+    tn_nachname: p.nachname ?? "",
+    tn_strasse: p.strasse ?? "",
+    tn_plz: p.plz ?? "",
+    tn_ort: p.ort ?? "",
+    tn_geburtsort: p.geburtsort ?? "",
+    tn_phone: p.phone ?? "",
+    tn_festnetz: p.festnetz ?? "",
+    tn_email: p.email,
+  };
+
+  try {
+    await db.transaction(async (tx) => {
+      const [fresh] = await tx
+        .select({ status: schema.documents.status })
+        .from(schema.documents)
+        .where(eq(schema.documents.id, doc.id))
+        .limit(1);
+      if (!fresh || fresh.status !== "draft") throw new Error("ALREADY_ACTIVE");
+
+      if (orgSignatureUrl) {
+        // signer_type='coach' = die erango-Seite (Coach ODER BT). Der konkrete
+        // Actor (BT-User bei BT-Docs) steht in coach_id, das Bild ist bei
+        // BT-Docs die geteilte Org-Unterschrift.
+        await tx.insert(schema.documentSignatures).values({
+          documentId: doc.id,
+          signerType: "coach",
+          coachId: actor.userId,
+          signatureUrl: orgSignatureUrl,
+          ipAddress,
+        });
+      }
+
+      await tx
+        .update(schema.documents)
+        .set({ status: "active", formData: snapshot })
+        .where(eq(schema.documents.id, doc.id));
+
+      await logAudit(
+        {
+          actorType: actor.type,
+          actorId: actor.userId,
+          action: orgSignatureUrl
+            ? "document.coach_signed"
+            : "document.released",
+          resourceType: "document",
+          resourceId: doc.id,
+          metadata: { type: doc.type, owner: cfg.owner },
+          ipAddress,
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "ALREADY_ACTIVE") {
+      return {
+        status: "error",
+        message: "Dieses Dokument wurde bereits freigegeben.",
+        echo: false,
+      };
+    }
+    console.error("submitDocument(release) failed:", err);
+    return {
+      status: "error",
+      message: "Freigabe fehlgeschlagen. Bitte erneut versuchen.",
+      echo: true,
+    };
+  }
+
+  return { status: "released" };
+}

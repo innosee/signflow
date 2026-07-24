@@ -9,9 +9,25 @@ import {
   type DocumentTypeId,
   type ParticipantMasterField,
 } from "@/lib/documents/config";
-import { submitDocumentEditor } from "../actions";
 
 type MasterData = Partial<Record<ParticipantMasterField, string>>;
+
+/**
+ * Rückgabe-Form der Editor-Server-Action (Coach ODER Bildungsträger). `values`
+ * ist das Werte-Echo bei Fehler (kein React-19-Form-Reset).
+ */
+export type DocumentEditorState =
+  | {
+      error?: string;
+      success?: boolean;
+      values?: Record<string, string>;
+    }
+  | undefined;
+
+export type DocumentEditorAction = (
+  prev: DocumentEditorState,
+  formData: FormData,
+) => Promise<DocumentEditorState>;
 
 type Props = {
   documentId: string;
@@ -20,7 +36,17 @@ type Props = {
   formData: Record<string, string>;
   master: MasterData;
   participantSigned: boolean;
-  hasCoachSignature: boolean;
+  /** Ob eine zweite (erango-seitige) Unterschrift hinterlegt ist. */
+  hasSignerSignature: boolean;
+  /** Server-Action der jeweiligen Rolle (Coach- bzw. BT-Route). */
+  submitAction: DocumentEditorAction;
+  /**
+   * Wer das Formular ausfüllt: Coach signiert persönlich, der Bildungsträger
+   * mit der geteilten Org-Unterschrift. Steuert nur die Texte.
+   */
+  role: "coach" | "bildungstraeger";
+  /** Pfad zur Unterschrift-Setup-Seite (Rollen-spezifisch). */
+  signatureHref: string;
 };
 
 export function DocumentEditor({
@@ -30,14 +56,17 @@ export function DocumentEditor({
   formData,
   master,
   participantSigned,
-  hasCoachSignature,
+  hasSignerSignature,
+  submitAction,
+  role,
+  signatureHref,
 }: Props) {
   const cfg = getDocumentConfig(type);
   const coachSigns = cfg.signers.coach;
-  const [state, action, pending] = useActionState(
-    submitDocumentEditor,
-    undefined,
-  );
+  const [state, action, pending] = useActionState(submitAction, undefined);
+
+  const signatureNoun =
+    role === "bildungstraeger" ? "Bildungsträger-Unterschrift" : "Unterschrift";
 
   if (status !== "draft") {
     return (
@@ -45,7 +74,7 @@ export function DocumentEditor({
         <p className="font-medium text-zinc-900">
           {status === "completed"
             ? "✓ Abgeschlossen — von beiden Seiten unterschrieben."
-            : "Von dir unterschrieben & freigegeben — wartet auf die Teilnehmer-Unterschrift."}
+            : "Unterschrieben & freigegeben — wartet auf die Teilnehmer-Unterschrift."}
         </p>
         <p className="mt-1 text-zinc-600">
           {participantSigned
@@ -155,10 +184,13 @@ export function DocumentEditor({
             ? "Mit dem Unterschreiben werden die Angaben eingefroren und das Dokument für die Teilnehmer-Unterschrift freigegeben."
             : "Mit der Freigabe werden die Angaben eingefroren und das Dokument der Teilnehmer:in zur Unterschrift bereitgestellt."}
         </p>
-        {coachSigns && !hasCoachSignature && (
+        {coachSigns && !hasSignerSignature && (
           <p className="mt-2 text-xs text-red-700">
-            Du hast noch keine Unterschrift hinterlegt — lege sie unter
-            &bdquo;Unterschrift&ldquo; an.
+            Es ist noch keine {signatureNoun} hinterlegt — lege sie unter{" "}
+            <a href={signatureHref} className="underline">
+              &bdquo;Unterschrift&ldquo;
+            </a>{" "}
+            an.
           </p>
         )}
 
@@ -185,7 +217,7 @@ export function DocumentEditor({
             type="submit"
             name="intent"
             value="release"
-            disabled={pending || (coachSigns && !hasCoachSignature)}
+            disabled={pending || (coachSigns && !hasSignerSignature)}
             className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white enabled:hover:bg-zinc-800 disabled:opacity-40"
           >
             {coachSigns ? "Unterschreiben & freigeben" : "An Teilnehmer freigeben"}
