@@ -6,6 +6,7 @@ import {
   isDocumentOwnedBy,
   type DocumentTypeId,
 } from "@/lib/documents/config";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { createDocument } from "./dokumente/actions";
 
 export type DocumentListItem = {
@@ -105,12 +106,12 @@ export function DocumentsSection({
                 </option>
               ))}
             </select>
-            <button
-              type="submit"
-              className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
+            <PendingSubmitButton
+              pendingLabel="Wird angelegt…"
+              className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white enabled:hover:bg-zinc-800"
             >
               Dokument hinzufügen
-            </button>
+            </PendingSubmitButton>
           </form>
         </div>
       )}
