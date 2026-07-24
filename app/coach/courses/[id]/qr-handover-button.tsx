@@ -12,12 +12,13 @@ type QrState =
 
 /**
  * QR-Handover-Button: pro TN-Zeile sichtbar, öffnet ein Modal mit dem
- * frisch generierten Magic-Link als QR-Code. Coach hält dem TN den
- * Bildschirm hin, TN scannt mit Kamera → öffnet Sign-Page.
+ * frisch generierten Magic-Link als QR-Code UND als kopierbarem Link
+ * („Link kopieren"). Coach hält dem TN den Bildschirm hin (Scan) oder
+ * kopiert den Link und schickt ihn im Notfall selbst raus.
  *
- * Behavioral note: jedes Öffnen erzeugt einen neuen Token und
- * invalidiert ältere Magic-Links für diesen TN — dasselbe Verhalten
- * wie ein Notify-Click. Modal sagt das transparent.
+ * Behavioral note: jedes Öffnen erzeugt einen neuen Token (7 Tage gültig).
+ * Früher verschickte Links werden NICHT invalidiert — sie bleiben bis zu
+ * ihrem eigenen Ablauf gültig (mehrere aktive Links pro TN erlaubt).
  */
 export function QrHandoverButton({
   courseId,
@@ -30,9 +31,11 @@ export function QrHandoverButton({
 }) {
   const [state, setState] = useState<QrState>({ status: "idle" });
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const openModal = useCallback(async () => {
     setOpen(true);
+    setCopied(false);
     setState({ status: "loading" });
     const result = await createParticipantQrLink({ courseId, participantId });
     // TS-Discriminator über `error?: undefined` reicht für Narrowing nicht —
@@ -53,6 +56,7 @@ export function QrHandoverButton({
 
   const close = useCallback(() => {
     setOpen(false);
+    setCopied(false);
     setState({ status: "idle" });
   }, []);
 
@@ -73,10 +77,10 @@ export function QrHandoverButton({
       <button
         type="button"
         onClick={openModal}
-        title={`QR-Code für ${participantName} anzeigen`}
+        title={`QR-Code & Link für ${participantName} anzeigen`}
         className="text-zinc-700 underline-offset-2 hover:underline text-xs"
       >
-        QR
+        QR / Link
       </button>
       {open && (
         <div
@@ -134,9 +138,27 @@ export function QrHandoverButton({
 
             {state.status === "ready" && (
               <div className="mt-4 space-y-2">
-                <p className="text-xs text-zinc-500">
-                  Falls Scannen nicht klappt: Link direkt öffnen
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-zinc-500">
+                    Falls Scannen nicht klappt: Link kopieren und selbst senden
+                  </p>
+                  <button
+                    type="button"
+                    // state.url ist zum Render-Zeitpunkt bereits geladen —
+                    // clipboard.writeText läuft daher OHNE vorheriges await im
+                    // selben Klick-Gesten-Kontext (sonst blockt Safari den
+                    // Clipboard-Zugriff).
+                    onClick={() => {
+                      navigator.clipboard
+                        ?.writeText(state.url)
+                        .then(() => setCopied(true))
+                        .catch(() => setCopied(false));
+                    }}
+                    className="shrink-0 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 enabled:hover:bg-zinc-50"
+                  >
+                    {copied ? "Kopiert ✓" : "Link kopieren"}
+                  </button>
+                </div>
                 <p className="break-all rounded-md bg-zinc-50 px-3 py-2 font-mono text-[11px] text-zinc-700">
                   {state.url}
                 </p>
@@ -144,9 +166,8 @@ export function QrHandoverButton({
             )}
 
             <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
-              Hinweis: Mit dem Öffnen dieses QR wurden ältere Magic-Links für
-              {" "}{participantName} ungültig. Der Code ist 24 Stunden gültig
-              und einmalig.
+              Hinweis: Dieser Link ist 7 Tage gültig und kann mehrfach geöffnet
+              werden. Früher verschickte Links bleiben weiterhin gültig.
             </p>
           </div>
         </div>
