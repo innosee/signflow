@@ -90,7 +90,7 @@ export default async function BildungstraegerDocumentsPage({ params }: Props) {
           {course.pName} · {massnahmeLabel}
         </p>
         <Link
-          href="/bildungstraeger/signature"
+          href={`/bildungstraeger/signature?returnTo=/bildungstraeger/courses/${courseId}/dokumente`}
           className="mt-2 inline-block text-sm text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
         >
           Bildungsträger-Unterschrift verwalten →

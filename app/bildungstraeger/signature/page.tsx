@@ -9,9 +9,24 @@ import { TenantSignatureSetup } from "./signature-setup";
 
 export const dynamic = "force-dynamic";
 
-export default async function BildungstraegerSignaturePage() {
+type Props = { searchParams: Promise<{ returnTo?: string }> };
+
+export default async function BildungstraegerSignaturePage({
+  searchParams,
+}: Props) {
   const session = await requireBildungstraeger();
   const tenantId = getTenantId(session);
+
+  // Zurück dorthin, wo der BT herkam (z.B. die Dokumente-Seite eines Kunden),
+  // statt stumpf aufs Dashboard. Nur interne BT-Pfade zulassen (kein Open
+  // Redirect); sonst Fallback aufs Dashboard.
+  const { returnTo } = await searchParams;
+  const backHref =
+    returnTo && returnTo.startsWith("/bildungstraeger/")
+      ? returnTo
+      : "/bildungstraeger";
+  const backLabel =
+    backHref === "/bildungstraeger" ? "Zurück zum Dashboard" : "← Zurück";
 
   const [row] = await db
     .select({ signatureUrl: schema.tenants.signatureUrl })
@@ -34,10 +49,10 @@ export default async function BildungstraegerSignaturePage() {
           </p>
         </div>
         <Link
-          href="/bildungstraeger"
+          href={backHref}
           className="text-sm text-zinc-600 underline-offset-2 hover:underline"
         >
-          Zurück zum Dashboard
+          {backLabel}
         </Link>
       </header>
 
