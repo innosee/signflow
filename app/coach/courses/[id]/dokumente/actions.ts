@@ -19,7 +19,7 @@ import {
   type DocumentTypeId,
 } from "@/lib/documents/config";
 import {
-  collectSubmittedValues,
+  collectAllFormValues,
   submitDocument,
 } from "@/lib/documents/editor-core";
 import {
@@ -170,11 +170,13 @@ export async function submitDocumentEditor(
 
   const documentId = String(formData.get("documentId") ?? "").trim();
   const intent = String(formData.get("intent") ?? "save");
+  // Werte-Echo vor dem Laden bauen, damit auch „nicht gefunden" die Eingaben
+  // erhält (kein React-19-Form-Reset).
+  const submitted = collectAllFormValues(formData);
   const doc = await loadOwnedDocument(documentId, coachId);
-  if (!doc) return { error: "Dokument nicht gefunden." };
+  if (!doc) return { error: "Dokument nicht gefunden.", values: submitted };
 
   const type = doc.type as DocumentTypeId;
-  const submitted = collectSubmittedValues(type, formData);
   const ipAddress =
     (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ??
     "unknown";

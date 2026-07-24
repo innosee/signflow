@@ -13,7 +13,8 @@ import {
 } from "@/lib/documents/config";
 import { loadDocumentSheet } from "@/lib/documents/data";
 import { DocumentEditor } from "@/components/documents/document-editor";
-import { submitDocumentEditor } from "../actions";
+import { DeleteDocumentButton } from "@/components/documents/delete-document-button";
+import { deleteDocument, submitDocumentEditor } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +114,9 @@ export default async function CoachDocumentPage({ params }: Props) {
           >
             PDF
           </a>
+          {canEdit && row.status !== "completed" && (
+            <DeleteDocumentButton action={deleteDocument} documentId={docId} />
+          )}
         </div>
       </div>
 
