@@ -7,7 +7,10 @@ import { loadStundennachweisSheet } from "@/lib/sheet-data";
 import { resolveParticipantToken } from "@/lib/participant-tokens";
 import { classifyApprovalGate } from "@/lib/sign-state";
 
+import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
+
 import { ApproveForm } from "./approve-form";
+import { DocumentSignForm } from "./document-sign-form";
 import { ParticipantSignatureOnboarding } from "./signature-onboarding";
 import { SignForm } from "./sign-form";
 
@@ -63,6 +66,13 @@ export default async function ParticipantSignPage({ params }: Props) {
   const open = resolved.sessions.filter((s) => !s.hasParticipantSignature);
   const done = resolved.sessions.filter((s) => s.hasParticipantSignature);
 
+  // Kunde-Dokumente (erango-Formulare): offen = vom Coach freigegeben (active),
+  // noch nicht vom Teilnehmer signiert.
+  const openDocs = resolved.documents.filter(
+    (d) => d.status === "active" && !d.hasParticipantSignature,
+  );
+  const doneDocs = resolved.documents.filter((d) => d.hasParticipantSignature);
+
   // Freigabe-Gate (geteilt mit der Server-Action): "ready" heißt, ALLE Termine
   // sind vollständig signiert (Coach UND TN). Der TN darf seinen Teil vor dem
   // Coach signieren (gewollt) — dann ist `open` leer, aber das Gate noch nicht
@@ -75,14 +85,21 @@ export default async function ParticipantSignPage({ params }: Props) {
     })),
   );
 
-  // Preview-Modus: Dokument final (Gate "ready") und der Teilnehmer hat noch
-  // nicht freigegeben → er sieht das vollständige Dokument pixel-identisch zum
-  // späteren PDF + einen Freigabe-Button (CLAUDE.md Schritt 8).
+  // Preview-Modus: Stundennachweis final (Gate "ready") und der Teilnehmer hat
+  // noch nicht freigegeben → er sieht den vollständigen Nachweis pixel-identisch
+  // zum späteren PDF + einen Freigabe-Button (CLAUDE.md Schritt 8).
+  //
+  // Offene Kunde-Dokumente haben Vorrang: solange noch ein freigegebenes
+  // Dokument auf die Teilnehmer-Unterschrift wartet, NICHT in den Preview-Modus
+  // wechseln — sonst würde die Vollbild-Vorschau (early return unten) die
+  // Dokumente ausblenden und der Teilnehmer käme nicht an sie heran. Erst wenn
+  // alle Dokumente signiert sind, erscheint die Stundennachweis-Freigabe.
   const inPreviewMode =
     hasSignature &&
     resolved.sessions.length > 0 &&
     approvalGate === "ready" &&
-    !resolved.hasApproved;
+    !resolved.hasApproved &&
+    openDocs.length === 0;
 
   if (inPreviewMode) {
     const sheet = await loadStundennachweisSheet({
@@ -147,7 +164,7 @@ export default async function ParticipantSignPage({ params }: Props) {
   // an, wird die Freigabe serverseitig verworfen (siehe createSession) — als
   // zusätzliche Absicherung haben offene Termine hier Vorrang vor dem
   // „Fertig"-Screen, damit der TN den neuen Termin signieren kann.
-  if (resolved.hasApproved && open.length === 0) {
+  if (resolved.hasApproved && open.length === 0 && openDocs.length === 0) {
     return (
       <div className="mx-auto max-w-xl px-4 py-8 space-y-6">
         <header>
@@ -220,7 +237,56 @@ export default async function ParticipantSignPage({ params }: Props) {
         </p>
       )}
 
+      {hasSignature && (openDocs.length > 0 || doneDocs.length > 0) && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-zinc-700">Dokumente</h2>
+          {openDocs.map((d) => (
+            <DocumentRow key={d.id} doc={d} token={token} open />
+          ))}
+          {doneDocs.map((d) => (
+            <DocumentRow key={d.id} doc={d} token={token} open={false} />
+          ))}
+        </section>
+      )}
+
       <DataProtectionNotice />
+    </div>
+  );
+}
+
+function DocumentRow({
+  doc,
+  token,
+  open,
+}: {
+  doc: {
+    id: string;
+    type: DocumentTypeId;
+    status: "active" | "completed";
+    hasParticipantSignature: boolean;
+  };
+  token: string;
+  open: boolean;
+}) {
+  const cfg = getDocumentConfig(doc.type);
+  return (
+    <div className="rounded-xl border border-zinc-300 bg-white p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <div className="font-medium">
+          {cfg.formNumber} · {cfg.label}
+        </div>
+        <Link
+          href={`/sign/${token}/dokument/${doc.id}`}
+          className="text-xs text-zinc-600 underline underline-offset-2 hover:text-zinc-800"
+        >
+          ansehen
+        </Link>
+      </div>
+      {open ? (
+        <DocumentSignForm token={token} documentId={doc.id} />
+      ) : (
+        <p className="text-xs text-green-700">✓ unterschrieben</p>
+      )}
     </div>
   );
 }

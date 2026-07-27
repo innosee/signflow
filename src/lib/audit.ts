@@ -43,7 +43,12 @@ export type AuditAction =
   | "ber.soft_flags.acknowledged"
   | "bildungstraeger.invite"
   | "bildungstraeger.deactivate"
-  | "bildungstraeger.onboard";
+  | "bildungstraeger.onboard"
+  | "document.created"
+  | "document.released"
+  | "document.coach_signed"
+  | "document.participant_signed"
+  | "document.deleted";
 
 export type AuditActorType =
   | "bildungstraeger"
@@ -65,7 +70,8 @@ export type AuditEntry = {
     | "final_document"
     | "checker_run"
     | "abschlussbericht"
-    | "user";
+    | "user"
+    | "document";
   resourceId: string;
   metadata?: Record<string, unknown> | null;
   ipAddress?: string | null;

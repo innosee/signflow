@@ -269,6 +269,12 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
                       Berichte
                     </Link>
                     <Link
+                      href={`/bildungstraeger/courses/${c.id}/dokumente`}
+                      className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                    >
+                      Dokumente
+                    </Link>
+                    <Link
                       href={`/bildungstraeger/courses/${c.id}/edit`}
                       className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
                     >

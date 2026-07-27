@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
@@ -15,6 +15,7 @@ import { ReviewThread } from "@/components/review-thread";
 
 import { AngabenEditor } from "./angaben-editor";
 import { AnwCheckButton } from "./anw-check-button";
+import { DocumentsSection, type DocumentListItem } from "./documents-section";
 import { CoachSignForm } from "./coach-sign-form";
 import { CorrectTopicButton } from "./correct-topic-button";
 import { DeleteSessionButton } from "./delete-session-button";
@@ -290,6 +291,23 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .where(eq(schema.courseReviewNotes.courseId, id))
     .orderBy(asc(schema.courseReviewNotes.createdAt));
 
+  // Kunde-Dokumente (digitalisierte erango-Formulare), neueste zuerst.
+  const documents = await db
+    .select({
+      id: schema.documents.id,
+      type: schema.documents.type,
+      status: schema.documents.status,
+      updatedAt: schema.documents.updatedAt,
+    })
+    .from(schema.documents)
+    .where(
+      and(
+        eq(schema.documents.courseId, id),
+        isNull(schema.documents.deletedAt),
+      ),
+    )
+    .orderBy(desc(schema.documents.createdAt));
+
   const allSessionsCompleted =
     sessions.length > 0 && sessions.every((s) => s.status === "completed");
   const allApproved =
@@ -562,6 +580,13 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           }
         />
       </section>
+
+      {/* Kunde-Dokumente (digitalisierte erango-Formulare, einfache Signatur). */}
+      <DocumentsSection
+        courseId={course.id}
+        documents={documents as DocumentListItem[]}
+        canManage={canManage}
+      />
 
       {/* Abschluss-Workflow (Gates → FES): jeder Team-Coach darf ihn auslösen. */}
       <section className="rounded-xl border border-zinc-300 bg-white">
