@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { isoWeek, isoWeekKey, wochenUnter2 } from "./termine-pro-woche";
+import {
+  innereWochenUnter2,
+  isoWeek,
+  isoWeekKey,
+  randWochenUnter2,
+  wochenUnter2,
+} from "./termine-pro-woche";
 
 describe("isoWeek", () => {
   it("zählt Mo–So als eine Woche", () => {
@@ -46,5 +52,79 @@ describe("wochenUnter2", () => {
 
   it("leere Eingabe → kein Verstoß", () => {
     expect(wochenUnter2([])).toEqual([]);
+  });
+});
+
+describe("innereWochenUnter2", () => {
+  it("meldet nur ECHTE innere Einzel-Termin-Wochen", () => {
+    // KW24 (2) | KW25 (1, INNEN) | KW26 (2) → nur KW25 ist ein Verstoß.
+    expect(
+      innereWochenUnter2([
+        "2026-06-08",
+        "2026-06-09",
+        "2026-06-15",
+        "2026-06-22",
+        "2026-06-23",
+      ]),
+    ).toEqual(["2026-W25"]);
+  });
+
+  it("nimmt die Schlusswoche aus (Wrap-up mit 1 Termin ist kein Verstoß)", () => {
+    // KW24 (2) | KW25 (2) | KW26 (1, LETZTE) → kein Verstoß (Antonenko-Fall).
+    expect(
+      innereWochenUnter2([
+        "2026-06-08",
+        "2026-06-09",
+        "2026-06-15",
+        "2026-06-16",
+        "2026-06-22",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("bei ≤2 belegten Wochen gibt es keine inneren Wochen", () => {
+    expect(innereWochenUnter2(["2026-06-08", "2026-06-15"])).toEqual([]);
+  });
+
+  it("leere Eingabe → kein Verstoß", () => {
+    expect(innereWochenUnter2([])).toEqual([]);
+  });
+});
+
+describe("randWochenUnter2", () => {
+  it("meldet die Schlusswoche mit nur 1 Termin", () => {
+    // KW24 (2) | KW25 (2) | KW26 (1, LETZTE) → Randwoche KW26.
+    expect(
+      randWochenUnter2([
+        "2026-06-08",
+        "2026-06-09",
+        "2026-06-15",
+        "2026-06-16",
+        "2026-06-22",
+      ]),
+    ).toEqual(["2026-W26"]);
+  });
+
+  it("meldet die Anfangswoche mit nur 1 Termin", () => {
+    // KW24 (1, ERSTE) | KW25 (2) | KW26 (2) → Randwoche KW24.
+    expect(
+      randWochenUnter2([
+        "2026-06-08",
+        "2026-06-15",
+        "2026-06-16",
+        "2026-06-22",
+        "2026-06-23",
+      ]),
+    ).toEqual(["2026-W24"]);
+  });
+
+  it("keine Randwoche, wenn Anfang und Ende ≥2 Termine haben", () => {
+    expect(
+      randWochenUnter2(["2026-06-08", "2026-06-09", "2026-06-15", "2026-06-16"]),
+    ).toEqual([]);
+  });
+
+  it("leere Eingabe → keine Randwoche", () => {
+    expect(randWochenUnter2([])).toEqual([]);
   });
 });
