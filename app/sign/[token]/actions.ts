@@ -11,6 +11,8 @@ import { resolveParticipantToken } from "@/lib/participant-tokens";
 import { isFutureSessionDate } from "@/lib/dates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 import { classifyApprovalGate } from "@/lib/sign-state";
+import { sendDocumentSignedToBildungstraeger } from "@/lib/email";
+import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 
 export type SignState = { error?: string } | undefined;
 
@@ -377,6 +379,10 @@ export async function submitDocumentSignature(
   const ipAddress = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   const userAgent = h.get("user-agent");
 
+  // Wird in der Transaktion gesetzt und NACH erfolgreichem Commit für die
+  // Bildungsträger-Benachrichtigung genutzt.
+  let signedDocType: DocumentTypeId | null = null;
+
   try {
     await db.transaction(async (tx) => {
       const [doc] = await tx
@@ -396,6 +402,7 @@ export async function submitDocumentSignature(
         .limit(1);
       if (!doc) throw new Error("NOT_FOUND");
       if (doc.status !== "active") throw new Error("NOT_SIGNABLE");
+      signedDocType = doc.type as DocumentTypeId;
 
       const [existing] = await tx
         .select({ id: schema.documentSignatures.id })
@@ -452,6 +459,81 @@ export async function submitDocumentSignature(
     return { error: "Unterschrift fehlgeschlagen. Bitte erneut versuchen." };
   }
 
+  // Best-effort: Bildungsträger-Admin(s) des Mandanten informieren, dass der
+  // Teilnehmer das Dokument unterschrieben hat. Ein Fehler hier darf die
+  // erfolgreiche Signatur NICHT kippen (nur loggen).
+  if (signedDocType) {
+    await notifyBildungstraegerDocumentSigned({
+      documentId,
+      docType: signedDocType,
+      courseId: resolved.courseId,
+      participantId: resolved.participantId,
+      participantName: resolved.participantName,
+      courseTitle: resolved.courseTitle,
+    });
+  }
+
   revalidatePath(`/sign/${token}`);
   return undefined;
+}
+
+/**
+ * Schickt allen aktiven Bildungsträger-Usern im Mandanten des Teilnehmers eine
+ * Info-Mail, dass ein Kunde-Dokument (DS/TNV/STV/Merge) unterschrieben wurde.
+ * Best-effort — jede Zustellung ist einzeln gekapselt, ein Fehler wird nur
+ * geloggt und stoppt weder die anderen Empfänger noch die Signatur. Mandant
+ * wird über `participants.tenantId` bestimmt (analog zum Review-Flow, dort via
+ * `users.tenantId`).
+ */
+async function notifyBildungstraegerDocumentSigned(params: {
+  documentId: string;
+  docType: DocumentTypeId;
+  courseId: string;
+  participantId: string;
+  participantName: string;
+  courseTitle: string;
+}): Promise<void> {
+  try {
+    const [participant] = await db
+      .select({ tenantId: schema.participants.tenantId })
+      .from(schema.participants)
+      .where(eq(schema.participants.id, params.participantId))
+      .limit(1);
+    if (!participant) return;
+
+    const recipients = await db
+      .select({ email: schema.users.email })
+      .from(schema.users)
+      .where(
+        and(
+          eq(schema.users.role, "bildungstraeger"),
+          eq(schema.users.tenantId, participant.tenantId),
+          isNull(schema.users.deletedAt),
+        ),
+      );
+    if (recipients.length === 0) return;
+
+    const documentLabel = getDocumentConfig(params.docType).label;
+    const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const url = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
+
+    for (const r of recipients) {
+      try {
+        await sendDocumentSignedToBildungstraeger({
+          to: r.email,
+          documentLabel,
+          participantName: params.participantName,
+          courseTitle: params.courseTitle,
+          url,
+        });
+      } catch (err) {
+        console.error(
+          `notifyBildungstraegerDocumentSigned: Zustellung an ${r.email} fehlgeschlagen`,
+          err,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("notifyBildungstraegerDocumentSigned failed:", err);
+  }
 }
