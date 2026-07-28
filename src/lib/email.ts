@@ -7,8 +7,13 @@ type SendEmailInput = {
   text?: string;
 };
 
+// Absender. Default ist der in Resend verifizierte Signflow-Absender, damit
+// Mails auch dann zugestellt werden, wenn `EMAIL_FROM` nicht (oder leer)
+// gesetzt ist. WICHTIG: `||` statt `??`, damit ein LEERER String (`""`, kommt
+// bei Vercel-Env-Overrides vor) ebenfalls auf den Default fällt — sonst ginge
+// `from: ""` an Resend → 422 „The domain is invalid" und KEINE Mail käme an.
 const fromAddress =
-  process.env.EMAIL_FROM ?? "Signflow <onboarding@resend.dev>";
+  process.env.EMAIL_FROM?.trim() || "Signflow <noreply@signflow.coach>";
 
 const HTML_ESCAPE: Record<string, string> = {
   "&": "&amp;",
@@ -353,7 +358,7 @@ export async function sendReviewRequestedToBildungstraeger(params: {
 }): Promise<void> {
   const body = `
     <p>Hallo,</p>
-    <p><strong>${esc(params.coachName)}</strong> hat die Anwesenheitsliste für <strong>${esc(params.courseTitle)}</strong> zur Prüfung eingereicht. Bitte prüfe sie und gib sie frei oder fordere eine Nachbesserung an — erst nach deiner Freigabe kann der Coach mit FES versiegeln.</p>
+    <p><strong>${esc(params.coachName)}</strong> hat die Anwesenheitsliste für <strong>${esc(params.courseTitle)}</strong> zur Prüfung eingereicht. Bitte prüfe sie und gib sie frei oder fordere eine Nachbesserung an — mit deiner Freigabe ist der Nachweis abgeschlossen.</p>
     ${renderButton(params.url, "Liste prüfen")}
   `;
   await sendEmail({
@@ -364,8 +369,8 @@ export async function sendReviewRequestedToBildungstraeger(params: {
 }
 
 /**
- * Mail an den Coach: der Bildungsträger hat die Liste freigegeben. Der Coach
- * kann jetzt die FES-Versiegelung auslösen.
+ * Mail an den Coach: der Bildungsträger hat die Liste freigegeben. Damit ist
+ * der Nachweis abgeschlossen und das finale PDF verfügbar.
  */
 export async function sendReviewApprovedToCoach(params: {
   to: string;
@@ -375,7 +380,7 @@ export async function sendReviewApprovedToCoach(params: {
 }): Promise<void> {
   const body = `
     <p>Hallo ${esc(params.coachName)},</p>
-    <p>der Bildungsträger hat die Anwesenheitsliste für <strong>${esc(params.courseTitle)}</strong> geprüft und <strong>freigegeben</strong>. Du kannst die Maßnahme jetzt mit FES versiegeln.</p>
+    <p>der Bildungsträger hat die Anwesenheitsliste für <strong>${esc(params.courseTitle)}</strong> geprüft und <strong>freigegeben</strong>. Damit ist die Maßnahme abgeschlossen — das finale PDF steht bereit.</p>
     ${renderButton(params.url, "Zur Maßnahme")}
   `;
   await sendEmail({
@@ -417,7 +422,12 @@ export async function sendReviewChangesToCoach(params: {
  * kein Handlungs-Gate. Führt auf die Dokumentenübersicht des Kunden im
  * Bildungsträger-Bereich.
  */
-export async function sendDocumentSignedToBildungstraeger(params: {
+/**
+ * Info-Mail „Kunde hat ein Dokument unterschrieben" an die verwaltende Seite —
+ * Bildungsträger bei DS/TNV/Merge, Coach bei der STV. Inhalt ist für beide
+ * identisch; nur Empfänger + Link (`url`) unterscheiden sich (setzt der Aufrufer).
+ */
+export async function sendDocumentSignedNotification(params: {
   to: string;
   documentLabel: string;
   participantName: string;

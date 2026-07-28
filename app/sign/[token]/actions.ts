@@ -11,7 +11,7 @@ import { resolveParticipantToken } from "@/lib/participant-tokens";
 import { isFutureSessionDate } from "@/lib/dates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 import { classifyApprovalGate } from "@/lib/sign-state";
-import { sendDocumentSignedToBildungstraeger } from "@/lib/email";
+import { sendDocumentSignedNotification } from "@/lib/email";
 import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 
 export type SignState = { error?: string } | undefined;
@@ -463,7 +463,7 @@ export async function submitDocumentSignature(
   // Teilnehmer das Dokument unterschrieben hat. Ein Fehler hier darf die
   // erfolgreiche Signatur NICHT kippen (nur loggen).
   if (signedDocType) {
-    await notifyBildungstraegerDocumentSigned({
+    await notifyDocumentSigned({
       documentId,
       docType: signedDocType,
       courseId: resolved.courseId,
@@ -478,14 +478,15 @@ export async function submitDocumentSignature(
 }
 
 /**
- * Schickt allen aktiven Bildungsträger-Usern im Mandanten des Teilnehmers eine
- * Info-Mail, dass ein Kunde-Dokument (DS/TNV/STV/Merge) unterschrieben wurde.
+ * Info-Mail „Kunde hat unterschrieben" an die **verwaltende Seite** des
+ * Dokuments (wie eine To-Do-Liste zum Abarbeiten):
+ *   - DS/TNV/Merge (owner=bildungstraeger) → alle aktiven Bildungsträger-User
+ *     des Mandanten (bei erango: avgs@erango.de).
+ *   - STV (owner=coach) → der Coach, der die STV angelegt hat (`created_by`).
  * Best-effort — jede Zustellung ist einzeln gekapselt, ein Fehler wird nur
- * geloggt und stoppt weder die anderen Empfänger noch die Signatur. Mandant
- * wird über `participants.tenantId` bestimmt (analog zum Review-Flow, dort via
- * `users.tenantId`).
+ * geloggt und stoppt weder die anderen Empfänger noch die Signatur.
  */
-async function notifyBildungstraegerDocumentSigned(params: {
+async function notifyDocumentSigned(params: {
   documentId: string;
   docType: DocumentTypeId;
   courseId: string;
@@ -494,46 +495,63 @@ async function notifyBildungstraegerDocumentSigned(params: {
   courseTitle: string;
 }): Promise<void> {
   try {
-    const [participant] = await db
-      .select({ tenantId: schema.participants.tenantId })
-      .from(schema.participants)
-      .where(eq(schema.participants.id, params.participantId))
-      .limit(1);
-    if (!participant) return;
-
-    const recipients = await db
-      .select({ email: schema.users.email })
-      .from(schema.users)
-      .where(
-        and(
-          eq(schema.users.role, "bildungstraeger"),
-          eq(schema.users.tenantId, participant.tenantId),
-          isNull(schema.users.deletedAt),
-        ),
-      );
-    if (recipients.length === 0) return;
-
-    const documentLabel = getDocumentConfig(params.docType).label;
+    const cfg = getDocumentConfig(params.docType);
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-    const url = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
+
+    let recipients: { email: string }[] = [];
+    let url: string;
+
+    if (cfg.owner === "bildungstraeger") {
+      const [participant] = await db
+        .select({ tenantId: schema.participants.tenantId })
+        .from(schema.participants)
+        .where(eq(schema.participants.id, params.participantId))
+        .limit(1);
+      if (!participant) return;
+      recipients = await db
+        .select({ email: schema.users.email })
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.role, "bildungstraeger"),
+            eq(schema.users.tenantId, participant.tenantId),
+            isNull(schema.users.deletedAt),
+          ),
+        );
+      url = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
+    } else {
+      // STV → den anlegenden Coach informieren.
+      recipients = await db
+        .select({ email: schema.users.email })
+        .from(schema.documents)
+        .innerJoin(schema.users, eq(schema.users.id, schema.documents.createdBy))
+        .where(
+          and(
+            eq(schema.documents.id, params.documentId),
+            isNull(schema.users.deletedAt),
+          ),
+        );
+      url = `${base}/coach/courses/${params.courseId}/dokumente`;
+    }
+    if (recipients.length === 0) return;
 
     for (const r of recipients) {
       try {
-        await sendDocumentSignedToBildungstraeger({
+        await sendDocumentSignedNotification({
           to: r.email,
-          documentLabel,
+          documentLabel: cfg.label,
           participantName: params.participantName,
           courseTitle: params.courseTitle,
           url,
         });
       } catch (err) {
         console.error(
-          `notifyBildungstraegerDocumentSigned: Zustellung an ${r.email} fehlgeschlagen`,
+          `notifyDocumentSigned: Zustellung an ${r.email} fehlgeschlagen`,
           err,
         );
       }
     }
   } catch (err) {
-    console.error("notifyBildungstraegerDocumentSigned failed:", err);
+    console.error("notifyDocumentSigned failed:", err);
   }
 }
