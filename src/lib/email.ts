@@ -410,3 +410,33 @@ export async function sendReviewChangesToCoach(params: {
     html: renderLayout("Nachbesserung angefordert", body),
   });
 }
+
+/**
+ * Mail an den/die Bildungsträger-Admin(s) des Mandanten: ein Teilnehmer hat ein
+ * Kunde-Dokument (DS/TNV/STV/Merge) fertig unterschrieben. Rein informativ —
+ * kein Handlungs-Gate. Führt auf die Dokumentenübersicht des Kunden im
+ * Bildungsträger-Bereich.
+ */
+export async function sendDocumentSignedToBildungstraeger(params: {
+  to: string;
+  documentLabel: string;
+  participantName: string;
+  courseTitle: string;
+  url: string;
+}): Promise<void> {
+  const body = `
+    <p>Hallo,</p>
+    <p><strong>${esc(params.participantName)}</strong> hat das Dokument <strong>${esc(
+      params.documentLabel,
+    )}</strong> für die Maßnahme <strong>${esc(
+      params.courseTitle,
+    )}</strong> unterschrieben.</p>
+    ${renderButton(params.url, "Dokument ansehen")}
+  `;
+  await sendEmail({
+    to: params.to,
+    // Plaintext-Betreff → kein HTML-Escaping.
+    subject: `Unterschrieben: ${params.documentLabel} – ${params.participantName}`,
+    html: renderLayout("Dokument unterschrieben", body),
+  });
+}
