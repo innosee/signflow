@@ -7,8 +7,28 @@ type SendEmailInput = {
   text?: string;
 };
 
-const fromAddress =
-  process.env.EMAIL_FROM ?? "Signflow <onboarding@resend.dev>";
+/**
+ * Absender-Adresse. Muss `EMAIL_FROM` **mit gültigem Wert** honorieren. `??`
+ * allein reicht NICHT: eine auf leeren String (`""`) gesetzte Env-Variable ist
+ * nicht nullish → würde durchgereicht und Resend lehnt jede Mail mit
+ * `422 „The domain is invalid"` ab (still, für ALLE Mails). Genau dieser Fall
+ * hat auf Prod den kompletten Mailversand lahmgelegt. Darum: leer/whitespace
+ * wird wie „nicht gesetzt" behandelt — und in Production **hart geworfen**,
+ * statt auf `onboarding@resend.dev` zurückzufallen (das kann ohnehin nur an die
+ * Resend-Konto-Adresse zustellen und würde den Ausfall nur verschleiern).
+ */
+function resolveFromAddress(): string {
+  const configured = process.env.EMAIL_FROM?.trim();
+  if (configured) return configured;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "EMAIL_FROM must be set to a verified sender in production — refusing to send with an empty/invalid from address.",
+    );
+  }
+
+  return "Signflow <onboarding@resend.dev>";
+}
 
 const HTML_ESCAPE: Record<string, string> = {
   "&": "&amp;",
@@ -46,7 +66,7 @@ async function sendViaResend(input: SendEmailInput): Promise<void> {
   const resend = new Resend(apiKey);
 
   const { error } = await resend.emails.send({
-    from: fromAddress,
+    from: resolveFromAddress(),
     to: input.to,
     subject: input.subject,
     html: input.html,
@@ -64,7 +84,7 @@ function logToConsole(input: SendEmailInput): void {
       "",
       "╭─ 📧 Email (dev, no RESEND_API_KEY set) ─────────────────",
       `│ To:      ${input.to}`,
-      `│ From:    ${fromAddress}`,
+      `│ From:    ${resolveFromAddress()}`,
       `│ Subject: ${input.subject}`,
       "├─ HTML ───────────────────────────────────────────────────",
       input.html,
