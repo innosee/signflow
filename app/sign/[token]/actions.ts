@@ -11,6 +11,8 @@ import { resolveParticipantToken } from "@/lib/participant-tokens";
 import { isFutureSessionDate } from "@/lib/dates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 import { classifyApprovalGate } from "@/lib/sign-state";
+import { sendDocumentSignedNotification } from "@/lib/email";
+import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 
 export type SignState = { error?: string } | undefined;
 
@@ -377,6 +379,10 @@ export async function submitDocumentSignature(
   const ipAddress = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   const userAgent = h.get("user-agent");
 
+  // Wird in der Transaktion gesetzt und NACH erfolgreichem Commit für die
+  // Bildungsträger-Benachrichtigung genutzt.
+  let signedDocType: DocumentTypeId | null = null;
+
   try {
     await db.transaction(async (tx) => {
       const [doc] = await tx
@@ -396,6 +402,7 @@ export async function submitDocumentSignature(
         .limit(1);
       if (!doc) throw new Error("NOT_FOUND");
       if (doc.status !== "active") throw new Error("NOT_SIGNABLE");
+      signedDocType = doc.type as DocumentTypeId;
 
       const [existing] = await tx
         .select({ id: schema.documentSignatures.id })
@@ -452,6 +459,99 @@ export async function submitDocumentSignature(
     return { error: "Unterschrift fehlgeschlagen. Bitte erneut versuchen." };
   }
 
+  // Best-effort: Bildungsträger-Admin(s) des Mandanten informieren, dass der
+  // Teilnehmer das Dokument unterschrieben hat. Ein Fehler hier darf die
+  // erfolgreiche Signatur NICHT kippen (nur loggen).
+  if (signedDocType) {
+    await notifyDocumentSigned({
+      documentId,
+      docType: signedDocType,
+      courseId: resolved.courseId,
+      participantId: resolved.participantId,
+      participantName: resolved.participantName,
+      courseTitle: resolved.courseTitle,
+    });
+  }
+
   revalidatePath(`/sign/${token}`);
   return undefined;
+}
+
+/**
+ * Info-Mail „Kunde hat unterschrieben" an die **verwaltende Seite** des
+ * Dokuments (wie eine To-Do-Liste zum Abarbeiten):
+ *   - DS/TNV/Merge (owner=bildungstraeger) → alle aktiven Bildungsträger-User
+ *     des Mandanten (bei erango: avgs@erango.de).
+ *   - STV (owner=coach) → der Coach, der die STV angelegt hat (`created_by`).
+ * Best-effort — jede Zustellung ist einzeln gekapselt, ein Fehler wird nur
+ * geloggt und stoppt weder die anderen Empfänger noch die Signatur.
+ */
+async function notifyDocumentSigned(params: {
+  documentId: string;
+  docType: DocumentTypeId;
+  courseId: string;
+  participantId: string;
+  participantName: string;
+  courseTitle: string;
+}): Promise<void> {
+  try {
+    const cfg = getDocumentConfig(params.docType);
+    const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+    let recipients: { email: string }[] = [];
+    let url: string;
+
+    if (cfg.owner === "bildungstraeger") {
+      const [participant] = await db
+        .select({ tenantId: schema.participants.tenantId })
+        .from(schema.participants)
+        .where(eq(schema.participants.id, params.participantId))
+        .limit(1);
+      if (!participant) return;
+      recipients = await db
+        .select({ email: schema.users.email })
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.role, "bildungstraeger"),
+            eq(schema.users.tenantId, participant.tenantId),
+            isNull(schema.users.deletedAt),
+          ),
+        );
+      url = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
+    } else {
+      // STV → den anlegenden Coach informieren.
+      recipients = await db
+        .select({ email: schema.users.email })
+        .from(schema.documents)
+        .innerJoin(schema.users, eq(schema.users.id, schema.documents.createdBy))
+        .where(
+          and(
+            eq(schema.documents.id, params.documentId),
+            isNull(schema.users.deletedAt),
+          ),
+        );
+      url = `${base}/coach/courses/${params.courseId}/dokumente`;
+    }
+    if (recipients.length === 0) return;
+
+    for (const r of recipients) {
+      try {
+        await sendDocumentSignedNotification({
+          to: r.email,
+          documentLabel: cfg.label,
+          participantName: params.participantName,
+          courseTitle: params.courseTitle,
+          url,
+        });
+      } catch (err) {
+        console.error(
+          `notifyDocumentSigned: Zustellung an ${r.email} fehlgeschlagen`,
+          err,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("notifyDocumentSigned failed:", err);
+  }
 }
