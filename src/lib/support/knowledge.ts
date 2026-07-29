@@ -50,11 +50,9 @@ MODUL A – ANWESENHEITSNACHWEISE, Ablauf:
    bestätigt, dass keine Termine mehr dazukommen. Ein KI-Anwesenheits-Check
    gibt beratende Hinweise (kein Block; „Hinweise gesehen — trotzdem
    freigeben"). Jede spätere Termin-Änderung setzt die Markierung zurück.
-9. Preview freigeben lassen: „Preview an Teilnehmer senden" → TN sieht das
-   vollständige Dokument (pixelgleich zum PDF) und klickt „Freigeben".
-10. Beim Bildungsträger einreichen: „Zur Prüfung einreichen" → BT gibt frei oder
-    fordert Nachbesserung an. Mit der BT-Freigabe wird der Nachweis abgeschlossen.
-11. AfA-Übermittlung: Mit der BT-Freigabe wird das A4-PDF mit einfacher
+9. Beim Bildungsträger einreichen: „Zur Prüfung einreichen" → BT gibt frei oder
+   fordert Nachbesserung an. Mit der BT-Freigabe wird der Nachweis abgeschlossen.
+10. AfA-Übermittlung: Mit der BT-Freigabe wird das A4-PDF mit einfacher
     elektronischer Signatur (Canvas + Zeitstempel + Audit-Protokoll) abgeschlossen.
     Danach übermittelt der Bildungsträger an die AfA. Ein abgeschlossener Kunde
     ist fixiert und nicht mehr änderbar.

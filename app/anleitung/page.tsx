@@ -53,16 +53,11 @@ const SIGN_STEPS: Array<{ num: string; title: string; body: string }> = [
   },
   {
     num: "09",
-    title: "Preview freigeben lassen",
-    body: 'Per „Preview an Teilnehmer senden" bekommt der Kunde das vollständige Dokument — pixelgleich zum späteren PDF — und klickt „Freigeben" (Audit-Log + Zeitstempel, noch kein Abschluss).',
+    title: "Beim Bildungsträger einreichen",
+    body: 'Mit „Zur Prüfung einreichen" geht die Liste an den Bildungsträger. Der prüft sie und gibt frei oder fordert eine Nachbesserung an. Erst nach der Bildungsträger-Freigabe wird der Abschluss-Button aktiv.',
   },
   {
     num: "10",
-    title: "Beim Bildungsträger einreichen",
-    body: 'Mit „Zur Prüfung einreichen" geht die freigegebene Liste an den Bildungsträger. Der prüft sie und gibt frei oder fordert eine Nachbesserung an. Erst nach der Bildungsträger-Freigabe wird der Abschluss-Button aktiv.',
-  },
-  {
-    num: "11",
     title: "Abschließen + AfA-Übermittlung",
     body: 'Jetzt „Nachweis abschließen": das HTML wird als A4-PDF gerendert und trägt die einfachen elektronischen Signaturen von Coach und Teilnehmer:in (Canvas + Zeitstempel + Audit-Protokoll). Anschließend übermittelt der Bildungsträger an die Agentur für Arbeit. Ein abgeschlossener Kunde ist rechtlich fixiert und kann nicht mehr verändert werden.',
   },

@@ -10,7 +10,6 @@ import { logAudit } from "@/lib/audit";
 import { resolveParticipantToken } from "@/lib/participant-tokens";
 import { isFutureSessionDate } from "@/lib/dates";
 import { recomputeSessionStatus } from "@/lib/session-status";
-import { classifyApprovalGate } from "@/lib/sign-state";
 import { sendDocumentSignedNotification } from "@/lib/email";
 import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 
@@ -171,182 +170,6 @@ export async function submitParticipantSignature(
   return undefined;
 }
 
-export type ApproveState = { error?: string } | undefined;
-
-/**
- * Finale Freigabe des Stundennachweises durch den Teilnehmer (CLAUDE.md
- * Schritt 8). Keine FES, rein dokumentarisch — aktive Bestätigung per
- * Klick + Zeitstempel + IP/User-Agent im Audit-Log.
- *
- * Pre-Conditions (zur Sicherheit hier nochmal geprüft, obwohl die UI
- * den Button nur im entsprechenden State zeigt):
- *   - Token gültig & nicht invalidiert
- *   - Teilnehmer ist im Kurs
- *   - ALLE nicht-gelöschten Sessions des Kurses haben die TN-Signatur
- *   - Noch keine bestehende Approval für diese (course × participant)
- */
-export async function approveFinalDocument(
-  _prev: ApproveState,
-  formData: FormData,
-): Promise<ApproveState> {
-  const token = String(formData.get("token") ?? "");
-  const confirmed = formData.get("confirm") === "on";
-
-  if (!token) return { error: "Token fehlt." };
-  if (!confirmed) return { error: "Bitte aktiv bestätigen." };
-
-  const tokenHash = hashToken(token);
-  const h = await headers();
-  const ipAddress =
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const userAgent = h.get("user-agent") ?? null;
-
-  try {
-    await db.transaction(async (tx) => {
-      const [tok] = await tx
-        .select({
-          courseId: schema.participantAccessTokens.courseId,
-          participantId: schema.participantAccessTokens.participantId,
-        })
-        .from(schema.participantAccessTokens)
-        .where(
-          and(
-            eq(schema.participantAccessTokens.tokenHash, tokenHash),
-            isNull(schema.participantAccessTokens.usedAt),
-            gt(schema.participantAccessTokens.expiresAt, new Date()),
-          ),
-        )
-        .limit(1);
-      if (!tok) throw new Error("TOKEN_INVALID");
-
-      // 1:1: Der Token-Teilnehmer muss der Kunde dieses Kurses sein.
-      const [courseRow] = await tx
-        .select({ participantId: schema.courses.participantId })
-        .from(schema.courses)
-        .where(eq(schema.courses.id, tok.courseId))
-        .limit(1);
-      if (!courseRow || courseRow.participantId !== tok.participantId) {
-        throw new Error("NOT_ENROLLED");
-      }
-
-      // Preview/Freigabe ist nur gültig, wenn ALLE Sessions des Kurses
-      // `status='completed'` sind — das bedeutet Coach + alle enrollten
-      // TN haben signiert (siehe recomputeSessionStatus). Früher prüften
-      // wir nur TN-Signaturen des aktuellen Teilnehmers, wodurch ein TN
-      // theoretisch per Direct-POST approven konnte, bevor andere TN
-      // oder der Coach unterschrieben hatten.
-      const allSessions = await tx
-        .select({ id: schema.sessions.id, status: schema.sessions.status })
-        .from(schema.sessions)
-        .where(
-          and(
-            eq(schema.sessions.courseId, tok.courseId),
-            isNull(schema.sessions.deletedAt),
-          ),
-        );
-      if (allSessions.length === 0) throw new Error("NO_SESSIONS");
-      // Welche Termine hat DIESER Kunde bereits signiert? Braucht das Gate, um
-      // zu entscheiden, an wessen Unterschrift es noch hängt.
-      const tnSignedIds = new Set(
-        (
-          await tx
-            .select({ sessionId: schema.signatures.sessionId })
-            .from(schema.signatures)
-            .innerJoin(
-              schema.sessions,
-              eq(schema.sessions.id, schema.signatures.sessionId),
-            )
-            .where(
-              and(
-                eq(schema.sessions.courseId, tok.courseId),
-                eq(schema.signatures.participantId, tok.participantId),
-                eq(schema.signatures.signerType, "participant"),
-              ),
-            )
-        ).map((r) => r.sessionId),
-      );
-      // "participant_open" → TN hat selbst noch offene Termine (erst signieren).
-      // "coach_open" → TN fertig, nur der Coach fehlt noch (warten, nicht
-      // fälschlich „signiere deine offenen Termine"). "ready" → freigabebereit.
-      const gate = classifyApprovalGate(
-        allSessions.map((s) => ({
-          status: s.status,
-          participantSigned: tnSignedIds.has(s.id),
-        })),
-      );
-      if (gate === "participant_open") throw new Error("PARTICIPANT_OPEN");
-      if (gate === "coach_open") throw new Error("COACH_OPEN");
-
-      // Doppel-Freigabe verhindern. Unique-Index auf (course, participant)
-      // würde das auch kicken, aber wir wollen eine saubere Fehlermeldung.
-      const [existing] = await tx
-        .select({ id: schema.participantApprovals.id })
-        .from(schema.participantApprovals)
-        .where(
-          and(
-            eq(schema.participantApprovals.courseId, tok.courseId),
-            eq(schema.participantApprovals.participantId, tok.participantId),
-          ),
-        )
-        .limit(1);
-      if (existing) throw new Error("ALREADY_APPROVED");
-
-      await tx.insert(schema.participantApprovals).values({
-        courseId: tok.courseId,
-        participantId: tok.participantId,
-        ipAddress,
-        userAgent,
-      });
-
-      await logAudit(
-        {
-          actorType: "participant",
-          actorId: tok.participantId,
-          action: "participant.approve",
-          resourceType: "course",
-          resourceId: tok.courseId,
-          ipAddress,
-          userAgent,
-        },
-        tx,
-      );
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message === "TOKEN_INVALID") {
-      return {
-        error:
-          "Link ist abgelaufen oder wurde durch einen neueren ersetzt. Bitte neuen Link beim Coach anfordern.",
-      };
-    }
-    if (message === "NOT_ENROLLED") {
-      return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
-    }
-    if (message === "NO_SESSIONS") {
-      return { error: "Der Kurs hat noch keine Termine." };
-    }
-    if (message === "PARTICIPANT_OPEN") {
-      return {
-        error:
-          "Du hast noch nicht alle Termine bestätigt. Bitte zuerst alle offenen signieren.",
-      };
-    }
-    if (message === "COACH_OPEN") {
-      return {
-        error:
-          "Du hast deinen Teil erledigt – danke! Dein Coach muss noch nicht signierte Termine bestätigen. Danach kannst du den Nachweis freigeben.",
-      };
-    }
-    if (message === "ALREADY_APPROVED") {
-      return { error: "Du hast den Nachweis bereits freigegeben." };
-    }
-    throw err;
-  }
-
-  revalidatePath(`/sign/${token}`);
-  return undefined;
-}
-
 export type DocSignState = { error?: string } | undefined;
 
 /**
@@ -478,13 +301,17 @@ export async function submitDocumentSignature(
 }
 
 /**
- * Info-Mail „Kunde hat unterschrieben" an die **verwaltende Seite** des
- * Dokuments (wie eine To-Do-Liste zum Abarbeiten):
- *   - DS/TNV/Merge (owner=bildungstraeger) → alle aktiven Bildungsträger-User
- *     des Mandanten (bei erango: avgs@erango.de).
- *   - STV (owner=coach) → der Coach, der die STV angelegt hat (`created_by`).
- * Best-effort — jede Zustellung ist einzeln gekapselt, ein Fehler wird nur
- * geloggt und stoppt weder die anderen Empfänger noch die Signatur.
+ * Info-Mail „Kunde hat unterschrieben" an die verwaltenden Seiten des Dokuments
+ * (wie eine To-Do-Liste zum Abarbeiten):
+ *   - **Bildungsträger** (alle aktiven BT-User des Mandanten, bei erango
+ *     avgs@erango.de) wird bei JEDEM Dokumenttyp informiert — er braucht das
+ *     signierte Dokument immer (DS/TNV/Merge gehören ihm, die STV benötigt er
+ *     ebenfalls in der Akte).
+ *   - Bei der **STV** (owner=coach) zusätzlich der anlegende Coach (`created_by`).
+ * Empfänger werden per E-Mail dedupliziert (Coach kann bei geteiltem Login = BT-
+ * User sein → nur eine Mail). Best-effort — jede Zustellung ist gekapselt, ein
+ * Fehler wird nur geloggt und stoppt weder die anderen Empfänger noch die
+ * Signatur.
  */
 async function notifyDocumentSigned(params: {
   documentId: string;
@@ -497,18 +324,20 @@ async function notifyDocumentSigned(params: {
   try {
     const cfg = getDocumentConfig(params.docType);
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const btUrl = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
+    const coachUrl = `${base}/coach/courses/${params.courseId}/dokumente`;
 
-    let recipients: { email: string }[] = [];
-    let url: string;
+    // Empfänger sammeln, dedupliziert per E-Mail (erste Zuordnung gewinnt).
+    const recipients = new Map<string, { email: string; url: string }>();
 
-    if (cfg.owner === "bildungstraeger") {
-      const [participant] = await db
-        .select({ tenantId: schema.participants.tenantId })
-        .from(schema.participants)
-        .where(eq(schema.participants.id, params.participantId))
-        .limit(1);
-      if (!participant) return;
-      recipients = await db
+    // Bildungsträger-User des Mandanten — immer (jeder Dokumenttyp).
+    const [participant] = await db
+      .select({ tenantId: schema.participants.tenantId })
+      .from(schema.participants)
+      .where(eq(schema.participants.id, params.participantId))
+      .limit(1);
+    if (participant) {
+      const btUsers = await db
         .select({ email: schema.users.email })
         .from(schema.users)
         .where(
@@ -518,10 +347,16 @@ async function notifyDocumentSigned(params: {
             isNull(schema.users.deletedAt),
           ),
         );
-      url = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
-    } else {
-      // STV → den anlegenden Coach informieren.
-      recipients = await db
+      for (const u of btUsers) {
+        if (!recipients.has(u.email)) {
+          recipients.set(u.email, { email: u.email, url: btUrl });
+        }
+      }
+    }
+
+    // Bei der STV zusätzlich der anlegende Coach.
+    if (cfg.owner === "coach") {
+      const [coach] = await db
         .select({ email: schema.users.email })
         .from(schema.documents)
         .innerJoin(schema.users, eq(schema.users.id, schema.documents.createdBy))
@@ -530,19 +365,21 @@ async function notifyDocumentSigned(params: {
             eq(schema.documents.id, params.documentId),
             isNull(schema.users.deletedAt),
           ),
-        );
-      url = `${base}/coach/courses/${params.courseId}/dokumente`;
+        )
+        .limit(1);
+      if (coach && !recipients.has(coach.email)) {
+        recipients.set(coach.email, { email: coach.email, url: coachUrl });
+      }
     }
-    if (recipients.length === 0) return;
 
-    for (const r of recipients) {
+    for (const r of recipients.values()) {
       try {
         await sendDocumentSignedNotification({
           to: r.email,
           documentLabel: cfg.label,
           participantName: params.participantName,
           courseTitle: params.courseTitle,
-          url,
+          url: r.url,
         });
       } catch (err) {
         console.error(

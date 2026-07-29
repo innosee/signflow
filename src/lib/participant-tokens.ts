@@ -5,10 +5,9 @@ import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import type { DocumentTypeId } from "@/lib/documents/config";
-import { sendParticipantMagicLink, sendParticipantPreview } from "@/lib/email";
+import { sendParticipantMagicLink } from "@/lib/email";
 import {
   composeMagicLinkSms,
-  composePreviewSms,
   isSmsEnabled,
   isValidE164,
   sendSms,
@@ -157,82 +156,9 @@ export async function sendParticipantInvite(params: {
     to: row.participantEmail,
     participantName: row.participantName,
     courseTitle: row.courseTitle,
-    // sessionDate bleibt Platzhalter — die Mail betrifft jetzt den ganzen
-    // Kurs, nicht eine einzelne Session. Könnte später durch "X offene
-    // Sessions" ersetzt werden.
-    sessionDate: "laufender Kurs",
     url,
   });
   return { usedChannel: "email" };
-}
-
-/**
- * Preview-Variant: identisch zu `sendParticipantInvite`, aber mit der
- * Preview-Mail-Vorlage. Flow (CLAUDE.md Schritt 7-8):
- *   - Alle Sessions sind signiert → Coach klickt "Preview senden"
- *   - TN bekommt frischen 7-Tage-Token + eine andere Betreffzeile/CTA
- *   - Sign-Page erkennt automatisch den Preview-Stand (keine offenen
- *     Sessions mehr, aber noch keine Freigabe) und zeigt das finale
- *     Dokument zur Freigabe an.
- *
- * Schema-mäßig ist das DERSELBE Token-Typ — der Stand im Workflow wird
- * aus dem Signatur-/Freigabe-State abgeleitet, nicht aus einem Flag am
- * Token.
- */
-export async function sendParticipantPreviewInvite(params: {
-  courseId: string;
-  participantId: string;
-  channel?: NotificationChannel;
-}): Promise<void> {
-  const requested: NotificationChannel = params.channel ?? "email";
-
-  const rows = await db
-    .select({
-      participantName: schema.participants.name,
-      participantEmail: schema.participants.email,
-      participantPhone: schema.participants.phone,
-      courseTitle: schema.courses.title,
-    })
-    .from(schema.courses)
-    .innerJoin(
-      schema.participants,
-      eq(schema.participants.id, schema.courses.participantId),
-    )
-    .where(
-      and(
-        eq(schema.courses.id, params.courseId),
-        eq(schema.courses.participantId, params.participantId),
-      ),
-    )
-    .limit(1);
-
-  const row = rows[0];
-  if (!row) {
-    throw new Error("Teilnehmer ist nicht in diesem Kurs eingeschrieben.");
-  }
-
-  const channel = effectiveChannel(requested, row.participantPhone);
-
-  const { url } = await createParticipantMagicLink(params);
-
-  if (channel === "sms") {
-    await sendSms({
-      to: row.participantPhone!,
-      body: composePreviewSms({
-        participantName: row.participantName,
-        courseTitle: row.courseTitle,
-        url,
-      }),
-    });
-    return;
-  }
-
-  await sendParticipantPreview({
-    to: row.participantEmail,
-    participantName: row.participantName,
-    courseTitle: row.courseTitle,
-    url,
-  });
 }
 
 export type ResolvedToken = {

@@ -1,15 +1,11 @@
 import Link from "next/link";
 
 import { AutoRefresh } from "@/components/auto-refresh";
-import { Stundennachweis } from "@/components/stundennachweis";
 import { isFutureSessionDate } from "@/lib/dates";
-import { loadStundennachweisSheet } from "@/lib/sheet-data";
 import { resolveParticipantToken } from "@/lib/participant-tokens";
-import { classifyApprovalGate } from "@/lib/sign-state";
 
 import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 
-import { ApproveForm } from "./approve-form";
 import { DocumentSignForm } from "./document-sign-form";
 import { ParticipantSignatureOnboarding } from "./signature-onboarding";
 import { SignForm } from "./sign-form";
@@ -73,98 +69,13 @@ export default async function ParticipantSignPage({ params }: Props) {
   );
   const doneDocs = resolved.documents.filter((d) => d.hasParticipantSignature);
 
-  // Freigabe-Gate (geteilt mit der Server-Action): "ready" heißt, ALLE Termine
-  // sind vollständig signiert (Coach UND TN). Der TN darf seinen Teil vor dem
-  // Coach signieren (gewollt) — dann ist `open` leer, aber das Gate noch nicht
-  // "ready", und er wartet auf den Coach statt fälschlich „offene Termine"
-  // signieren zu sollen.
-  const approvalGate = classifyApprovalGate(
-    resolved.sessions.map((s) => ({
-      status: s.status,
-      participantSigned: s.hasParticipantSignature,
-    })),
-  );
-
-  // Preview-Modus: Stundennachweis final (Gate "ready") und der Teilnehmer hat
-  // noch nicht freigegeben → er sieht den vollständigen Nachweis pixel-identisch
-  // zum späteren PDF + einen Freigabe-Button (CLAUDE.md Schritt 8).
-  //
-  // Offene Kunde-Dokumente haben Vorrang: solange noch ein freigegebenes
-  // Dokument auf die Teilnehmer-Unterschrift wartet, NICHT in den Preview-Modus
-  // wechseln — sonst würde die Vollbild-Vorschau (early return unten) die
-  // Dokumente ausblenden und der Teilnehmer käme nicht an sie heran. Erst wenn
-  // alle Dokumente signiert sind, erscheint die Stundennachweis-Freigabe.
-  const inPreviewMode =
-    hasSignature &&
-    resolved.sessions.length > 0 &&
-    approvalGate === "ready" &&
-    !resolved.hasApproved &&
-    openDocs.length === 0;
-
-  if (inPreviewMode) {
-    const sheet = await loadStundennachweisSheet({
-      courseId: resolved.courseId,
-      participantId: resolved.participantId,
-    });
-    // Wenn wir im Preview-Modus sind (alle Sessions signiert + nicht
-    // approved), MUSS das Sheet ladbar sein — sonst wäre die TN hier
-    // wieder im normalen „alle bestätigt"-Flow und könnte nie freigeben.
-    // Statt stillschweigend den alten Flow zu zeigen, hart fehlschlagen
-    // mit klarer Meldung.
-    if (!sheet) {
-      return (
-        <div className="mx-auto max-w-md px-4 py-16">
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-            <h1 className="text-lg font-semibold text-red-800">
-              Nachweis gerade nicht ladbar
-            </h1>
-            <p className="mt-2 text-sm text-red-700">
-              Wir konnten dein fertiges Dokument gerade nicht zusammenstellen.
-              Bitte in ein paar Minuten erneut probieren oder deinen Coach
-              informieren.
-            </p>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="preview-wrapper">
-        <header className="preview-header">
-          <h1 className="text-lg font-semibold">Dein Stundennachweis</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Bitte prüfe deinen Stundennachweis auf Richtigkeit. Mit der
-            Freigabe bestätigst du, dass deine Anwesenheiten korrekt erfasst
-            sind.
-          </p>
-        </header>
-        <div className="preview-sheet">
-          <Stundennachweis
-            branding={sheet.branding}
-            course={sheet.course}
-            bedarfstraeger={sheet.bedarfstraeger}
-            coach={sheet.coach}
-            participant={sheet.participant}
-            sessions={sheet.sessions}
-            audit={sheet.audit}
-          />
-        </div>
-        <div className="preview-cta">
-          <ApproveForm token={token} />
-          <div className="mx-auto mt-3 max-w-140">
-            <DataProtectionNotice />
-          </div>
-        </div>
-        <style>{previewCss}</style>
-      </div>
-    );
-  }
-
-  // „Vorgang abgeschlossen" nur, wenn der TN freigegeben hat UND es keine
-  // offenen Termine gibt. Legt der Coach nach der Freigabe einen neuen Termin
-  // an, wird die Freigabe serverseitig verworfen (siehe createSession) — als
-  // zusätzliche Absicherung haben offene Termine hier Vorrang vor dem
-  // „Fertig"-Screen, damit der TN den neuen Termin signieren kann.
-  if (resolved.hasApproved && open.length === 0 && openDocs.length === 0) {
+  // „Fertig": Der Teilnehmer hat seine Unterschrift angelegt und es gibt weder
+  // offene Termine noch offene Dokumente. Eine separate Stundennachweis-
+  // „Freigabe" durch den Teilnehmer gibt es NICHT mehr (entfernt 2026-07-29) —
+  // die einzelnen Termin-Signaturen + der Audit-Trail dokumentieren die
+  // Zustimmung. Offene Termine/Dokumente haben Vorrang vor dem Fertig-Screen,
+  // damit der TN neu angelegte Einheiten noch signieren kann.
+  if (hasSignature && open.length === 0 && openDocs.length === 0) {
     return (
       <div className="mx-auto max-w-xl px-4 py-8 space-y-6">
         <header>
@@ -173,11 +84,9 @@ export default async function ParticipantSignPage({ params }: Props) {
           </h1>
         </header>
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
-          <strong>
-            Danke, {resolved.participantName} – Vorgang abgeschlossen.
-          </strong>{" "}
-          Du hast deinen Stundennachweis geprüft und freigegeben. Du musst
-          nichts weiter tun.
+          <strong>Danke, {resolved.participantName} – alles erledigt.</strong>{" "}
+          Du hast alle Termine und Dokumente unterschrieben. Du musst nichts
+          weiter tun.
         </div>
         <DataProtectionNotice />
       </div>
@@ -205,8 +114,7 @@ export default async function ParticipantSignPage({ params }: Props) {
         />
       ) : open.length === 0 ? (
         <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
-          Alle Termine sind bestätigt – danke! Sobald dein Coach die Maßnahme
-          abschließt, bekommst du eine Vorschau zur finalen Freigabe.
+          Alle Termine sind bestätigt – danke!
         </div>
       ) : (
         <section className="space-y-3">
@@ -335,44 +243,3 @@ function SessionRow({
     </div>
   );
 }
-
-// Mobile-Vorgabe: das Sheet skaliert horizontal auf den Viewport,
-// damit der TN auf dem Handy nicht seitwärts scrollen muss. Der
-// Freigabe-Button liegt sticky am unteren Rand, damit er auch nach
-// dem Scrollen durchs Sheet erreichbar bleibt.
-const previewCss = `
-  .preview-wrapper {
-    background: #f4f4f5;
-    min-height: 100vh;
-    padding: 16px 8px 160px 8px;
-  }
-  .preview-header {
-    max-width: 800px;
-    margin: 0 auto 16px;
-    padding: 0 8px;
-  }
-  .preview-sheet {
-    max-width: 800px;
-    margin: 0 auto;
-    transform-origin: top center;
-  }
-  @media (max-width: 820px) {
-    /* Auf schmalen Screens rutscht das A4-Sheet in Overflow — einfach
-       horizontal scrollbar lassen, das PDF-Layout bleibt intakt. */
-    .preview-sheet { overflow-x: auto; }
-  }
-  .preview-cta {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 16px;
-    background: rgba(255,255,255,0.96);
-    border-top: 1px solid #d4d4d8;
-    backdrop-filter: blur(6px);
-  }
-  .preview-cta form {
-    max-width: 560px;
-    margin: 0 auto;
-  }
-`;
