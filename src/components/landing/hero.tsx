@@ -15,9 +15,8 @@ export function LandingHero() {
 
           <p className="max-w-xl text-base leading-relaxed text-zinc-600 sm:text-lg">
             Stundennachweise für AVGS-Maßnahmen digital erfassen, von Coach und
-            Teilnehmer:innen signieren, als A4-PDF mit fortgeschrittener
-            elektronischer Signatur (FES) an die Agentur für Arbeit übermitteln
-            — alles in einem Flow.
+            Teilnehmer:innen rechtssicher signieren und als A4-PDF an die
+            Agentur für Arbeit übermitteln — alles in einem Flow.
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -49,7 +48,7 @@ export function LandingHero() {
           <dl className="grid grid-cols-3 gap-6 pt-6 text-sm">
             <div>
               <dt className="text-zinc-500">AfA-Konform</dt>
-              <dd className="mt-1 font-medium text-zinc-950">FES nach eIDAS</dd>
+              <dd className="mt-1 font-medium text-zinc-950">eIDAS-Signatur</dd>
             </div>
             <div>
               <dt className="text-zinc-500">Hosting</dt>
@@ -72,7 +71,7 @@ export function LandingHero() {
 
 /**
  * Dekoratives Stundennachweis-Mockup als SVG — zeigt die Kernidee
- * (Kopfblock, Termin-Tabelle mit Signaturen, FES-Siegel) ohne echtes
+ * (Kopfblock, Termin-Tabelle mit Signaturen) ohne echtes
  * Screenshot-Asset. Verzichtet bewusst auf `<img>` damit wir keine Blob-/
  * CDN-Abhängigkeit für die öffentliche Startseite bauen.
  */
@@ -98,7 +97,7 @@ function MockupPreview() {
               strokeLinejoin="round"
             />
           </svg>
-          FES-signiert
+          Signiert
         </span>
       </div>
 

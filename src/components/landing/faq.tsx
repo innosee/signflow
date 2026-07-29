@@ -34,7 +34,7 @@ const COACH_FAQ: Q[] = [
 const BILDUNGSTRAEGER_FAQ: Q[] = [
   {
     q: "Ist die elektronische Signatur rechtsgültig für die AfA?",
-    a: "Ja. Die Anwesenheitslisten werden digital von Coach und Teilnehmer:in signiert (einfache elektronische Signatur nach eIDAS, EU-Verordnung 910/2014) — abgesichert durch Zeitstempel, Identitätsnachweis und Audit-Protokoll. Das ergänzende fortgeschrittene Siegel (FES via D-Trust) ist in Vorbereitung. Eine qualifizierte Signatur (QES) ist für AfA-Stundennachweise nicht erforderlich und würde deutlich höhere Kosten verursachen.",
+    a: "Ja. Die Anwesenheitslisten werden digital von Coach und Teilnehmer:in signiert (einfache elektronische Signatur nach eIDAS, EU-Verordnung 910/2014) — abgesichert durch Zeitstempel, Identitätsnachweis und Audit-Protokoll. Eine qualifizierte Signatur (QES) ist für AfA-Stundennachweise nicht erforderlich und würde deutlich höhere Kosten verursachen.",
   },
   {
     q: "Wo werden die Daten gespeichert?",
