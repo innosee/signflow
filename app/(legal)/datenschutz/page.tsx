@@ -290,21 +290,20 @@ export default function DatenschutzPage() {
             Zugriffstoken für die Signatur (Magic Links): ab Ausstellung
             7 Tage gültig, danach automatisch ungültig. Gespeichert wird
             ausschließlich ein kryptographischer Hash des Tokens, nicht der
-            versandte Link selbst.{" "}
-            <Placeholder>
-              Aufbewahrungs-/Löschintervall der abgelaufenen Token-Datensätze
-              (Cleanup-Routine) festlegen und hier ergänzen.
-            </Placeholder>
+            versandte Link selbst. Abgelaufene Token-Datensätze werden
+            30 Tage nach Ablauf durch eine tägliche automatische
+            Löschroutine entfernt.
           </li>
           <li>
-            Audit-Log-Einträge: signaturbezogene Ereignisse (Unterschriften,
-            Freigaben) für die Dauer der Aufbewahrung der zugehörigen
-            Nachweise, da sie deren Beweiswert tragen.{" "}
-            <Placeholder>
-              Löschroutine für nicht-signaturbezogene Audit-Einträge festlegen
-              (Empfehlung: 12 Monate) und technisch umsetzen; danach hier
-              konkretisieren.
-            </Placeholder>
+            Audit-Log-Einträge: 12 Monate, danach automatische Löschung
+            durch eine tägliche Löschroutine. Ausgenommen sind
+            signaturbezogene Einträge (z.&nbsp;B. Freigaben durch
+            Teilnehmende, Prüfung und Abschluss des Nachweises,
+            Übermittlung an die Agentur für Arbeit sowie nachträgliche
+            Änderungen an signierten Terminen) — diese tragen den
+            Beweiswert des Anwesenheitsnachweises und werden wie dieser
+            bis zur Erfüllung der gesetzlichen Aufbewahrungspflichten
+            gespeichert.
           </li>
           <li>
             Versandprotokolle des SMS-Dienstleisters (Mobilnummer,
