@@ -7,13 +7,11 @@ import { BUNDESLAENDER } from "@/lib/feiertage";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
 import { createCourse, type CourseFormState } from "../actions";
+import {
+  BedarfstraegerSelect,
+  type BedarfstraegerOption,
+} from "../bedarfstraeger-select";
 import { CoachMultiSelect, type CoachOption } from "../coach-multiselect";
-
-type BedarfstraegerOption = {
-  id: string;
-  name: string;
-  type: "JC" | "AA";
-};
 
 type CourseFormValues = {
   coachIds: string[];
@@ -139,22 +137,13 @@ export function CourseForm({
             <span className="text-sm font-medium text-zinc-800">
               Bedarfsträger <span className="text-red-600">*</span>
             </span>
-            <select
-              name="bedarfstraegerId"
-              required
+            <BedarfstraegerSelect
+              options={bedarfstraeger}
               value={head.bedarfstraegerId}
-              onChange={setField("bedarfstraegerId")}
-              className="block w-full rounded-lg border border-zinc-500 bg-white px-3 py-2 text-sm outline-none focus:border-black"
-            >
-              <option value="" disabled>
-                Bitte wählen…
-              </option>
-              {bedarfstraeger.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.type})
-                </option>
-              ))}
-            </select>
+              onChange={(id) =>
+                setHead((prev) => ({ ...prev, bedarfstraegerId: id }))
+              }
+            />
           </label>
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-zinc-800">
