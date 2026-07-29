@@ -183,22 +183,6 @@ export function composeMagicLinkSms(params: {
   return `${greeting}bitte bestätige deine Anwesenheit für „${params.courseTitle}": ${params.url} (7 Tage gültig).`;
 }
 
-/**
- * Preview-SMS-Variant: anderer Wortlaut als der Magic-Link, weil der TN
- * jetzt nicht mehr Sessions bestätigt, sondern das fertige Dokument als
- * Ganzes freigibt. Lebt zentral hier (statt inline im Caller), damit
- * Magic-Link- und Preview-SMS denselben Stil + dieselben Constraints
- * (1 Segment, Link früh, Gültigkeits-Hinweis) teilen.
- */
-export function composePreviewSms(params: {
-  participantName: string;
-  courseTitle: string;
-  url: string;
-}): string {
-  const greeting = greetingForFirstName(params.participantName);
-  return `${greeting}dein Stundennachweis für „${params.courseTitle}“ ist fertig — bitte ansehen und freigeben: ${params.url} (7 Tage gültig).`;
-}
-
 // Vorname only, damit Anrede + Link in 1 Segment passen.
 function greetingForFirstName(fullName: string): string {
   const firstName = fullName.split(" ")[0] ?? "";

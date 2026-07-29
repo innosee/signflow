@@ -10,7 +10,7 @@ import {
 } from "./actions";
 
 /**
- * Empfohlener KI-gestützter Pre-Step vor „Vorschau an Teilnehmer senden":
+ * Empfohlener KI-gestützter Pre-Step vor „Zur Prüfung einreichen":
  * checkt die Stichwort-Einträge aller Sessions gegen AZAV-Compliance
  * (No-Go-Wortschatz, Defizitorientierung, Roter Faden zur Maßnahme).
  *

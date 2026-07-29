@@ -321,35 +321,6 @@ export async function sendParticipantMagicLink(params: {
 }
 
 /**
- * Preview-Mail: alle Sessions sind vom Coach+TN signiert, Coach möchte jetzt
- * die finale Freigabe einholen. URL führt auf dieselbe Sign-Page wie der
- * normale Magic-Link — die Page entscheidet anhand des Signatur-Stands
- * automatisch, dass der Preview-Modus angezeigt wird (pixel-identisch zum
- * späteren PDF inkl. Freigabe-Button).
- */
-export async function sendParticipantPreview(params: {
-  to: string;
-  participantName: string;
-  courseTitle: string;
-  url: string;
-}): Promise<void> {
-  const body = `
-    <p>Hallo ${esc(params.participantName)},</p>
-    <p>Deine Maßnahme <strong>${esc(params.courseTitle)}</strong> ist abgeschlossen. Bitte sieh dir den fertigen Stundennachweis einmal an und gib ihn frei — du bestätigst damit die inhaltliche Richtigkeit deiner Anwesenheiten.</p>
-    ${renderButton(params.url, "Nachweis ansehen & freigeben")}
-    <p style="font-size:12px; color:#888;">Der Link ist 7 Tage gültig. Die Freigabe ist kein rechtliches Siegel — das setzt im Anschluss dein Coach.</p>
-  `;
-  await sendEmail({
-    to: params.to,
-    // Subject ist plaintext-Feld → KEIN HTML-Escaping, sonst würden
-    // Entity-Sequenzen wie `&amp;` im Inbox-Betreff sichtbar. Escaping
-    // bleibt auf dem HTML-Body.
-    subject: `Nachweis freigeben – ${params.courseTitle}`,
-    html: renderLayout("Stundennachweis zur Freigabe", body),
-  });
-}
-
-/**
  * Mail an den Bildungsträger: ein Coach hat eine Anwesenheitsliste zur Prüfung
  * eingereicht (FES-Gate 3/3). Führt direkt auf die Prüf-Seite.
  */
