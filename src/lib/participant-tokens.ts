@@ -156,10 +156,6 @@ export async function sendParticipantInvite(params: {
     to: row.participantEmail,
     participantName: row.participantName,
     courseTitle: row.courseTitle,
-    // sessionDate bleibt Platzhalter — die Mail betrifft jetzt den ganzen
-    // Kurs, nicht eine einzelne Session. Könnte später durch "X offene
-    // Sessions" ersetzt werden.
-    sessionDate: "laufender Kurs",
     url,
   });
   return { usedChannel: "email" };

@@ -478,13 +478,17 @@ export async function submitDocumentSignature(
 }
 
 /**
- * Info-Mail „Kunde hat unterschrieben" an die **verwaltende Seite** des
- * Dokuments (wie eine To-Do-Liste zum Abarbeiten):
- *   - DS/TNV/Merge (owner=bildungstraeger) → alle aktiven Bildungsträger-User
- *     des Mandanten (bei erango: avgs@erango.de).
- *   - STV (owner=coach) → der Coach, der die STV angelegt hat (`created_by`).
- * Best-effort — jede Zustellung ist einzeln gekapselt, ein Fehler wird nur
- * geloggt und stoppt weder die anderen Empfänger noch die Signatur.
+ * Info-Mail „Kunde hat unterschrieben" an die verwaltenden Seiten des Dokuments
+ * (wie eine To-Do-Liste zum Abarbeiten):
+ *   - **Bildungsträger** (alle aktiven BT-User des Mandanten, bei erango
+ *     avgs@erango.de) wird bei JEDEM Dokumenttyp informiert — er braucht das
+ *     signierte Dokument immer (DS/TNV/Merge gehören ihm, die STV benötigt er
+ *     ebenfalls in der Akte).
+ *   - Bei der **STV** (owner=coach) zusätzlich der anlegende Coach (`created_by`).
+ * Empfänger werden per E-Mail dedupliziert (Coach kann bei geteiltem Login = BT-
+ * User sein → nur eine Mail). Best-effort — jede Zustellung ist gekapselt, ein
+ * Fehler wird nur geloggt und stoppt weder die anderen Empfänger noch die
+ * Signatur.
  */
 async function notifyDocumentSigned(params: {
   documentId: string;
@@ -497,18 +501,20 @@ async function notifyDocumentSigned(params: {
   try {
     const cfg = getDocumentConfig(params.docType);
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const btUrl = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
+    const coachUrl = `${base}/coach/courses/${params.courseId}/dokumente`;
 
-    let recipients: { email: string }[] = [];
-    let url: string;
+    // Empfänger sammeln, dedupliziert per E-Mail (erste Zuordnung gewinnt).
+    const recipients = new Map<string, { email: string; url: string }>();
 
-    if (cfg.owner === "bildungstraeger") {
-      const [participant] = await db
-        .select({ tenantId: schema.participants.tenantId })
-        .from(schema.participants)
-        .where(eq(schema.participants.id, params.participantId))
-        .limit(1);
-      if (!participant) return;
-      recipients = await db
+    // Bildungsträger-User des Mandanten — immer (jeder Dokumenttyp).
+    const [participant] = await db
+      .select({ tenantId: schema.participants.tenantId })
+      .from(schema.participants)
+      .where(eq(schema.participants.id, params.participantId))
+      .limit(1);
+    if (participant) {
+      const btUsers = await db
         .select({ email: schema.users.email })
         .from(schema.users)
         .where(
@@ -518,10 +524,16 @@ async function notifyDocumentSigned(params: {
             isNull(schema.users.deletedAt),
           ),
         );
-      url = `${base}/bildungstraeger/courses/${params.courseId}/dokumente`;
-    } else {
-      // STV → den anlegenden Coach informieren.
-      recipients = await db
+      for (const u of btUsers) {
+        if (!recipients.has(u.email)) {
+          recipients.set(u.email, { email: u.email, url: btUrl });
+        }
+      }
+    }
+
+    // Bei der STV zusätzlich der anlegende Coach.
+    if (cfg.owner === "coach") {
+      const [coach] = await db
         .select({ email: schema.users.email })
         .from(schema.documents)
         .innerJoin(schema.users, eq(schema.users.id, schema.documents.createdBy))
@@ -530,19 +542,21 @@ async function notifyDocumentSigned(params: {
             eq(schema.documents.id, params.documentId),
             isNull(schema.users.deletedAt),
           ),
-        );
-      url = `${base}/coach/courses/${params.courseId}/dokumente`;
+        )
+        .limit(1);
+      if (coach && !recipients.has(coach.email)) {
+        recipients.set(coach.email, { email: coach.email, url: coachUrl });
+      }
     }
-    if (recipients.length === 0) return;
 
-    for (const r of recipients) {
+    for (const r of recipients.values()) {
       try {
         await sendDocumentSignedNotification({
           to: r.email,
           documentLabel: cfg.label,
           participantName: params.participantName,
           courseTitle: params.courseTitle,
-          url,
+          url: r.url,
         });
       } catch (err) {
         console.error(

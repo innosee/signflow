@@ -301,19 +301,22 @@ export async function sendParticipantMagicLink(params: {
   to: string;
   participantName: string;
   courseTitle: string;
-  sessionDate: string;
   url: string;
 }): Promise<void> {
+  // Ein kurs-scoped Link deckt ALLES Offene ab — Termine UND freigegebene
+  // Dokumente (DS/TNV/STV/Merge). Der Text ist deshalb bewusst generisch: er
+  // wird sowohl bei „Teilnehmer benachrichtigen" (Termine) als auch beim
+  // automatischen Versand nach einer Dokument-Freigabe verwendet.
   const body = `
     <p>Hallo ${esc(params.participantName)},</p>
-    <p>Bitte bestätige deine Anwesenheit für den Termin am <strong>${esc(params.sessionDate)}</strong> in der Maßnahme <strong>${esc(params.courseTitle)}</strong>.</p>
-    ${renderButton(params.url, "Jetzt bestätigen")}
-    <p style="font-size:12px; color:#888;">Der Link ist 7 Tage gültig. Du kannst ihn mehrfach öffnen und darüber alle offenen Termine bestätigen.</p>
+    <p>für dich liegt in der Maßnahme <strong>${esc(params.courseTitle)}</strong> etwas zum Unterschreiben bereit — offene Termine und/oder Dokumente.</p>
+    ${renderButton(params.url, "Jetzt öffnen & unterschreiben")}
+    <p style="font-size:12px; color:#888;">Der Link ist 7 Tage gültig. Du kannst ihn mehrfach öffnen und darüber alle offenen Punkte erledigen.</p>
   `;
   await sendEmail({
     to: params.to,
-    subject: `Anwesenheit bestätigen – ${params.courseTitle}`,
-    html: renderLayout("Anwesenheit bestätigen", body),
+    subject: `Zum Unterschreiben – ${params.courseTitle}`,
+    html: renderLayout("Zum Unterschreiben bereit", body),
   });
 }
 
