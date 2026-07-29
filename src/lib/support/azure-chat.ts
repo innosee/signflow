@@ -4,6 +4,7 @@ import { AzureOpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/index";
 
 import { SUPPORT_SYSTEM_PROMPT } from "./knowledge";
+import { scrubMessages } from "./scrub-pii";
 
 // Eigener, self-contained Azure-Client — bewusst NICHT der Checker-Client
 // (src/lib/checker/azure-client.ts), damit das Support-Modul den produktiven
@@ -49,7 +50,9 @@ export async function runSupportChat(
 
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: SUPPORT_SYSTEM_PROMPT },
-    ...history.map(
+    // PII-Scrub vor dem Azure-Call — Begründung + Grenzen in scrub-pii.ts
+    // (Datenschutz-Audit 2026-07, P1-1).
+    ...scrubMessages(history).map(
       (m): ChatCompletionMessageParam => ({
         role: m.role,
         content: m.content,
