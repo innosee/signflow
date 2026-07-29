@@ -39,6 +39,9 @@ export type CockpitRow = {
   // Abschlussbericht
   berStatus: "missing" | "draft" | "submitted";
   berId: string | null;
+  // Kunde-Dokumente-Stand (DS/TNV/STV): je Chip `done` = komplett signiert.
+  // null = Kunde hat (noch) keine Dokumente → Badge wird ausgeblendet.
+  docChips: { label: string; done: boolean }[] | null;
 };
 
 export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
@@ -202,6 +205,26 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
                       <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
                         {c.statusLabel}
                       </span>
+                      {c.docChips && (
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full bg-zinc-50 px-2 py-0.5 text-xs"
+                          title="Kunde-Dokumente — komplett signiert (✓) oder noch offen (○): DS = Datenschutz, TNV = Teilnehmervertrag, STV = Strategievereinbarung"
+                        >
+                          <span className="text-zinc-500">Dok:</span>
+                          {c.docChips.map((d) => (
+                            <span
+                              key={d.label}
+                              className={
+                                d.done
+                                  ? "font-medium text-emerald-700"
+                                  : "text-zinc-400"
+                              }
+                            >
+                              {d.done ? "✓" : "○"} {d.label}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </div>
 
                     {/* Downloads für den Versand ans Jobcenter / die AfA */}

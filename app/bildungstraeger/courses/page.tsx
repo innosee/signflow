@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import {
@@ -82,6 +82,36 @@ export default async function BildungstraegerCoursesPage() {
     )
     .orderBy(desc(schema.courses.createdAt));
 
+  // Kunde-Dokumente (DS/TNV/STV) pro Kunde für das Cockpit-Badge — nur der
+  // Vollständigkeits-Stand („completed" = beidseitig signiert). EINE Query für
+  // alle Kunden statt N+1. Ein completed TNV+DS-Merge deckt DS UND TNV ab.
+  const courseIds = customers.map((c) => c.id);
+  const docRows = courseIds.length
+    ? await db
+        .select({
+          courseId: schema.documents.courseId,
+          type: schema.documents.type,
+          status: schema.documents.status,
+        })
+        .from(schema.documents)
+        .where(
+          and(
+            inArray(schema.documents.courseId, courseIds),
+            isNull(schema.documents.deletedAt),
+          ),
+        )
+    : [];
+  const completedTypesByCourse = new Map<string, Set<string>>();
+  const hasDocsByCourse = new Set<string>();
+  for (const d of docRows) {
+    hasDocsByCourse.add(d.courseId);
+    if (d.status === "completed") {
+      const set = completedTypesByCourse.get(d.courseId) ?? new Set<string>();
+      set.add(d.type);
+      completedTypesByCourse.set(d.courseId, set);
+    }
+  }
+
   // „Abgeschlossen" = Maßnahme als abgeschlossen markiert (abgeschlossen_at).
   const archivableCount = customers.filter(
     (c) => c.abgeschlossenAt && c.status !== "archived",
@@ -97,8 +127,21 @@ export default async function BildungstraegerCoursesPage() {
       fesStatus: c.fesStatus,
     });
     const sealed = c.fesStatus === "completed";
+    // Doc-Badge nur zeigen, wenn der Kunde überhaupt Dokumente hat (sonst
+    // bleibt die Zeile für Kunden ohne Dokumente-Nutzung sauber). Ein
+    // completed Merge (tnv_ds_merge) deckt DS UND TNV ab.
+    const completed = completedTypesByCourse.get(c.id) ?? new Set<string>();
+    const mergeDone = completed.has("tnv_ds_merge");
+    const docChips = hasDocsByCourse.has(c.id)
+      ? [
+          { label: "DS", done: completed.has("f04_ds") || mergeDone },
+          { label: "TNV", done: completed.has("f08_tnv") || mergeDone },
+          { label: "STV", done: completed.has("f21_stv") },
+        ]
+      : null;
     return {
       id: c.id,
+      docChips,
       participantName: c.participantName,
       title: c.title,
       kundenNr: c.kundenNr,
