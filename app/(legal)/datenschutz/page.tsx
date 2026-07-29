@@ -117,9 +117,7 @@ export default function DatenschutzPage() {
             <li>
               Elektronische Signatur der Nachweise (einfache elektronische
               Signatur: Canvas-Unterschrift mit Zeitstempel, IP-Adresse und
-              Audit-Protokoll) und Übermittlung an die Agentur für Arbeit. Eine
-              zusätzliche fortgeschrittene Versiegelung (FES) ist in Vorbereitung
-              und derzeit nicht aktiv.
+              Audit-Protokoll) und Übermittlung an die Agentur für Arbeit.
             </li>
           </ul>
         </Subsection>
@@ -161,26 +159,7 @@ export default function DatenschutzPage() {
             </li>
           </ul>
         </Subsection>
-        <Subsection title="4.4 FES-Versiegelung (in Vorbereitung)">
-          <p>
-            Derzeit werden die Nachweise mit einer einfachen elektronischen
-            Signatur abgesichert; eine fortgeschrittene elektronische
-            Versiegelung (FES) ist <strong>geplant, aber noch nicht aktiv</strong>.
-            Sobald sie live geschaltet wird, wird ein Zertifikat eines
-            eIDAS-akkreditierten Vertrauensdiensteanbieters genutzt (
-            <Placeholder>
-              geplanter Anbieter: D-Trust GmbH, Berlin — Bundesdruckerei-Gruppe;
-              vor Live-Schaltung bestätigen
-            </Placeholder>
-            ). Auch dann erhält der Anbieter weder die zu siegelnden Dokumente
-            noch Inhalte daraus; das Siegel wird server-seitig in der
-            Infrastruktur der {company.name} auf das fertige PDF angewendet. Im
-            Rahmen der Zertifikats-Ausstellung werden lediglich
-            Unternehmensstammdaten (Handelsregister, Geschäftsführer-
-            Identifizierung) an den Aussteller übermittelt.
-          </p>
-        </Subsection>
-        <Subsection title="4.5 Gültigkeit und Absicherung der Magic Links">
+        <Subsection title="4.4 Gültigkeit und Absicherung der Magic Links">
           <p>
             Die zur Signatur versandten Magic Links sind ab Ausstellung{" "}
             <strong>7 Tage</strong> gültig und werden danach automatisch

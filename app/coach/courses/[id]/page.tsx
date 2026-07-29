@@ -718,8 +718,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
               !allApproved && (
                 <p className="mt-2 text-xs text-zinc-500">
                   Hinweis: Die Teilnehmer-Gesamt-Freigabe steht noch aus. Das ist
-                  derzeit optional und blockiert das Einreichen nicht — sie wird
-                  erst mit der FES-Versiegelung wieder verpflichtend.
+                  derzeit optional und blockiert das Einreichen nicht.
                 </p>
               )}
             {course.reviewStatus === "approved" && finalDoc?.pdfUrl && (

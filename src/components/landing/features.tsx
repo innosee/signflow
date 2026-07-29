@@ -19,7 +19,7 @@ const FEATURES = [
   {
     icon: ShieldIcon,
     title: "Einfache elektronische Signatur",
-    desc: "Coach und Teilnehmer:in signieren digital per Canvas — mit Zeitstempel, Identitätsnachweis und Audit-Protokoll. Das finale A4-PDF ist ausreichend für die AfA, ohne den Aufwand einer QES. Das fortgeschrittene FES-Siegel nach eIDAS ist in Vorbereitung.",
+    desc: "Coach und Teilnehmer:in signieren digital per Canvas — mit Zeitstempel, Identitätsnachweis und Audit-Protokoll. Das finale A4-PDF ist ausreichend für die AfA, ohne den Aufwand einer QES.",
   },
   {
     icon: ClockIcon,

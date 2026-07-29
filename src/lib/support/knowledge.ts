@@ -18,7 +18,7 @@ SIGNFLOW – KURZWISSEN FÜR COACHES
 
 Was ist Signflow: SaaS zur Digitalisierung von Unterschriften für Coaches und
 Kursteilnehmer:innen im Kontext der Agentur für Arbeit (AfA). Zwei Module unter
-einem Login: (A) digital signierte Anwesenheitsnachweise mit FES an die AfA,
+einem Login: (A) digital signierte Anwesenheitsnachweise an die AfA,
 (B) KI-gestützter Abschlussbericht-Checker.
 
 ROLLEN:
@@ -53,11 +53,11 @@ MODUL A – ANWESENHEITSNACHWEISE, Ablauf:
 9. Preview freigeben lassen: „Preview an Teilnehmer senden" → TN sieht das
    vollständige Dokument (pixelgleich zum PDF) und klickt „Freigeben".
 10. Beim Bildungsträger einreichen: „Zur Prüfung einreichen" → BT gibt frei oder
-    fordert Nachbesserung an. Erst nach BT-Freigabe wird der Siegel-Button aktiv.
-11. FES + AfA-Übermittlung: „Mit FES versiegeln" rendert ein A4-PDF mit
-    fortgeschrittener elektronischer Signatur. Danach übermittelt der
-    Bildungsträger an die AfA. Ein gesiegelter Kunde ist fixiert und nicht mehr
-    änderbar.
+    fordert Nachbesserung an. Mit der BT-Freigabe wird der Nachweis abgeschlossen.
+11. AfA-Übermittlung: Mit der BT-Freigabe wird das A4-PDF mit einfacher
+    elektronischer Signatur (Canvas + Zeitstempel + Audit-Protokoll) abgeschlossen.
+    Danach übermittelt der Bildungsträger an die AfA. Ein abgeschlossener Kunde
+    ist fixiert und nicht mehr änderbar.
 
 Wichtig zu Inhalt-Korrekturen: Der Themen-Text lässt sich später per „Inhalt
 korrigieren" ändern, OHNE Signaturen/Freigabe zu verlieren. Datum, UE und

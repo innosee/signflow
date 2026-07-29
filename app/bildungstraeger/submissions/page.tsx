@@ -98,8 +98,8 @@ export default async function BildungstraegerSubmissionsPage() {
           <span className="font-semibold">
             „Übermittelt“-Markierung vorübergehend gesperrt.
           </span>{" "}
-          Gesiegelte Stundennachweise lassen sich weiterhin einsehen und als PDF
-          herunterladen; das manuelle Markieren ist gerade deaktiviert.
+          Abgeschlossene Stundennachweise lassen sich weiterhin einsehen und als
+          PDF herunterladen; das manuelle Markieren ist gerade deaktiviert.
         </div>
       )}
 

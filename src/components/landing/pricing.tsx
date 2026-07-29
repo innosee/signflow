@@ -9,7 +9,7 @@ const TIERS = [
       "Unbegrenzt Kunden + Termine",
       "Canvas-Signatur für Coach + TN",
       "Magic-Link-Versand per E-Mail & QR-Code",
-      "A4-PDF mit einfacher Signatur (FES folgt)",
+      "A4-PDF mit einfacher elektronischer Signatur",
       "Audit-Log + EU-Hosting",
       "14 Tage kostenlos testen",
     ],

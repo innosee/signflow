@@ -50,8 +50,8 @@ export const ANW_STATUS_LABEL: Record<AnwStatus, string> = {
   anw_check_ok: "ANW-Check ✓",
   review_pending: "BT-Prüfung läuft",
   changes_requested: "Nachbesserung angefordert",
-  review_approved: "BT-freigegeben — bereit zum Siegeln",
-  gesiegelt: "Gesiegelt",
+  review_approved: "BT-freigegeben",
+  gesiegelt: "Abgeschlossen ✓",
 };
 
 export const ANW_STATUS_TONE: Record<AnwStatus, AnwTone> = {
