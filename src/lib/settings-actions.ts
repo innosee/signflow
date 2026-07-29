@@ -7,7 +7,13 @@ import { APIError } from "better-auth/api";
 
 import { db, schema } from "@/db";
 import { auth } from "@/lib/auth";
-import { assertNotImpersonating, getActiveRole, requireSession } from "@/lib/dal";
+import {
+  assertNotImpersonating,
+  getActiveRole,
+  getTenantId,
+  getTenantOwnerId,
+  requireSession,
+} from "@/lib/dal";
 
 export type SettingsFormState =
   | undefined
@@ -128,12 +134,19 @@ export async function updateBrandingAction(
     return addressResult;
   }
 
+  // Branding ist org-weit → immer auf die OWNER-Zeile schreiben (identisch zu
+  // der Zeile, die getBranding liest), nicht auf `session.user.id`. Sonst
+  // würde bei Tenants mit mehreren BT-Usern ein Edit auf einer anderen Zeile
+  // landen als der Read → Adresse/Logo scheinen „nicht zu haften".
+  const ownerId =
+    (await getTenantOwnerId(getTenantId(session))) ?? session.user.id;
+
   await db
     .update(schema.users)
     .set({
       pdfAddress: addressResult.length === 0 ? null : addressResult,
     })
-    .where(eq(schema.users.id, session.user.id));
+    .where(eq(schema.users.id, ownerId));
 
   // BER-PDFs ziehen das Branding bei jedem Render neu — Settings-Page
   // selbst zeigt die aktuellen Werte nach Refresh.
@@ -147,10 +160,14 @@ export async function clearBrandingLogoAction(): Promise<void> {
   assertNotImpersonating(session);
   if (getActiveRole(session) !== "bildungstraeger") return;
 
+  // Wie updateBrandingAction: org-weites Branding auf der Owner-Zeile pflegen.
+  const ownerId =
+    (await getTenantOwnerId(getTenantId(session))) ?? session.user.id;
+
   await db
     .update(schema.users)
     .set({ pdfLogoUrl: null })
-    .where(eq(schema.users.id, session.user.id));
+    .where(eq(schema.users.id, ownerId));
 
   revalidatePath("/bildungstraeger/settings");
   revalidatePath("/coach/checker/export");

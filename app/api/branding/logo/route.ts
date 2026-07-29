@@ -3,7 +3,13 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
 import { db, schema } from "@/db";
-import { getActiveRole, getCurrentSession, isImpersonating } from "@/lib/dal";
+import {
+  getActiveRole,
+  getCurrentSession,
+  getTenantId,
+  getTenantOwnerId,
+  isImpersonating,
+} from "@/lib/dal";
 import { deleteBlob, uploadBrandingLogo } from "@/lib/storage";
 
 const MAX_BYTES = 1_000_000; // 1 MB — reicht für PDF-Header-Logos
@@ -61,10 +67,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const userId = session.user.id;
+  // Branding ist org-weit → Logo auf der Owner-Zeile pflegen (konsistent mit
+  // getBranding/updateBrandingAction), nicht auf session.user.id. Sonst liest
+  // getBranding bei mehreren BT-Usern eine andere Zeile als die geschriebene.
+  const ownerId =
+    (await getTenantOwnerId(getTenantId(session))) ?? session.user.id;
   let url: string;
   try {
-    url = await uploadBrandingLogo(`bt-${userId}`, file, extension);
+    url = await uploadBrandingLogo(`bt-${ownerId}`, file, extension);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Logo upload failed:", err);
@@ -75,13 +85,13 @@ export async function POST(req: Request) {
   const [previous] = await db
     .select({ pdfLogoUrl: schema.users.pdfLogoUrl })
     .from(schema.users)
-    .where(eq(schema.users.id, userId))
+    .where(eq(schema.users.id, ownerId))
     .limit(1);
 
   await db
     .update(schema.users)
     .set({ pdfLogoUrl: url })
-    .where(eq(schema.users.id, userId));
+    .where(eq(schema.users.id, ownerId));
 
   if (previous?.pdfLogoUrl && previous.pdfLogoUrl !== url) {
     await deleteBlob(previous.pdfLogoUrl).catch(() => {
