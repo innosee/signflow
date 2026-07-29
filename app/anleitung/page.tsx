@@ -64,7 +64,7 @@ const SIGN_STEPS: Array<{ num: string; title: string; body: string }> = [
   {
     num: "11",
     title: "Abschließen + AfA-Übermittlung",
-    body: 'Jetzt „Nachweis abschließen": das HTML wird als A4-PDF gerendert und trägt die einfachen elektronischen Signaturen von Coach und Teilnehmer:in (Canvas + Zeitstempel + Audit-Protokoll). Anschließend übermittelt der Bildungsträger an die Agentur für Arbeit. Ein abgeschlossener Kunde ist rechtlich fixiert und kann nicht mehr verändert werden. (Das fortgeschrittene FES-Siegel ist in Vorbereitung und wird später ergänzt.)',
+    body: 'Jetzt „Nachweis abschließen": das HTML wird als A4-PDF gerendert und trägt die einfachen elektronischen Signaturen von Coach und Teilnehmer:in (Canvas + Zeitstempel + Audit-Protokoll). Anschließend übermittelt der Bildungsträger an die Agentur für Arbeit. Ein abgeschlossener Kunde ist rechtlich fixiert und kann nicht mehr verändert werden.',
   },
 ];
 

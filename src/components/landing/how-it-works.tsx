@@ -17,7 +17,7 @@ const STEPS = [
   {
     num: "04",
     title: "Freigabe, Abschluss & Übermittlung",
-    desc: "Der Bildungsträger prüft die fertige Liste und gibt sie frei. Erst dann schließt der Coach das A4-PDF mit einfacher elektronischer Signatur ab — fertig für die AfA. Das FES-Siegel nach eIDAS ist in Vorbereitung.",
+    desc: "Der Bildungsträger prüft die fertige Liste und gibt sie frei. Damit wird das A4-PDF mit einfacher elektronischer Signatur abgeschlossen — fertig für die AfA.",
   },
 ];
 

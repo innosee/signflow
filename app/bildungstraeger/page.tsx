@@ -144,7 +144,7 @@ export default async function BildungstraegerDashboard({ searchParams }: Props) 
                     pendingReviews === 1
                       ? "Liste wartet"
                       : "Listen warten"
-                  } auf deine Freigabe (blockiert die FES-Versiegelung).`}
+                  } auf deine Freigabe (blockiert den Abschluss).`}
             </p>
           </div>
           <Link
