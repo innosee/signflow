@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { resolveAssetUrl } from "@/lib/storage";
@@ -58,6 +58,13 @@ export const getBranding = cache(
           isNull(schema.users.deletedAt),
         ),
       )
+      // Branding ist org-weit, wird aber (Legacy) auf einer BT-User-Zeile
+      // gespeichert. Deterministisch die OWNER-Zeile lesen (ältester aktiver
+      // BT = `createdAt ASC`, identisch zu `getTenantOwnerId`) — sonst würde
+      // `.limit(1)` bei mehreren BT-Usern eine beliebige Zeile treffen und
+      // gespeicherte Adresse/Logo eines anderen BT nicht anzeigen. Schreiben
+      // (updateBrandingAction) zielt auf dieselbe Owner-Zeile.
+      .orderBy(asc(schema.users.createdAt))
       .limit(1);
 
     if (!row) return DEFAULT_BRANDING;
