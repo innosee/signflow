@@ -1,9 +1,10 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { sendParticipantInvite } from "@/lib/participant-tokens";
 import {
   getDocumentConfig,
   MASTER_FIELD_LABELS,
@@ -289,6 +290,38 @@ export async function submitDocument(params: {
       message: "Freigabe fehlgeschlagen. Bitte erneut versuchen.",
       echo: true,
     };
+  }
+
+  // Freigabe = Kunde soll unterschreiben → Magic-Link automatisch verschicken
+  // (best-effort; ein Mailfehler kippt die erfolgreiche Freigabe NICHT). Dedup:
+  // nur senden, wenn der Kunde noch keinen gültigen Link hat — sonst würde die
+  // Freigabe mehrerer Dokumente ihn mit Mails zuspammen (ein kurs-scoped Link
+  // deckt alle offenen Dokumente ab).
+  try {
+    const [activeToken] = await db
+      .select({ id: schema.participantAccessTokens.id })
+      .from(schema.participantAccessTokens)
+      .where(
+        and(
+          eq(schema.participantAccessTokens.courseId, doc.courseId),
+          eq(schema.participantAccessTokens.participantId, doc.participantId),
+          isNull(schema.participantAccessTokens.usedAt),
+          gt(schema.participantAccessTokens.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+    if (!activeToken) {
+      await sendParticipantInvite({
+        courseId: doc.courseId,
+        participantId: doc.participantId,
+        channel: "email",
+      });
+    }
+  } catch (err) {
+    console.error(
+      "submitDocument: automatische Teilnehmer-Benachrichtigung fehlgeschlagen",
+      err,
+    );
   }
 
   return { status: "released" };
