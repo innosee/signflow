@@ -79,7 +79,7 @@ export function DocumentEditor({
         <p className="mt-1 text-zinc-600">
           {participantSigned
             ? "Die Teilnehmer:in hat unterschrieben."
-            : "Die Teilnehmer:in unterschreibt über ihren Magic-Link im Bereich Dokumente. Löse bei Bedarf auf der Kursseite Teilnehmer benachrichtigen aus."}
+            : "Die Teilnehmer:in wurde per E-Mail mit ihrem Signier-Link benachrichtigt und unterschreibt über den Bereich Dokumente. Auf der Kursseite kann der Link bei Bedarf erneut gesendet werden."}
         </p>
       </div>
     );
@@ -181,8 +181,8 @@ export function DocumentEditor({
       <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
         <p className="text-xs text-zinc-600">
           {coachSigns
-            ? "Mit dem Unterschreiben werden die Angaben eingefroren und das Dokument für die Teilnehmer-Unterschrift freigegeben."
-            : "Mit der Freigabe werden die Angaben eingefroren und das Dokument der Teilnehmer:in zur Unterschrift bereitgestellt."}
+            ? "Mit dem Unterschreiben werden die Angaben eingefroren, das Dokument freigegeben und die Teilnehmer:in automatisch per E-Mail mit ihrem Signier-Link benachrichtigt."
+            : "Mit der Freigabe werden die Angaben eingefroren und die Teilnehmer:in automatisch per E-Mail mit ihrem Signier-Link benachrichtigt."}
         </p>
         {coachSigns && !hasSignerSignature && (
           <p className="mt-2 text-xs text-red-700">
