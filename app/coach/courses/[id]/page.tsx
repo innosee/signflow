@@ -644,6 +644,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             {!impersonating && (
               <AnwCheckButton
                 courseId={course.id}
+                sessions={sessions.map((s) => ({ id: s.id, topic: s.topic }))}
                 disabled={sessions.length === 0}
                 disabledReason={
                   sessions.length === 0

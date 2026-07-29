@@ -996,6 +996,111 @@ export async function correctSessionTopic(
   return { success: true };
 }
 
+export type ApplyAnwSuggestionState =
+  | { ok?: undefined; error?: string }
+  | { ok: true }
+  | undefined;
+
+/**
+ * ANW-Compliance-Vorschlag „Im Text übernehmen" (analog BER-Checker): ersetzt
+ * chirurgisch das beanstandete `zitat` im Thema des Termins durch den KI-
+ * `vorschlag` — signatur-erhaltend über denselben Pfad wie correctSessionTopic
+ * (Modus bleibt, inhaltsabhängige Gates werden zurückgesetzt, Signaturen und
+ * Freigaben bleiben, Audit als `session.topic_corrected`).
+ *
+ * Der Client hat den Termin bereits über das Zitat eindeutig zugeordnet und
+ * schickt die `sessionId` mit; der Server verifiziert Besitz + dass das Zitat
+ * noch **genau so** im Thema steht (sonst Fehler statt stiller Fehlmutation).
+ * Nach dem Übernehmen prüft der Coach den ANW-Check manuell erneut.
+ */
+export async function applyAnwSuggestion(
+  _prev: ApplyAnwSuggestionState,
+  formData: FormData,
+): Promise<ApplyAnwSuggestionState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const sessionId = String(formData.get("sessionId") ?? "").trim();
+  const zitat = String(formData.get("zitat") ?? "");
+  const vorschlag = String(formData.get("vorschlag") ?? "");
+  if (!courseId || !sessionId) return { error: "Kurs oder Termin fehlt." };
+  if (!zitat.trim() || !vorschlag.trim()) {
+    return { error: "Zitat oder Vorschlag fehlt." };
+  }
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  // Versiegelter Kurs ist rechtlich unveränderbar (wie correctSessionTopic).
+  const [doc] = await db
+    .select({ fesStatus: schema.finalDocuments.fesStatus })
+    .from(schema.finalDocuments)
+    .where(eq(schema.finalDocuments.courseId, ownedCourseId))
+    .limit(1);
+  if (doc && (doc.fesStatus === "sent" || doc.fesStatus === "completed")) {
+    return {
+      error:
+        "Dieser Kunde ist bereits abgeschlossen und kann rechtlich nicht mehr verändert werden.",
+    };
+  }
+
+  const [sess] = await db
+    .select({ id: schema.sessions.id, topic: schema.sessions.topic })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, sessionId),
+        eq(schema.sessions.courseId, ownedCourseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sess) return { error: "Termin nicht gefunden." };
+
+  // `replace(string, string)` ist ein LITERAL-Replace (kein Regex) und trifft
+  // nur das ERSTE Vorkommen — chirurgisch wie im BER. Vorher prüfen, dass das
+  // Zitat noch exakt drinsteht, sonst lieber sauber abbrechen.
+  if (!sess.topic.includes(zitat)) {
+    return {
+      error:
+        "Die beanstandete Stelle steht nicht mehr genau so im Termin (evtl. schon geändert). Bitte manuell über „Inhalt korrigieren“.",
+    };
+  }
+  const newTopic = sess.topic.replace(zitat, vorschlag).trim();
+  if (!newTopic) {
+    return { error: "Ergebnis wäre leer — bitte manuell korrigieren." };
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.sessions)
+        .set({ topic: newTopic })
+        .where(eq(schema.sessions.id, sessionId));
+      await resetFesGates(tx, ownedCourseId, { keepAbgeschlossen: true });
+      await logAudit(
+        {
+          actorType: "coach",
+          actorId: coachId,
+          action: "session.topic_corrected",
+          resourceType: "session",
+          resourceId: sessionId,
+          metadata: { courseId: ownedCourseId, source: "anw_suggestion" },
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Übernehmen fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { ok: true };
+}
+
 function looksLikeEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
