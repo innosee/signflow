@@ -66,6 +66,14 @@ export const SIGNATURE_RELATED_AUDIT_ACTIONS = [
   "session.topic_corrected",
   "session.deleted",
   "course.delete",
+  // Kunde-Dokumente (DS/TNV/STV): die Signaturen sowie Freigabe/Löschung des
+  // signierbaren Dokuments gehören zur Signatur-/Nachweiskette und werden
+  // aufbewahrt — analog zu session.deleted / course.delete. Reine Draft-Anlage
+  // (document.created) ist operativ und fällt in die 12-Monats-Löschung unten.
+  "document.released",
+  "document.coach_signed",
+  "document.participant_signed",
+  "document.deleted",
 ] as const satisfies readonly AuditAction[];
 
 /**
@@ -89,6 +97,8 @@ export const DELETABLE_AUDIT_ACTIONS = [
   "bildungstraeger.onboard",
   "course.bewilligt.set",
   "course.bewilligt.unset",
+  // Anlage eines Kunde-Dokument-Drafts (vor jeder Signatur) — operativ.
+  "document.created",
 ] as const satisfies readonly AuditAction[];
 
 type ClassifiedAction =
