@@ -18,11 +18,9 @@ import {
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/email", () => ({
   sendParticipantMagicLink: vi.fn(),
-  sendParticipantPreview: vi.fn(),
 }));
 vi.mock("@/lib/sms", () => ({
   composeMagicLinkSms: vi.fn(),
-  composePreviewSms: vi.fn(),
   isSmsEnabled: () => false,
   isValidE164: () => false,
   sendSms: vi.fn(),

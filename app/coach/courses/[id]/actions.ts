@@ -26,10 +26,7 @@ import {
   coachCanAccessCourse,
   courseVisibleToCoach,
 } from "@/lib/course-access";
-import {
-  sendParticipantInvite,
-  sendParticipantPreviewInvite,
-} from "@/lib/participant-tokens";
+import { sendParticipantInvite } from "@/lib/participant-tokens";
 import { resetFesGates } from "@/lib/fes-gates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 import { evaluateSealReadiness, type SealBlock } from "@/lib/sign-state";
@@ -1322,121 +1319,6 @@ export async function resendInviteAsSms(
 
   revalidatePath(`/coach/courses/${ownedCourseId}`);
   return { success: true };
-}
-
-/**
- * Triggert an alle Teilnehmer eine Preview-Mail (neuer 24-h-Token + Mail
- * mit Freigabe-CTA). Nur erlaubt, wenn jede nicht-gelöschte Session des
- * Kurses `status = 'completed'` hat (= Coach + alle TN signiert).
- *
- * Dieselbe Token-Infrastruktur wie beim normalen Magic-Link — die Sign-
- * Page erkennt anhand des Signatur-Stands, dass jetzt der Preview-Modus
- * angezeigt wird. Freigeben-Klick landet in `participant_approvals`.
- */
-export async function sendPreviewToParticipants(
-  _prev: NotifyState,
-  formData: FormData,
-): Promise<NotifyState> {
-  const session = await requireSigningEnabled();
-  assertNotImpersonating(session);
-  const coachId = session.user.id;
-
-  const courseId = String(formData.get("courseId") ?? "").trim();
-  if (!courseId) return { error: "Kurs fehlt." };
-
-  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
-  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
-
-  // Gate: jede Session muss vollständig signiert sein. Auch "no sessions"
-  // ist kein valider Preview-Trigger — es gäbe nichts freizugeben.
-  const openSessions = await db
-    .select({ id: schema.sessions.id, status: schema.sessions.status })
-    .from(schema.sessions)
-    .where(
-      and(
-        eq(schema.sessions.courseId, ownedCourseId),
-        isNull(schema.sessions.deletedAt),
-      ),
-    );
-
-  if (openSessions.length === 0) {
-    return { error: "Kurs hat noch keine Sessions." };
-  }
-  const incomplete = openSessions.filter((s) => s.status !== "completed");
-  if (incomplete.length > 0) {
-    return {
-      error: `Noch ${incomplete.length} Session(s) nicht komplett signiert — Preview erst möglich, wenn alle bestätigt sind.`,
-    };
-  }
-
-  // Pflicht-Gates vor TN-Freigabe-Aufforderung: ANW-Check muss durch und
-  // der Coach muss die Maßnahme aktiv als abgeschlossen markiert haben.
-  // Sonst landet beim TN eine Freigabe-Aufforderung an die Agentur für
-  // Arbeit, während der Coach gedanklich noch mitten im Kurs ist und
-  // weitere Sessions plant.
-  const [gates] = await db
-    .select({
-      anwCheckPassedAt: schema.courses.anwCheckPassedAt,
-      abgeschlossenAt: schema.courses.abgeschlossenAt,
-    })
-    .from(schema.courses)
-    .where(eq(schema.courses.id, ownedCourseId))
-    .limit(1);
-  if (!gates?.abgeschlossenAt) {
-    return {
-      error:
-        "Vor dem Versand der Freigabe-Aufforderung muss die Maßnahme als abgeschlossen markiert werden (Schritt davor).",
-    };
-  }
-  if (!gates.anwCheckPassedAt) {
-    return {
-      error:
-        "Vor dem Versand der Freigabe-Aufforderung muss der ANW-Compliance-Check mit Status „Freigabe“ durchlaufen sein.",
-    };
-  }
-
-  const participants = await db
-    .select({
-      participantId: schema.participants.id,
-      email: schema.participants.email,
-    })
-    .from(schema.courses)
-    .innerJoin(
-      schema.participants,
-      eq(schema.participants.id, schema.courses.participantId),
-    )
-    .where(eq(schema.courses.id, ownedCourseId));
-
-  if (participants.length === 0) {
-    return { error: "Kurs hat keinen Kunden." };
-  }
-
-  const failedEmails: string[] = [];
-  let success = 0;
-  for (const p of participants) {
-    try {
-      await sendParticipantPreviewInvite({
-        courseId: ownedCourseId,
-        participantId: p.participantId,
-      });
-      success++;
-    } catch (err) {
-      // Kein `p.email` in Logs — PII gehört in die Datenbank, nicht in
-      // Log-Aggregatoren. Die E-Mail ist in `failedEmails` für die
-      // UI-Rückmeldung (nur an den Coach, unter Auth) weiterhin sichtbar.
-      console.error(
-        `sendPreview failed for participant ${p.participantId} in course ${ownedCourseId}:`,
-        err,
-      );
-      failedEmails.push(p.email);
-    }
-  }
-
-  revalidatePath(`/coach/courses/${ownedCourseId}`);
-  return {
-    success,
-    failedEmails: failedEmails.length > 0 ? failedEmails : undefined,
-  };
 }
 
 export type AnwCheckState =
