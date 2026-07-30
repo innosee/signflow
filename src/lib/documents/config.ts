@@ -12,25 +12,19 @@
  * Template-Komponente + Prefill-Zweig.
  */
 
-export type DocumentTypeId =
-  | "f04_ds"
-  | "f08_tnv"
-  | "f21_stv"
-  | "tnv_ds_merge";
+export type DocumentTypeId = "f08_tnv" | "f21_stv";
 
-// Reihenfolge in der Auswahl-Liste: STV, TNV, DS, kombiniertes TNV+DS.
-export const DOCUMENT_TYPE_IDS: DocumentTypeId[] = [
-  "f21_stv",
-  "f08_tnv",
-  "f04_ds",
-  "tnv_ds_merge",
-];
+// Genau zwei aktive Formulare (Reduktion 2026-07-30): der Teilnehmervertrag
+// (F08, jetzt inkl. Datenschutz) und die Strategievereinbarung (F21). Die
+// früheren F04 (Datenschutz solo) und der TNV+DS-Merge sind entfallen — die
+// Datenschutzhinweise stecken direkt in der aktuellen F08.
+export const DOCUMENT_TYPE_IDS: DocumentTypeId[] = ["f08_tnv", "f21_stv"];
 
 /**
  * Wer ein Dokument anlegt, ausfüllt und (auf der erango-Seite) signiert:
- * - `bildungstraeger` = Datenschutz (F04), Teilnehmervertrag (F08),
- *   TNV+DS-Merge. Die zweite Signaturzeile ist die geteilte
- *   Organisations-Unterschrift („erango Mitarbeiter:in").
+ * - `bildungstraeger` = Teilnehmervertrag & Teilnahmevereinbarung (F08, inkl.
+ *   Datenschutz). Die zweite Signaturzeile ist die geteilte Organisations-
+ *   Unterschrift („erango GmbH (Mitarbeiter:in)").
  * - `coach` = Strategievereinbarung (F21). Zweite Zeile = Coach-Unterschrift.
  * Die jeweils andere Rolle sieht die Dokumente nur read-only (+ PDF-Download).
  */
@@ -120,27 +114,7 @@ export type DocumentConfig = {
   signers: { coach: boolean };
 };
 
-const F04: DocumentConfig = {
-  id: "f04_ds",
-  formNumber: "F 04",
-  label: "Datenschutzerklärung",
-  fullTitle: "Datenschutzerklärung",
-  description:
-    "Datenschutzhinweise nach Art. 13/14 DSGVO für Teilnehmer:innen von AVGS-Einzelcoachings.",
-  owner: "bildungstraeger",
-  fields: [
-    {
-      key: "ort",
-      label: "Ort (für die Unterschriftszeile)",
-      type: "text",
-      placeholder: "z.B. Singen",
-    },
-  ],
-  requiredMasterData: [],
-  signers: { coach: true },
-};
-
-// Maßnahme-/Vertragsfelder der TNV — auch vom Merge genutzt.
+// Maßnahme-/Vertragsfelder der Teilnehmervertrag & Teilnahmevereinbarung (F08).
 const TNV_FIELDS: DocField[] = [
   {
     key: "massnahme",
@@ -173,9 +147,9 @@ const F08: DocumentConfig = {
   id: "f08_tnv",
   formNumber: "F 08",
   label: "Teilnehmervertrag",
-  fullTitle: "Teilnehmervertrag / Anmeldung I AVGS",
+  fullTitle: "Teilnehmervertrag & Teilnahmevereinbarung",
   description:
-    "Verbindliche Anmeldung zur AVGS-Maßnahme inkl. Stamm- und Maßnahmedaten.",
+    "Verbindliche Anmeldung zur AVGS-Maßnahme inkl. Stamm-, Maßnahme- und Datenschutzangaben.",
   owner: "bildungstraeger",
   fields: TNV_FIELDS,
   // Reduziert auf das, was erango realistisch immer hat.
@@ -231,24 +205,9 @@ const F21: DocumentConfig = {
   signers: { coach: true },
 };
 
-const TNV_DS_MERGE: DocumentConfig = {
-  id: "tnv_ds_merge",
-  formNumber: "F 08 + F 04",
-  label: "Teilnehmervertrag + Datenschutz",
-  fullTitle: "Teilnehmervertrag / Anmeldung I AVGS + Datenschutzerklärung",
-  description:
-    "Kombiniertes Dokument: Teilnehmervertrag und Datenschutzerklärung in einem, eine Unterschrift.",
-  owner: "bildungstraeger",
-  fields: TNV_FIELDS,
-  requiredMasterData: ["vorname", "nachname"],
-  signers: { coach: true },
-};
-
 const CONFIGS: Record<DocumentTypeId, DocumentConfig> = {
-  f04_ds: F04,
   f08_tnv: F08,
   f21_stv: F21,
-  tnv_ds_merge: TNV_DS_MERGE,
 };
 
 export function getDocumentConfig(type: DocumentTypeId): DocumentConfig {
@@ -267,7 +226,7 @@ export function allDocumentConfigs(): DocumentConfig[] {
 /**
  * Konfigurationen, die die angegebene Rolle verwaltet (anlegen/ausfüllen/
  * signieren) — in fester Reihenfolge. Für die Anlegen-Auswahl der jeweiligen
- * Seite (Coach: nur STV; Bildungsträger: DS/TNV/Merge).
+ * Seite (Coach: nur STV; Bildungsträger: nur TNV).
  */
 export function documentConfigsForOwner(owner: DocumentOwner): DocumentConfig[] {
   return allDocumentConfigs().filter((c) => c.owner === owner);
@@ -313,10 +272,7 @@ export function prefillFormData(
   input: PrefillInput,
 ): Record<string, string> {
   switch (type) {
-    case "f04_ds":
-      return { ort: input.durchfuehrungsort || "" };
     case "f08_tnv":
-    case "tnv_ds_merge":
       return tnvPrefill(input);
     case "f21_stv":
       return {
