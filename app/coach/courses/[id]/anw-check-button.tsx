@@ -4,10 +4,14 @@ import { useActionState } from "react";
 
 import {
   acknowledgeAnwCheckAction,
+  applyAnwSuggestion,
   runAnwCheckAction,
   type AnwAcknowledgeState,
   type AnwCheckState,
+  type ApplyAnwSuggestionState,
 } from "./actions";
+
+type SessionRef = { id: string; topic: string };
 
 /**
  * Empfohlener KI-gestützter Pre-Step vor „Zur Prüfung einreichen":
@@ -22,10 +26,13 @@ import {
  */
 export function AnwCheckButton({
   courseId,
+  sessions,
   disabled,
   disabledReason,
 }: {
   courseId: string;
+  /** Termine (id + Thema) für die Zitat→Termin-Zuordnung beim Übernehmen. */
+  sessions: SessionRef[];
   disabled?: boolean;
   disabledReason?: string;
 }) {
@@ -65,7 +72,13 @@ export function AnwCheckButton({
         </p>
       )}
 
-      {result && <AnwCheckResultCard result={result} />}
+      {result && (
+        <AnwCheckResultCard
+          result={result}
+          courseId={courseId}
+          sessions={sessions}
+        />
+      )}
 
       {showAcknowledge && (
         <form
@@ -115,8 +128,12 @@ export function AnwCheckButton({
 
 function AnwCheckResultCard({
   result,
+  courseId,
+  sessions,
 }: {
   result: NonNullable<AnwCheckState>["result"];
+  courseId: string;
+  sessions: SessionRef[];
 }) {
   if (!result) return null;
   const isFreigabe = result.status === "freigabe";
@@ -160,6 +177,12 @@ function AnwCheckResultCard({
                 <div className="mt-1 text-emerald-800">
                   <span className="font-medium">Vorschlag:</span> {w.vorschlag}
                 </div>
+                <ApplyWarningButton
+                  courseId={courseId}
+                  sessions={sessions}
+                  zitat={w.zitat}
+                  vorschlag={w.vorschlag}
+                />
               </li>
             ))}
           </ul>
@@ -181,5 +204,75 @@ function AnwCheckResultCard({
         &bdquo;Bearbeiten&ldquo; an der betroffenen Session.
       </footer>
     </div>
+  );
+}
+
+/**
+ * „Im Text übernehmen" pro Warnung (analog BER-Checker). Ordnet die Warnung
+ * über das exakte `zitat` genau EINEM Termin zu (chirurgisch); nur dann gibt es
+ * den Button. Der Server ersetzt das Zitat signatur-erhaltend. Danach markiert
+ * die UI die Warnung als übernommen — der Coach prüft den ANW-Check manuell neu
+ * (bewusst kein Auto-Re-Run, spart Azure-Kosten).
+ */
+function ApplyWarningButton({
+  courseId,
+  sessions,
+  zitat,
+  vorschlag,
+}: {
+  courseId: string;
+  sessions: SessionRef[];
+  zitat: string;
+  vorschlag: string;
+}) {
+  const [state, action, pending] = useActionState<
+    ApplyAnwSuggestionState,
+    FormData
+  >(applyAnwSuggestion, undefined);
+
+  if (state?.ok) {
+    return (
+      <p className="mt-1.5 text-xs font-medium text-emerald-700">
+        ✓ übernommen — bitte den ANW-Check erneut ausführen.
+      </p>
+    );
+  }
+
+  // Nur bei genau EINEM Termin, dessen Thema das Zitat exakt enthält,
+  // automatisch übernehmbar; sonst manueller Fallback (kein stiller Fehltreffer).
+  const matches = zitat.trim()
+    ? sessions.filter((s) => s.topic.includes(zitat))
+    : [];
+  const match = matches.length === 1 ? matches[0] : null;
+
+  if (!match) {
+    return (
+      <p className="mt-1.5 text-xs text-zinc-500">
+        {matches.length > 1
+          ? "Mehrere Termine enthalten diese Stelle — bitte manuell über „Inhalt korrigieren“ übernehmen."
+          : "Nicht automatisch zuordenbar — bitte manuell über „Inhalt korrigieren“ übernehmen."}
+      </p>
+    );
+  }
+
+  return (
+    <form action={action} className="mt-1.5">
+      <input type="hidden" name="courseId" value={courseId} />
+      <input type="hidden" name="sessionId" value={match.id} />
+      <input type="hidden" name="zitat" value={zitat} />
+      <input type="hidden" name="vorschlag" value={vorschlag} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md border border-emerald-400 bg-white px-2.5 py-1 text-xs font-medium text-emerald-800 transition enabled:hover:bg-emerald-50 disabled:opacity-40"
+      >
+        {pending ? "Wird übernommen…" : "✎ Vorschlag im Text übernehmen"}
+      </button>
+      {state?.error && (
+        <p role="alert" className="mt-1 text-xs text-red-700">
+          {state.error}
+        </p>
+      )}
+    </form>
   );
 }
