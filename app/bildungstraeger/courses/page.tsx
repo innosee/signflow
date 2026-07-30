@@ -82,9 +82,9 @@ export default async function BildungstraegerCoursesPage() {
     )
     .orderBy(desc(schema.courses.createdAt));
 
-  // Kunde-Dokumente (DS/TNV/STV) pro Kunde für das Cockpit-Badge — nur der
+  // Kunde-Dokumente (TNV/STV) pro Kunde für das Cockpit-Badge — nur der
   // Vollständigkeits-Stand („completed" = beidseitig signiert). EINE Query für
-  // alle Kunden statt N+1. Ein completed TNV+DS-Merge deckt DS UND TNV ab.
+  // alle Kunden statt N+1.
   const courseIds = customers.map((c) => c.id);
   const docRows = courseIds.length
     ? await db
@@ -128,14 +128,11 @@ export default async function BildungstraegerCoursesPage() {
     });
     const sealed = c.fesStatus === "completed";
     // Doc-Badge nur zeigen, wenn der Kunde überhaupt Dokumente hat (sonst
-    // bleibt die Zeile für Kunden ohne Dokumente-Nutzung sauber). Ein
-    // completed Merge (tnv_ds_merge) deckt DS UND TNV ab.
+    // bleibt die Zeile für Kunden ohne Dokumente-Nutzung sauber).
     const completed = completedTypesByCourse.get(c.id) ?? new Set<string>();
-    const mergeDone = completed.has("tnv_ds_merge");
     const docChips = hasDocsByCourse.has(c.id)
       ? [
-          { label: "DS", done: completed.has("f04_ds") || mergeDone },
-          { label: "TNV", done: completed.has("f08_tnv") || mergeDone },
+          { label: "TNV", done: completed.has("f08_tnv") },
           { label: "STV", done: completed.has("f21_stv") },
         ]
       : null;

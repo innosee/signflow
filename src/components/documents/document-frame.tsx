@@ -11,12 +11,11 @@ import type { ReactNode } from "react";
  * „erango"-Text-Fallback.
  */
 
-// erango-Absender (fester Bestandteil der Formulare F04/F08/F21).
+// erango-Absender (fester Bestandteil der Formulare F08/F21).
 const ERANGO_ADDRESS = [
-  "Ekkehardstraße 12b",
+  "Scheffelstraße 28",
   "D-78224 Singen",
   "Tel. +49 (0) 7731 / 90 97 18 - 10",
-  "Fax +49 (0) 7731 / 90 97 18 - 11",
   "avgs@erango.de",
   "www.erango.de",
 ];
@@ -241,8 +240,10 @@ const documentCss = `
     color: #111;
   }
   .doc-body p { margin: 0 0 2mm; }
-  .doc-body ul { margin: 0 0 2mm; padding-left: 5mm; }
+  .doc-body ul, .doc-body ol { margin: 0 0 2mm; padding-left: 5mm; }
+  .doc-body ul { list-style: disc; }
   .doc-body li { margin: 0 0 1mm; }
+  .doc-list-decimal { list-style: decimal; }
   .doc-small { font-size: 8.5pt; color: #333; line-height: 1.35; }
   .doc-field {
     display: grid;

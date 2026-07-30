@@ -86,7 +86,7 @@ export function DocumentEditor({
   }
 
   const requiresMaster = cfg.requiredMasterData.length > 0;
-  const showMaster = requiresMaster || type === "f08_tnv" || type === "tnv_ds_merge";
+  const showMaster = requiresMaster || type === "f08_tnv";
 
   // Bei Fehler gibt die Action die abgeschickten Werte zurück (`state.values`),
   // damit React 19 das Formular nicht auf die alten defaultValues zurücksetzt
