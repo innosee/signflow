@@ -73,6 +73,10 @@ export const SIGNATURE_RELATED_AUDIT_ACTIONS = [
   "document.released",
   "document.coach_signed",
   "document.participant_signed",
+  // Zurücknahme der erango-Signatur zur Korrektur vor der Kundenunterschrift —
+  // belegt (wie session.topic_corrected), was sich nach Signaturleistung noch
+  // geändert hat.
+  "document.reopened",
   "document.deleted",
 ] as const satisfies readonly AuditAction[];
 

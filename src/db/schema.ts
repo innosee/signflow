@@ -127,19 +127,19 @@ export const berStatus = pgEnum("ber_status", ["draft", "submitted"]);
  * Typ eines vom Bildungsträger digitalisierten Formulars („Kunde-Dokumente").
  * Jeder Wert entspricht einer erango-Vorlage, die als HTML-as-Source-of-Truth
  * nachgebaut ist (identische Screen-/Print-Ansicht, A4-PDF via Puppeteer):
- *   - `f04_ds`  = F 04 Datenschutzerklärung (Art. 13/14 DSGVO)
- *   - `f08_tnv` = F 08 Teilnehmervertrag / Anmeldung AVGS
+ *   - `f08_tnv` = F 08 Teilnehmervertrag & Teilnahmevereinbarung (inkl.
+ *                 Datenschutzhinweise Art. 13/14 DSGVO)
  *   - `f21_stv` = F 21 Strategievereinbarung
  * Neue Formulare werden hier ergänzt (+ eine Template-Komponente + ein
  * Config-Eintrag in `src/lib/documents/config.ts`).
+ *
+ * Reduziert 2026-07-30 auf diese zwei aktiven Typen. Die früheren Labels
+ * `f04_ds` (Datenschutz solo) und `tnv_ds_merge` (TNV+DS-Merge) sind entfallen —
+ * die Datenschutzhinweise stecken jetzt direkt in der F08. Der Postgres-Enum-Typ
+ * `document_type` kann diese alten Labels physisch noch tragen (PostgreSQL
+ * erlaubt kein DROP VALUE); sie werden aber nirgends mehr geschrieben/gelesen.
  */
-export const documentType = pgEnum("document_type", [
-  "f04_ds",
-  "f08_tnv",
-  "f21_stv",
-  // Kombiniertes Dokument: Teilnehmervertrag + Datenschutz in einem.
-  "tnv_ds_merge",
-]);
+export const documentType = pgEnum("document_type", ["f08_tnv", "f21_stv"]);
 /**
  * Lebenszyklus eines Kunde-Dokuments:
  *   - `draft`     = Coach füllt die Felder noch aus, keine Signatur, editierbar

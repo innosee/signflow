@@ -101,10 +101,10 @@ export default async function BildungstraegerDocumentsPage({ params }: Props) {
         <div className="border-b border-zinc-300 px-6 py-4">
           <h2 className="text-lg font-semibold">Formulare</h2>
           <p className="mt-1 text-sm text-zinc-600">
-            Du verwaltest Datenschutz (F04), Teilnehmervertrag (F08) und das
-            kombinierte TNV+DS-Dokument. Die Strategievereinbarung (F21) legt der
-            Coach an (für dich nur Ansicht + PDF). Die Teilnehmer:in signiert
-            alle über ihren Magic-Link.
+            Du verwaltest den Teilnehmervertrag & die Teilnahmevereinbarung
+            (F08, inkl. Datenschutzhinweise). Die Strategievereinbarung (F21)
+            legt der Coach an (für dich nur Ansicht + PDF). Die Teilnehmer:in
+            signiert alle über ihren Magic-Link.
           </p>
         </div>
 
@@ -154,7 +154,7 @@ export default async function BildungstraegerDocumentsPage({ params }: Props) {
             <input type="hidden" name="courseId" value={courseId} />
             <select
               name="type"
-              defaultValue="f04_ds"
+              defaultValue="f08_tnv"
               className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
             >
               {documentConfigsForOwner("bildungstraeger").map((c) => (

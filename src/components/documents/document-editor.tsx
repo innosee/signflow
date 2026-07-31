@@ -4,6 +4,7 @@ import { useActionState } from "react";
 
 import {
   getDocumentConfig,
+  MASTER_FIELD_DATE,
   MASTER_FIELD_LABELS,
   MASTER_FIELD_ORDER,
   type DocumentTypeId,
@@ -81,12 +82,20 @@ export function DocumentEditor({
             ? "Die Teilnehmer:in hat unterschrieben."
             : "Die Teilnehmer:in wurde per E-Mail mit ihrem Signier-Link benachrichtigt und unterschreibt über den Bereich Dokumente. Auf der Kursseite kann der Link bei Bedarf erneut gesendet werden."}
         </p>
+        {status === "active" && !participantSigned && (
+          <p className="mt-2 text-xs text-zinc-500">
+            Tippfehler entdeckt? Solange die Teilnehmer:in noch nicht
+            unterschrieben hat, kannst du das Dokument oben über
+            &bdquo;Bearbeiten (Korrektur)&ldquo; wieder öffnen, korrigieren und
+            neu freigeben.
+          </p>
+        )}
       </div>
     );
   }
 
   const requiresMaster = cfg.requiredMasterData.length > 0;
-  const showMaster = requiresMaster || type === "f08_tnv" || type === "tnv_ds_merge";
+  const showMaster = requiresMaster || type === "f08_tnv";
 
   // Bei Fehler gibt die Action die abgeschickten Werte zurück (`state.values`),
   // damit React 19 das Formular nicht auf die alten defaultValues zurücksetzt
@@ -116,7 +125,7 @@ export function DocumentEditor({
                     {required && <span className="text-red-600"> *</span>}
                   </span>
                   <input
-                    type="text"
+                    type={MASTER_FIELD_DATE.has(f) ? "date" : "text"}
                     // Namensraum `m_` verhindert Kollision mit Formularfeldern,
                     // die denselben Schlüssel tragen können (z.B. `ort`:
                     // Wohnort in den Stammdaten vs. Durchführungsort im Formular).
