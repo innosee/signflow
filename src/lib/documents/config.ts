@@ -47,9 +47,9 @@ export type DocField = {
 /**
  * Erweiterte Teilnehmer-Stammdaten (Spalten in `participants`). `phone` =
  * Mobilfunknummer (bestehende Spalte), `festnetz` = separate Festnetznummer.
- * Geburtsdatum ist bewusst NICHT dabei — erango hat es bei AVGS-TN praktisch nie
- * vorliegen (Abstimmung 2026-07-21). Die DB-Spalte bleibt, wird aber nicht
- * mehr erfasst/angezeigt.
+ * `geburtsdatum` = optionales Geburtsdatum (Datumsfeld) — steht auf der F08 und
+ * wird auf User-Wunsch (2026-07-31) wieder erfasst (bleibt aber optional, da
+ * erango es nicht immer vorliegen hat).
  */
 export type ParticipantMasterField =
   | "vorname"
@@ -57,6 +57,7 @@ export type ParticipantMasterField =
   | "strasse"
   | "plz"
   | "ort"
+  | "geburtsdatum"
   | "geburtsort"
   | "phone"
   | "festnetz";
@@ -67,10 +68,19 @@ export const MASTER_FIELD_LABELS: Record<ParticipantMasterField, string> = {
   strasse: "Straße / Hausnummer",
   plz: "PLZ",
   ort: "Ort",
+  geburtsdatum: "Geburtsdatum",
   geburtsort: "Geburtsort",
   phone: "Mobilfunknummer",
   festnetz: "Festnetznummer",
 };
+
+/**
+ * Master-Felder, die als Datums-Eingabe (`<input type="date">`, ISO yyyy-mm-dd)
+ * gerendert werden — der Rest ist Freitext.
+ */
+export const MASTER_FIELD_DATE = new Set<ParticipantMasterField>([
+  "geburtsdatum",
+]);
 
 /** Reihenfolge der Stammdaten-Felder im Editor. */
 export const MASTER_FIELD_ORDER: ParticipantMasterField[] = [
@@ -79,6 +89,7 @@ export const MASTER_FIELD_ORDER: ParticipantMasterField[] = [
   "strasse",
   "plz",
   "ort",
+  "geburtsdatum",
   "geburtsort",
   "phone",
   "festnetz",

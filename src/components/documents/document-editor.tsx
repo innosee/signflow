@@ -4,6 +4,7 @@ import { useActionState } from "react";
 
 import {
   getDocumentConfig,
+  MASTER_FIELD_DATE,
   MASTER_FIELD_LABELS,
   MASTER_FIELD_ORDER,
   type DocumentTypeId,
@@ -124,7 +125,7 @@ export function DocumentEditor({
                     {required && <span className="text-red-600"> *</span>}
                   </span>
                   <input
-                    type="text"
+                    type={MASTER_FIELD_DATE.has(f) ? "date" : "text"}
                     // Namensraum `m_` verhindert Kollision mit Formularfeldern,
                     // die denselben Schlüssel tragen können (z.B. `ort`:
                     // Wohnort in den Stammdaten vs. Durchführungsort im Formular).
