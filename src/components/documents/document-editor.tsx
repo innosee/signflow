@@ -81,6 +81,14 @@ export function DocumentEditor({
             ? "Die Teilnehmer:in hat unterschrieben."
             : "Die Teilnehmer:in wurde per E-Mail mit ihrem Signier-Link benachrichtigt und unterschreibt über den Bereich Dokumente. Auf der Kursseite kann der Link bei Bedarf erneut gesendet werden."}
         </p>
+        {status === "active" && !participantSigned && (
+          <p className="mt-2 text-xs text-zinc-500">
+            Tippfehler entdeckt? Solange die Teilnehmer:in noch nicht
+            unterschrieben hat, kannst du das Dokument oben über
+            &bdquo;Bearbeiten (Korrektur)&ldquo; wieder öffnen, korrigieren und
+            neu freigeben.
+          </p>
+        )}
       </div>
     );
   }

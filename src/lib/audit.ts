@@ -48,6 +48,7 @@ export type AuditAction =
   | "document.released"
   | "document.coach_signed"
   | "document.participant_signed"
+  | "document.reopened"
   | "document.deleted";
 
 export type AuditActorType =
