@@ -217,7 +217,12 @@ export async function submitDocumentEditor(
   return { success: true };
 }
 
-/** Soft-Delete eines BT-Dokuments (nur solange nicht abgeschlossen). */
+/**
+ * Soft-Delete eines BT-Dokuments. Auf User-Wunsch (2026-07-31) auch für
+ * abgeschlossene (beidseitig signierte) Dokumente erlaubt — Soft-Delete
+ * (deleted_at), Zeile + Signaturen bleiben in der DB, Audit-Log hält die
+ * Löschung fest.
+ */
 export async function deleteDocument(formData: FormData): Promise<void> {
   const session = await requireBildungstraeger();
   assertNotImpersonating(session);
@@ -227,9 +232,6 @@ export async function deleteDocument(formData: FormData): Promise<void> {
   const doc = await loadTenantDocument(documentId, tenantId);
   if (!doc) redirect(`/bildungstraeger/courses`);
   if (!isDocumentOwnedBy(doc.type as DocumentTypeId, "bildungstraeger")) {
-    redirect(`/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`);
-  }
-  if (doc.status === "completed") {
     redirect(`/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`);
   }
 
@@ -244,9 +246,76 @@ export async function deleteDocument(formData: FormData): Promise<void> {
     action: "document.deleted",
     resourceType: "document",
     resourceId: documentId,
-    metadata: { type: doc.type },
+    metadata: { type: doc.type, status: doc.status },
   });
 
   revalidatePath(`/bildungstraeger/courses/${doc.courseId}/dokumente`);
   redirect(`/bildungstraeger/courses/${doc.courseId}/dokumente`);
+}
+
+/**
+ * Setzt ein freigegebenes (`active`), aber vom Kunden noch NICHT signiertes
+ * BT-Dokument zurück auf `draft`, damit Tippfehler VOR der Kundenunterschrift
+ * korrigiert werden können. Die geteilte Org-Unterschrift wird zurückgenommen
+ * und muss nach der Korrektur neu geleistet werden. Nach der Kundenunterschrift
+ * (`completed`) nicht mehr möglich.
+ */
+export async function reopenDocument(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+
+  const documentId = String(formData.get("documentId") ?? "").trim();
+  const doc = await loadTenantDocument(documentId, tenantId);
+  if (!doc) redirect(`/bildungstraeger/courses`);
+  const backToDoc = `/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`;
+  if (!isDocumentOwnedBy(doc.type as DocumentTypeId, "bildungstraeger")) {
+    redirect(backToDoc);
+  }
+  if (doc.status !== "active") redirect(backToDoc);
+
+  try {
+    await db.transaction(async (tx) => {
+      const [fresh] = await tx
+        .select({ status: schema.documents.status })
+        .from(schema.documents)
+        .where(eq(schema.documents.id, documentId))
+        .limit(1);
+      if (!fresh || fresh.status !== "active") throw new Error("NOT_ACTIVE");
+      const [pSig] = await tx
+        .select({ id: schema.documentSignatures.id })
+        .from(schema.documentSignatures)
+        .where(
+          and(
+            eq(schema.documentSignatures.documentId, documentId),
+            eq(schema.documentSignatures.signerType, "participant"),
+          ),
+        )
+        .limit(1);
+      if (pSig) throw new Error("ALREADY_SIGNED");
+      await tx
+        .delete(schema.documentSignatures)
+        .where(eq(schema.documentSignatures.documentId, documentId));
+      await tx
+        .update(schema.documents)
+        .set({ status: "draft" })
+        .where(eq(schema.documents.id, documentId));
+      await logAudit(
+        {
+          actorType: "bildungstraeger",
+          actorId: session.user.id,
+          action: "document.reopened",
+          resourceType: "document",
+          resourceId: documentId,
+          metadata: { type: doc.type },
+        },
+        tx,
+      );
+    });
+  } catch {
+    redirect(backToDoc);
+  }
+
+  revalidatePath(backToDoc);
+  redirect(backToDoc);
 }

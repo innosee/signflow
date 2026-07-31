@@ -39,7 +39,7 @@ export type CockpitRow = {
   // Abschlussbericht
   berStatus: "missing" | "draft" | "submitted";
   berId: string | null;
-  // Kunde-Dokumente-Stand (DS/TNV/STV): je Chip `done` = komplett signiert.
+  // Kunde-Dokumente-Stand (TNV/STV): je Chip `done` = komplett signiert.
   // null = Kunde hat (noch) keine Dokumente → Badge wird ausgeblendet.
   docChips: { label: string; done: boolean }[] | null;
 };
@@ -208,7 +208,7 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
                       {c.docChips && (
                         <span
                           className="inline-flex items-center gap-1.5 rounded-full bg-zinc-50 px-2 py-0.5 text-xs"
-                          title="Kunde-Dokumente — komplett signiert (✓) oder noch offen (○): DS = Datenschutz, TNV = Teilnehmervertrag, STV = Strategievereinbarung"
+                          title="Kunde-Dokumente — komplett signiert (✓) oder noch offen (○): TNV = Teilnehmervertrag, STV = Strategievereinbarung"
                         >
                           <span className="text-zinc-500">Dok:</span>
                           {c.docChips.map((d) => (

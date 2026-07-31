@@ -215,7 +215,12 @@ export async function submitDocumentEditor(
   return { success: true };
 }
 
-/** Soft-Delete eines Dokuments (nur eigene STV, nur solange nicht abgeschlossen). */
+/**
+ * Soft-Delete eines Dokuments (nur eigene STV). Auf User-Wunsch (2026-07-31)
+ * auch für abgeschlossene (beidseitig signierte) Dokumente erlaubt — es ist ein
+ * Soft-Delete (deleted_at), die Zeile + Signaturen bleiben in der DB und das
+ * Audit-Log hält die Löschung fest.
+ */
 export async function deleteDocument(formData: FormData): Promise<void> {
   const session = await requireSigningEnabled();
   assertNotImpersonating(session);
@@ -226,10 +231,6 @@ export async function deleteDocument(formData: FormData): Promise<void> {
   if (!doc) redirect(`/coach/courses`);
   // Coach darf nur eigene (STV) Dokumente löschen — BT-Docs sieht er read-only.
   if (!isDocumentOwnedBy(doc.type as DocumentTypeId, "coach")) {
-    redirect(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
-  }
-  if (doc.status === "completed") {
-    // Abgeschlossene Dokumente bleiben erhalten (Nachweis).
     redirect(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
   }
 
@@ -244,9 +245,78 @@ export async function deleteDocument(formData: FormData): Promise<void> {
     action: "document.deleted",
     resourceType: "document",
     resourceId: documentId,
-    metadata: { type: doc.type },
+    metadata: { type: doc.type, status: doc.status },
   });
 
   revalidatePath(`/coach/courses/${doc.courseId}`);
   redirect(`/coach/courses/${doc.courseId}`);
+}
+
+/**
+ * Setzt ein freigegebenes (`active`), aber vom Kunden noch NICHT signiertes
+ * Dokument zurück auf `draft`, damit Tippfehler VOR der Kundenunterschrift
+ * korrigiert werden können. Die Coach-Unterschrift (erango-Seite) wird dabei
+ * zurückgenommen und muss nach der Korrektur neu geleistet werden. Nach der
+ * Kundenunterschrift (`completed`) nicht mehr möglich.
+ */
+export async function reopenDocument(formData: FormData): Promise<void> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const documentId = String(formData.get("documentId") ?? "").trim();
+  const doc = await loadOwnedDocument(documentId, coachId);
+  if (!doc) redirect(`/coach/courses`);
+  const backToDoc = `/coach/courses/${doc.courseId}/dokumente/${documentId}`;
+  if (!isDocumentOwnedBy(doc.type as DocumentTypeId, "coach")) redirect(backToDoc);
+  // Nur „active" (erango-Seite signiert, Kunde noch nicht) lässt sich zurückholen.
+  if (doc.status !== "active") redirect(backToDoc);
+
+  try {
+    await db.transaction(async (tx) => {
+      const [fresh] = await tx
+        .select({ status: schema.documents.status })
+        .from(schema.documents)
+        .where(eq(schema.documents.id, documentId))
+        .limit(1);
+      if (!fresh || fresh.status !== "active") throw new Error("NOT_ACTIVE");
+      // Race-Absicherung: hat der Kunde inzwischen signiert, nicht zurückholen.
+      const [pSig] = await tx
+        .select({ id: schema.documentSignatures.id })
+        .from(schema.documentSignatures)
+        .where(
+          and(
+            eq(schema.documentSignatures.documentId, documentId),
+            eq(schema.documentSignatures.signerType, "participant"),
+          ),
+        )
+        .limit(1);
+      if (pSig) throw new Error("ALREADY_SIGNED");
+      // Erango-Signatur zurücknehmen + zurück auf Entwurf.
+      await tx
+        .delete(schema.documentSignatures)
+        .where(eq(schema.documentSignatures.documentId, documentId));
+      await tx
+        .update(schema.documents)
+        .set({ status: "draft" })
+        .where(eq(schema.documents.id, documentId));
+      await logAudit(
+        {
+          actorType: "coach",
+          actorId: coachId,
+          action: "document.reopened",
+          resourceType: "document",
+          resourceId: documentId,
+          metadata: { type: doc.type },
+        },
+        tx,
+      );
+    });
+  } catch {
+    // Nicht mehr zurückholbar (Race o.ä.) → zurück zur Detailseite.
+    redirect(backToDoc);
+  }
+
+  revalidatePath(backToDoc);
+  redirect(backToDoc);
 }

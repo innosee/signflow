@@ -14,7 +14,8 @@ import {
 import { loadDocumentSheet } from "@/lib/documents/data";
 import { DocumentEditor } from "@/components/documents/document-editor";
 import { DeleteDocumentButton } from "@/components/documents/delete-document-button";
-import { deleteDocument, submitDocumentEditor } from "../actions";
+import { ReopenDocumentButton } from "@/components/documents/reopen-document-button";
+import { deleteDocument, reopenDocument, submitDocumentEditor } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -114,8 +115,15 @@ export default async function CoachDocumentPage({ params }: Props) {
           >
             PDF
           </a>
-          {canEdit && row.status !== "completed" && (
-            <DeleteDocumentButton action={deleteDocument} documentId={docId} />
+          {canEdit && row.status === "active" && (
+            <ReopenDocumentButton action={reopenDocument} documentId={docId} />
+          )}
+          {canEdit && (
+            <DeleteDocumentButton
+              action={deleteDocument}
+              documentId={docId}
+              signed={row.status === "completed"}
+            />
           )}
         </div>
       </div>
@@ -134,6 +142,7 @@ export default async function CoachDocumentPage({ params }: Props) {
                 strasse: row.strasse ?? "",
                 plz: row.plz ?? "",
                 ort: row.ort ?? "",
+                geburtsdatum: row.geburtsdatum ?? "",
                 geburtsort: row.geburtsort ?? "",
                 phone: row.phone ?? "",
                 festnetz: row.festnetz ?? "",
