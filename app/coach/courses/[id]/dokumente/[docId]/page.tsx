@@ -142,6 +142,7 @@ export default async function CoachDocumentPage({ params }: Props) {
                 strasse: row.strasse ?? "",
                 plz: row.plz ?? "",
                 ort: row.ort ?? "",
+                geburtsdatum: row.geburtsdatum ?? "",
                 geburtsort: row.geburtsort ?? "",
                 phone: row.phone ?? "",
                 festnetz: row.festnetz ?? "",
