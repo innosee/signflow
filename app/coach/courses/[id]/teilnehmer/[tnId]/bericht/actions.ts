@@ -13,7 +13,12 @@ import {
   readHardBlocks,
   readSnapshotInput,
 } from "@/lib/checker/snapshot";
-import { resolveMassnahmeTyp } from "@/lib/checker/types";
+import { type MassnahmeTyp, resolveMassnahmeTyp } from "@/lib/checker/types";
+import {
+  integrationsergebnisVariante,
+  parseIntegrationsergebnisField,
+  validateIntegrationsergebnis,
+} from "@/lib/integrationsergebnis";
 import { isImpersonating, requireCoach } from "@/lib/dal";
 import { formatDateDE } from "@/lib/format-date";
 
@@ -29,11 +34,13 @@ type OwnedContext = {
   courseId: string;
   participantId: string;
   coachId: string;
+  massnahmeTyp: MassnahmeTyp;
 };
 
 /**
  * Prüft: (1) Coach ist im Kompetenzteam des Kurses, (2) TN ist im Kurs
- * eingeschrieben. Ohne beides darf weder draft noch submit durchgehen.
+ * eingeschrieben. Ohne beides darf weder draft noch submit durchgehen. Liefert
+ * zusätzlich den Maßnahmentyp (für die Integrationsergebnis-Variante).
  */
 async function requireOwnedTnContext(
   courseId: string,
@@ -41,7 +48,7 @@ async function requireOwnedTnContext(
   coachId: string,
 ): Promise<OwnedContext | null> {
   const [row] = await db
-    .select({ id: schema.courses.id })
+    .select({ massnahmeTyp: schema.courses.massnahmeTyp })
     .from(schema.courses)
     .where(
       and(
@@ -53,7 +60,12 @@ async function requireOwnedTnContext(
     )
     .limit(1);
   if (!row) return null;
-  return { courseId, participantId, coachId };
+  return {
+    courseId,
+    participantId,
+    coachId,
+    massnahmeTyp: resolveMassnahmeTyp(row.massnahmeTyp),
+  };
 }
 
 async function currentRequestMeta() {
@@ -111,6 +123,14 @@ export async function saveBerDraftAction(
   const ctx = await requireOwnedTnContext(courseId, participantId, coachId);
   if (!ctx) return { error: "Kurs/Teilnehmer nicht gefunden." };
 
+  // Integrationsergebnis: im Entwurf ohne Pflicht-Check gespeichert (Teil-
+  // stand darf hängen). ESCA → Variante null → immer null.
+  const ieVariante = integrationsergebnisVariante(ctx.massnahmeTyp);
+  const integrationsergebnis = parseIntegrationsergebnisField(
+    formData.get("integrationsergebnis"),
+    ieVariante,
+  );
+
   const [existing] = await db
     .select()
     .from(schema.abschlussberichte)
@@ -128,7 +148,15 @@ export async function saveBerDraftAction(
   if (existing) {
     await db
       .update(schema.abschlussberichte)
-      .set({ teilnahme, ablauf, fazit, sonstiges, keineFehlzeiten, abschlussDatum })
+      .set({
+        teilnahme,
+        ablauf,
+        fazit,
+        sonstiges,
+        keineFehlzeiten,
+        abschlussDatum,
+        integrationsergebnis,
+      })
       .where(eq(schema.abschlussberichte.id, existing.id));
     berId = existing.id;
   } else {
@@ -144,6 +172,7 @@ export async function saveBerDraftAction(
         sonstiges,
         keineFehlzeiten,
         abschlussDatum,
+        integrationsergebnis,
       })
       .returning({ id: schema.abschlussberichte.id });
     berId = created.id;
@@ -284,6 +313,19 @@ export async function submitBerAction(
   const ctx = await requireOwnedTnContext(courseId, participantId, coachId);
   if (!ctx) return { error: "Kurs/Teilnehmer nicht gefunden." };
 
+  // Integrationsergebnis (nur EKC/ESC/EGC): Ja/Nein ist Pflicht, Datum (+ Firma
+  // bei Vermittlung) nur bei „Ja". Server-autoritativ — Variante aus dem Kunden-
+  // Maßnahmentyp, nicht aus dem Client.
+  const ieVariante = integrationsergebnisVariante(ctx.massnahmeTyp);
+  const integrationsergebnis = parseIntegrationsergebnisField(
+    formData.get("integrationsergebnis"),
+    ieVariante,
+  );
+  if (ieVariante) {
+    const ieError = validateIntegrationsergebnis(integrationsergebnis, ieVariante);
+    if (ieError) return { error: ieError };
+  }
+
   // Snapshot-Daten für die Bildungsträger-Liste (Suche, PDF-Filename).
   // Ein einzelner Join genügt — wenn der Coach hier ankommt, ist
   // requireOwnedTnContext schon durch und Course/Participant existieren.
@@ -344,6 +386,7 @@ export async function submitBerAction(
         : "",
     coachNameSnapshot: snapshotData?.coachName ?? "",
     abschlussDatum,
+    integrationsergebnis,
   };
 
   let berId: string;

@@ -42,6 +42,7 @@ export default async function CoachBerPrintPage({ params }: Props) {
         fazit: schema.abschlussberichte.fazit,
         sonstiges: schema.abschlussberichte.sonstiges,
         keineFehlzeiten: schema.abschlussberichte.keineFehlzeiten,
+        integrationsergebnis: schema.abschlussberichte.integrationsergebnis,
         mustHaveOverrideReason:
           schema.abschlussberichte.mustHaveOverrideReason,
         status: schema.abschlussberichte.status,
@@ -58,6 +59,7 @@ export default async function CoachBerPrintPage({ params }: Props) {
       participantName: schema.participants.name,
       participantKundenNr: schema.participants.kundenNr,
       courseTitle: schema.courses.title,
+      courseMassnahmeTyp: schema.courses.massnahmeTyp,
       courseAvgs: schema.courses.avgsNummer,
       courseStart: schema.courses.startDate,
       courseEnd: schema.courses.endDate,
@@ -173,6 +175,8 @@ export default async function CoachBerPrintPage({ params }: Props) {
             mustHaveOverrideReason: ber.mustHaveOverrideReason,
           }}
           branding={branding}
+          massnahmeTyp={row.courseMassnahmeTyp}
+          integrationsergebnis={ber.integrationsergebnis}
         />
       </div>
 
