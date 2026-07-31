@@ -37,9 +37,17 @@ export function SessionForm({
     createSession,
     undefined,
   );
-  const [isErstgespraech, setIsErstgespraech] = useState(false);
+  // Kein Erstgespräch erfasst → Formular startet im Erstgespräch-Modus, damit
+  // das Kennenlerngespräch der natürliche erste Termin ist. Existiert schon
+  // eins, ist die Option ausgeblendet und dies bleibt false.
+  const [isErstgespraech, setIsErstgespraech] = useState(!erstgespraechExists);
   const [sessionDate, setSessionDate] = useState("");
   const [anzahlUe, setAnzahlUe] = useState("");
+
+  // Harte Regel (auch serverseitig): ohne Erstgespräch kein Coaching-Termin.
+  // Will der Coach hier eine reguläre UE anlegen, obwohl noch kein Erstgespräch
+  // existiert, wird der Submit gesperrt und erklärt.
+  const erstgespraechZuerst = !erstgespraechExists && !isErstgespraech;
 
   // UE-Budget-Hinweis (live, „bei der Eingabe"): bereits verplante UE + die
   // gerade eingegebene dürfen die bewilligten UE nicht überschreiten. Reine
@@ -221,6 +229,18 @@ export function SessionForm({
           </label>
         )}
 
+        {erstgespraechZuerst && (
+          <p
+            role="alert"
+            className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800"
+          >
+            Für diese Maßnahme ist noch <span className="font-medium">kein
+            Erstgespräch (Kennenlerngespräch)</span> erfasst. Bitte lege zuerst
+            das Erstgespräch an — ein Coaching-Termin ist erst danach möglich.
+            Setze dazu oben den Haken <span className="font-medium">Erstgespräch</span>.
+          </p>
+        )}
+
         {!erstgespraechExists && isErstgespraech && (
           <EignungAnalyseFieldset
             defaultEignung={state?.values?.eignungsanalyse}
@@ -257,7 +277,12 @@ export function SessionForm({
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || erstgespraechZuerst}
+          title={
+            erstgespraechZuerst
+              ? "Zuerst das Erstgespräch (Kennenlerngespräch) anlegen"
+              : undefined
+          }
           className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition enabled:hover:bg-zinc-800 disabled:opacity-60"
         >
           {pending ? "Wird angelegt…" : "Termin anlegen"}
