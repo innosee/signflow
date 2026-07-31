@@ -48,14 +48,24 @@ export function TnbTeilnahmebescheinigung({
     <article className="tnb" aria-label="Teilnahmebescheinigung">
       <header className="tnb-head">
         <h1 className="tnb-title">Teilnahmebescheinigung</h1>
-        {data.branding.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={data.branding.logoUrl}
-            alt="erango"
-            className="tnb-logo"
-          />
-        ) : null}
+        <div className="tnb-logo">
+          {data.branding.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.branding.logoUrl}
+              alt="erango"
+              className="tnb-logo-img"
+            />
+          ) : (
+            <div className="tnb-logo-fallback">
+              er—
+              <br />
+              an
+              <br />
+              go.
+            </div>
+          )}
+        </div>
       </header>
 
       <p className="tnb-name">
@@ -115,15 +125,24 @@ export function TnbTeilnahmebescheinigung({
       </div>
 
       <footer className="tnb-foot">
-        <p className="tnb-foot-line1">
+        <p className="tnb-foot-services">
           erango Karrierecoaching (EKC) • erango Gründungscoaching (EGC) • erango
           Systemisches Coaching (ESC) • erango Stabilisierung während der Probezeit
           (ESCA)
         </p>
-        <p className="tnb-foot-line2">
-          info@erango.de · +49 (0) 7731 909 718 10 · Scheffelstraße 28, D-78224
-          Singen · erango GmbH · HRB 704979 · USt-ID DE271240874
-        </p>
+        <div className="tnb-foot-contact">
+          <span>info@erango.de</span>
+          <span>+49 (0) 7731 909 718 10</span>
+          <span>Scheffelstraße 28, D-78224 Singen</span>
+          <span>erango GmbH</span>
+        </div>
+        <div className="tnb-foot-legal">
+          <span>Geschäftsführerin: Victoria Dressel</span>
+          <span>IBAN: DE50 6905 1410 0007 0862 67 · BIC: SOLADES1REN</span>
+          <span>Bezirkssparkasse Reichenau</span>
+          <span>Singen, Freiburg im Breisgau · HRB 704979</span>
+          <span>USt-ID: DE271240874</span>
+        </div>
       </footer>
 
       <style>{tnbCss}</style>
@@ -170,9 +189,22 @@ const tnbCss = `
   position: absolute;
   right: 0;
   top: 0;
+}
+.tnb-logo-img {
   max-height: 20mm;
   max-width: 34mm;
   object-fit: contain;
+  display: block;
+}
+.tnb-logo-fallback {
+  border: 1.5pt solid #14545f;
+  color: #14545f;
+  font-weight: 800;
+  font-size: 12pt;
+  line-height: 1.05;
+  padding: 2mm 3mm;
+  text-align: left;
+  display: inline-block;
 }
 .tnb-name {
   font-size: 18pt;
@@ -259,18 +291,37 @@ const tnbCss = `
 }
 .tnb-foot {
   margin-top: 16mm;
-  border-top: 0.3mm solid #d4d4d8;
-  padding-top: 3mm;
 }
-.tnb-foot-line1 {
+.tnb-foot-services {
   font-size: 7.5pt;
-  color: #3f3f46;
-  margin: 0 0 1.5mm 0;
+  color: #14545f;
+  font-weight: 600;
+  margin: 0 0 2.5mm 0;
+  line-height: 1.4;
 }
-.tnb-foot-line2 {
-  font-size: 7pt;
-  color: #52525b;
-  margin: 0;
+.tnb-foot-contact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5mm 5mm;
+  font-size: 8pt;
+  color: #3f3f46;
+  border-top: 0.3mm solid #d4d4d8;
+  padding: 2.5mm 0;
+  margin-bottom: 3mm;
+}
+.tnb-foot-legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5mm 4mm;
+  background: #14545f;
+  color: #e8f0f1;
+  font-size: 6.5pt;
+  line-height: 1.5;
+  padding: 2.5mm 4mm;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 @media print {
   @page {
