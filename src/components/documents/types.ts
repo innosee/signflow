@@ -45,6 +45,8 @@ export type DocumentSheetData = {
     anzahlBewilligteUe: number;
     startDate: string | null;
     endDate: string | null;
+    /** Letzter tatsächlicher Termin (max session_date) oder null. */
+    letzterTermin: string | null;
   };
   coachName: string;
   signatures: {
