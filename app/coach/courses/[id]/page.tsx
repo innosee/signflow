@@ -457,7 +457,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 <li key={s.id} className="px-6 py-4 space-y-2">
                   <div className="flex items-start gap-4">
                     <div className="w-24 shrink-0">
-                      <div className="font-medium">{s.sessionDate}</div>
+                      <div className="font-medium">{formatDate(s.sessionDate)}</div>
                       <div className="text-xs text-zinc-500">
                         {s.modus === "online" ? "Online" : "Präsenz"}
                         {" · "}

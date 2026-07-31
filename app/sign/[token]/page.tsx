@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 import { isFutureSessionDate } from "@/lib/dates";
+import { formatDateDE } from "@/lib/format-date";
 import { resolveParticipantToken } from "@/lib/participant-tokens";
 
 import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
@@ -219,7 +220,7 @@ function SessionRow({
     <div className="rounded-xl border border-zinc-300 bg-white p-4 space-y-3">
       <div className="flex items-baseline justify-between gap-2 text-sm">
         <div>
-          <div className="font-medium">{session.sessionDate}</div>
+          <div className="font-medium">{formatDateDE(session.sessionDate)}</div>
           <div className="text-xs text-zinc-500">
             {session.modus === "online" ? "Online" : "Präsenz"}
             {" · "}
