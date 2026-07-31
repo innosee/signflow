@@ -140,7 +140,14 @@ export const berStatus = pgEnum("ber_status", ["draft", "submitted"]);
  * `document_type` kann diese alten Labels physisch noch tragen (PostgreSQL
  * erlaubt kein DROP VALUE); sie werden aber nirgends mehr geschrieben/gelesen.
  */
-export const documentType = pgEnum("document_type", ["f08_tnv", "f21_stv"]);
+export const documentType = pgEnum("document_type", [
+  "f08_tnv",
+  "f21_stv",
+  // Teilnahmebescheinigung (erango F 05-x): coach-seitig aus dem Inhalte-Katalog
+  // zusammengeklickt, mit erango-Org-Signatur generiert, KEINE Teilnehmer-
+  // Signatur. Reines erango-Ausstellungsdokument.
+  "tnb_cert",
+]);
 /**
  * Lebenszyklus eines Kunde-Dokuments:
  *   - `draft`     = Coach füllt die Felder noch aus, keine Signatur, editierbar

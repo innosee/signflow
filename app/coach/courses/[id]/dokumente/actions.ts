@@ -26,6 +26,11 @@ import {
   isMassnahmeTyp,
   MASSNAHME_TYP_LABEL,
 } from "@/lib/massnahme-typ";
+import {
+  TNB_CUSTOM_LINES,
+  TNB_KATALOGE,
+  validateTnbAuswahl,
+} from "@/lib/documents/tnb-katalog";
 
 type ActionState =
   | {
@@ -319,4 +324,149 @@ export async function reopenDocument(formData: FormData): Promise<void> {
 
   revalidatePath(backToDoc);
   redirect(backToDoc);
+}
+
+// --- Teilnahmebescheinigung (F 05, kind: certificate) ----------------------
+
+export type TnbActionState =
+  | { error?: string; success?: boolean; issued?: boolean }
+  | undefined;
+
+function parseKeyArray(raw: FormDataEntryValue | null): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Heutiges Datum als ISO yyyy-mm-dd in Europe/Berlin. */
+function todayIsoBerlin(): string {
+  // en-CA liefert yyyy-mm-dd; Zeitzone fixiert, damit das Ausstellungsdatum
+  // nicht abends auf den Vortag kippt.
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+}
+
+/**
+ * Speichert (intent=save) bzw. stellt aus (intent=issue) eine
+ * Teilnahmebescheinigung. Ausstellen = die erango-Org-Signatur wird gerendert,
+ * Zeitraum/UE/Ort werden als Snapshot eingefroren, Status → `completed`. KEINE
+ * Teilnehmer-Signatur (reines erango-Ausstellungsdokument).
+ */
+export async function submitTnbCert(
+  _prev: TnbActionState,
+  formData: FormData,
+): Promise<TnbActionState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const documentId = String(formData.get("documentId") ?? "").trim();
+  const intent = String(formData.get("intent") ?? "save");
+  const selectedKeysRaw = parseKeyArray(formData.get("selectedKeys"));
+  const customLinesRaw = parseKeyArray(formData.get("customLines"));
+
+  const doc = await loadOwnedDocument(documentId, coachId);
+  if (!doc) return { error: "Dokument nicht gefunden." };
+  if (doc.type !== "tnb_cert") return { error: "Falscher Dokumenttyp." };
+  if (doc.status !== "draft") {
+    return { error: "Bereits ausgestellt — nicht mehr änderbar." };
+  }
+
+  // Kurs-/Teilnehmer-/Tenant-Kontext für Snapshot + Signatur-Check.
+  const [ctx] = await db
+    .select({
+      massnahmeTyp: schema.courses.massnahmeTyp,
+      startDate: schema.courses.startDate,
+      endDate: schema.courses.endDate,
+      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      durchfuehrungsort: schema.courses.durchfuehrungsort,
+      participantName: schema.participants.name,
+      orgSignatureUrl: schema.tenants.signatureUrl,
+    })
+    .from(schema.documents)
+    .innerJoin(schema.courses, eq(schema.courses.id, schema.documents.courseId))
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.documents.participantId),
+    )
+    .leftJoin(
+      schema.tenants,
+      eq(schema.tenants.id, schema.participants.tenantId),
+    )
+    .where(eq(schema.documents.id, documentId))
+    .limit(1);
+  if (!ctx) return { error: "Kurs-Kontext nicht gefunden." };
+
+  const typ = isMassnahmeTyp(ctx.massnahmeTyp) ? ctx.massnahmeTyp : null;
+
+  // Auswahl säubern: nur gültige Katalog-Keys, eigene Zeilen getrimmt + gedeckelt.
+  const validKeys = typ
+    ? new Set(TNB_KATALOGE[typ].groups.flatMap((g) => g.items.map((i) => i.key)))
+    : new Set<string>();
+  const selectedKeys = selectedKeysRaw.filter((k) => validKeys.has(k));
+  const customLines = customLinesRaw
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, TNB_CUSTOM_LINES);
+
+  const baseForm: Record<string, string> = {
+    selectedKeys: JSON.stringify(selectedKeys),
+    customLines: JSON.stringify(customLines),
+  };
+
+  const backToDoc = `/coach/courses/${doc.courseId}/dokumente/${documentId}`;
+
+  if (intent !== "issue") {
+    await db
+      .update(schema.documents)
+      .set({ formData: baseForm })
+      .where(eq(schema.documents.id, documentId));
+    revalidatePath(backToDoc);
+    return { success: true };
+  }
+
+  // --- Ausstellen ---
+  if (!typ) return { error: "Maßnahmentyp des Kurses ist unbekannt." };
+  const auswahlError = validateTnbAuswahl(typ, { selectedKeys, customLines });
+  if (auswahlError) return { error: auswahlError };
+  if (!ctx.orgSignatureUrl) {
+    return {
+      error:
+        "Es ist noch keine erango-Unterschrift hinterlegt. Der Bildungsträger legt sie unter „Unterschrift“ an, dann lässt sich die Bescheinigung ausstellen.",
+    };
+  }
+
+  const frozen: Record<string, string> = {
+    ...baseForm,
+    cert_von: ctx.startDate ?? "",
+    cert_bis: ctx.endDate ?? "",
+    cert_ue:
+      ctx.anzahlBewilligteUe != null ? String(ctx.anzahlBewilligteUe) : "",
+    cert_ort: ctx.durchfuehrungsort ?? "",
+    cert_datum: todayIsoBerlin(),
+    tn_name: ctx.participantName ?? "",
+  };
+
+  await db
+    .update(schema.documents)
+    .set({ formData: frozen, status: "completed", completedAt: new Date() })
+    .where(eq(schema.documents.id, documentId));
+
+  await logAudit({
+    actorType: "coach",
+    actorId: coachId,
+    action: "document.tnb_issued",
+    resourceType: "document",
+    resourceId: documentId,
+    metadata: { type: doc.type, courseId: doc.courseId, count: selectedKeys.length + customLines.length },
+  });
+
+  revalidatePath(backToDoc);
+  revalidatePath(`/coach/courses/${doc.courseId}`);
+  return { success: true, issued: true };
 }

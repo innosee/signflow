@@ -40,6 +40,7 @@ export async function loadDocumentSheet(
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
       tenantId: schema.participants.tenantId,
+      orgSignatureUrl: schema.tenants.signatureUrl,
       // Teilnehmer (Stammdaten)
       pName: schema.participants.name,
       pVorname: schema.participants.vorname,
@@ -63,6 +64,7 @@ export async function loadDocumentSheet(
       eq(schema.participants.id, schema.documents.participantId),
     )
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
+    .leftJoin(schema.tenants, eq(schema.tenants.id, schema.participants.tenantId))
     .where(
       and(
         eq(schema.documents.id, documentId),
@@ -93,11 +95,13 @@ export async function loadDocumentSheet(
     sigRows.find((r) => r.signerType === "participant") ?? null;
 
   const branding = await getBranding(doc.tenantId);
-  const [brandingLogo, coachSigUrl, participantSigUrl] = await Promise.all([
-    resolveAssetUrl(branding.logoUrl),
-    resolveAssetUrl(coachSig?.signatureUrl),
-    resolveAssetUrl(participantSig?.signatureUrl),
-  ]);
+  const [brandingLogo, coachSigUrl, participantSigUrl, orgSigUrl] =
+    await Promise.all([
+      resolveAssetUrl(branding.logoUrl),
+      resolveAssetUrl(coachSig?.signatureUrl),
+      resolveAssetUrl(participantSig?.signatureUrl),
+      resolveAssetUrl(doc.orgSignatureUrl),
+    ]);
 
   const massnahmeLabel = isMassnahmeTyp(doc.massnahmeTyp)
     ? MASSNAHME_TYP_LABEL[doc.massnahmeTyp]
@@ -119,6 +123,7 @@ export async function loadDocumentSheet(
     status: doc.status,
     formData: snap,
     branding: { logoUrl: brandingLogo },
+    orgSignatureUrl: orgSigUrl,
     participant: {
       name: pick("tn_name", doc.pName) ?? doc.pName,
       vorname: pick("tn_vorname", doc.pVorname),
@@ -135,6 +140,7 @@ export async function loadDocumentSheet(
     },
     course: {
       title: doc.courseTitle,
+      massnahmeTyp: doc.massnahmeTyp,
       massnahmeLabel,
       durchfuehrungsort: doc.durchfuehrungsort,
       avgsNummer: doc.avgsNummer,

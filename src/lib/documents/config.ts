@@ -12,13 +12,17 @@
  * Template-Komponente + Prefill-Zweig.
  */
 
-export type DocumentTypeId = "f08_tnv" | "f21_stv";
+export type DocumentTypeId = "f08_tnv" | "f21_stv" | "tnb_cert";
 
 // Genau zwei aktive Formulare (Reduktion 2026-07-30): der Teilnehmervertrag
 // (F08, jetzt inkl. Datenschutz) und die Strategievereinbarung (F21). Die
 // früheren F04 (Datenschutz solo) und der TNV+DS-Merge sind entfallen — die
 // Datenschutzhinweise stecken direkt in der aktuellen F08.
-export const DOCUMENT_TYPE_IDS: DocumentTypeId[] = ["f08_tnv", "f21_stv"];
+export const DOCUMENT_TYPE_IDS: DocumentTypeId[] = [
+  "f08_tnv",
+  "f21_stv",
+  "tnb_cert",
+];
 
 /**
  * Wer ein Dokument anlegt, ausfüllt und (auf der erango-Seite) signiert:
@@ -97,6 +101,15 @@ export const MASTER_FIELD_ORDER: ParticipantMasterField[] = [
 
 export type DocumentConfig = {
   id: DocumentTypeId;
+  /**
+   * Art des Dokuments:
+   * - `form` (Default) = klassisches Feld-Formular (F08/F21), generischer
+   *   `DocumentEditor` + `submitDocument`-Freigabe mit Teilnehmer-Signatur.
+   * - `certificate` = generierte Bescheinigung aus einem Inhalte-Katalog
+   *   (Teilnahmebescheinigung). Eigener Editor + eigene „Erstellen"-Action,
+   *   erango-Org-Signatur, KEINE Teilnehmer-Signatur.
+   */
+  kind?: "form" | "certificate";
   /** Formularnummer im erango-System, z.B. "F 08". */
   formNumber: string;
   /** Kurzname für Buttons/Listen, z.B. "Teilnehmervertrag". */
@@ -216,9 +229,28 @@ const F21: DocumentConfig = {
   signers: { coach: true },
 };
 
+const TNB: DocumentConfig = {
+  id: "tnb_cert",
+  kind: "certificate",
+  formNumber: "F 05",
+  label: "Teilnahmebescheinigung",
+  fullTitle: "Teilnahmebescheinigung",
+  description:
+    "Inhalte aus dem Maßnahme-Katalog anklicken → generiert die erango-Teilnahmebescheinigung (mit erango-Signatur, ohne Teilnehmer-Unterschrift).",
+  owner: "coach",
+  // Kein Feld-Formular — der Editor ist der Inhalte-Katalog (Auswahl in
+  // form_data als selectedKeys/customLines). Zeitraum/UE/Ort kommen aus dem Kurs.
+  fields: [],
+  requiredMasterData: [],
+  // Keine app-seitige Signatur-Zeile im generischen Sinn — die erango-
+  // Org-Signatur wird im Template gerendert, kein Teilnehmer signiert.
+  signers: { coach: false },
+};
+
 const CONFIGS: Record<DocumentTypeId, DocumentConfig> = {
   f08_tnv: F08,
   f21_stv: F21,
+  tnb_cert: TNB,
 };
 
 export function getDocumentConfig(type: DocumentTypeId): DocumentConfig {
@@ -293,6 +325,9 @@ export function prefillFormData(
         abwesenheitszeiten: "",
         ort: input.durchfuehrungsort || "",
       };
+    case "tnb_cert":
+      // Auswahl startet leer; der Coach klickt die Inhalte im Katalog-Editor an.
+      return { selectedKeys: "[]", customLines: "[]" };
   }
 }
 

@@ -1,5 +1,6 @@
 import { F08Teilnehmervertrag } from "@/components/documents/f08-teilnehmervertrag";
 import { F21Strategievereinbarung } from "@/components/documents/f21-strategievereinbarung";
+import { TnbTeilnahmebescheinigung } from "@/components/documents/tnb-teilnahmebescheinigung";
 import type { DocumentSheetData } from "@/components/documents/types";
 
 /**
@@ -13,5 +14,7 @@ export function DocumentSheet({ data }: { data: DocumentSheetData }) {
       return <F08Teilnehmervertrag data={data} />;
     case "f21_stv":
       return <F21Strategievereinbarung data={data} />;
+    case "tnb_cert":
+      return <TnbTeilnahmebescheinigung data={data} />;
   }
 }
