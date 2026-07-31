@@ -29,7 +29,9 @@ export function TnbTeilnahmebescheinigung({
     : data.course.massnahmeLabel;
 
   const von = fd.cert_von || data.course.startDate || "";
-  const bis = fd.cert_bis || data.course.endDate || "";
+  // Zeitraum-Ende = letzter tatsächlicher Termin; Bewilligungsende nur Fallback.
+  const bis =
+    fd.cert_bis || data.course.letzterTermin || data.course.endDate || "";
   const ue =
     fd.cert_ue ||
     (data.course.anzahlBewilligteUe != null

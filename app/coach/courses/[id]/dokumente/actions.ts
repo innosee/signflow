@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, max } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
@@ -441,10 +441,22 @@ export async function submitTnbCert(
     };
   }
 
+  // Zeitraum-Ende = letzter tatsächlicher Termin (max session_date), nicht das
+  // Bewilligungsende; Bewilligungsende nur Fallback, wenn (noch) kein Termin da.
+  const [{ letzterTermin } = { letzterTermin: null }] = await db
+    .select({ letzterTermin: max(schema.sessions.sessionDate) })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, doc.courseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+
   const frozen: Record<string, string> = {
     ...baseForm,
     cert_von: ctx.startDate ?? "",
-    cert_bis: ctx.endDate ?? "",
+    cert_bis: letzterTermin ?? ctx.endDate ?? "",
     cert_ue:
       ctx.anzahlBewilligteUe != null ? String(ctx.anzahlBewilligteUe) : "",
     cert_ort: ctx.durchfuehrungsort ?? "",

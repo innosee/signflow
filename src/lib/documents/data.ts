@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, max } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
@@ -94,6 +94,18 @@ export async function loadDocumentSheet(
   const participantSig =
     sigRows.find((r) => r.signerType === "participant") ?? null;
 
+  // Letzter tatsächlicher Termin (max. session_date, nicht gelöscht) — bildet auf
+  // der Teilnahmebescheinigung das Zeitraum-Ende (statt des Bewilligungsendes).
+  const [{ letzterTermin } = { letzterTermin: null }] = await db
+    .select({ letzterTermin: max(schema.sessions.sessionDate) })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.courseId, doc.courseId),
+        isNull(schema.sessions.deletedAt),
+      ),
+    );
+
   const branding = await getBranding(doc.tenantId);
   const [brandingLogo, coachSigUrl, participantSigUrl, orgSigUrl] =
     await Promise.all([
@@ -147,6 +159,7 @@ export async function loadDocumentSheet(
       anzahlBewilligteUe: doc.anzahlBewilligteUe,
       startDate: doc.startDate,
       endDate: doc.endDate,
+      letzterTermin: letzterTermin ?? null,
     },
     coachName: coachSig?.coachName ?? doc.leadCoachName,
     signatures: {
