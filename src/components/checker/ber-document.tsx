@@ -1,4 +1,9 @@
-import type { CheckerInput } from "@/lib/checker/types";
+import type { CheckerInput, MassnahmeTyp } from "@/lib/checker/types";
+import { formatDateDE } from "@/lib/format-date";
+import {
+  type Integrationsergebnis,
+  integrationsergebnisVariante,
+} from "@/lib/integrationsergebnis";
 
 type BerMetadata = {
   avgsMassnahme?: string;
@@ -96,10 +101,16 @@ export function BerDocument({
   input,
   meta,
   branding,
+  massnahmeTyp,
+  integrationsergebnis,
 }: {
   input: CheckerInput;
   meta?: BerMetadata;
   branding?: BerBranding;
+  /** Maßnahmentyp des Kunden — steuert die Integrationsergebnis-Variante. */
+  massnahmeTyp?: MassnahmeTyp | null;
+  /** Integrationsergebnis (nur EKC/ESC/EGC) — null → Block wird nicht gerendert. */
+  integrationsergebnis?: Integrationsergebnis | null;
 }) {
   // Header rendert NUR was via `branding` reinkommt — keine Hardcoded-
   // Fallbacks mehr (vorher Erango-Adresse/-Logo, was im Multi-Tenant-
@@ -195,6 +206,11 @@ export function BerDocument({
           </section>
         )}
 
+      <IntegrationsergebnisBlock
+        massnahmeTyp={massnahmeTyp}
+        ergebnis={integrationsergebnis}
+      />
+
       <footer className="ber-footer">
         <div className="ber-signfield">
           {/* Über der Linie: Ort + Datum (wie handschriftlich) — spiegelt die
@@ -226,6 +242,68 @@ export function BerDocument({
 
       <style>{berCss}</style>
     </article>
+  );
+}
+
+/**
+ * Integrationsergebnis-Block am Berichtsende (über der Signaturzeile).
+ * Zwei Varianten je Maßnahmentyp; ESCA / fehlende Daten → rendert nichts.
+ * Ja/Nein als CSS-gezeichnete Boxen (kein Unicode-Glyph — der Vercel-Chromium-
+ * Font hat ☒/☐ nicht, siehe Memory pdf_no_unicode_symbols). Der aktive
+ * Ja-Kasten wird grün gefüllt, der aktive Nein-Kasten dunkel.
+ */
+function IntegrationsergebnisBlock({
+  massnahmeTyp,
+  ergebnis,
+}: {
+  massnahmeTyp?: MassnahmeTyp | null;
+  ergebnis?: Integrationsergebnis | null;
+}) {
+  if (!massnahmeTyp) return null;
+  const variante = integrationsergebnisVariante(massnahmeTyp);
+  if (!variante) return null;
+  if (!ergebnis || ergebnis.erfolg === null) return null;
+
+  const ja = ergebnis.erfolg === true;
+  const label =
+    variante === "vermittlung" ? "Vermittlungserfolg" : "Erfolgreiche Gründung";
+  const datum = formatDateDE(ergebnis.datum);
+
+  return (
+    <section className="ber-io" aria-label="Integrationsergebnis">
+      <div className="ber-io-choice">
+        <span className="ber-io-label">{label}:</span>
+        <span className="ber-io-option">
+          <span
+            className={`ber-io-box${ja ? " ja" : ""}`}
+            aria-hidden
+          />{" "}
+          JA
+        </span>
+        <span className="ber-io-option">
+          <span
+            className={`ber-io-box${!ja ? " nein" : ""}`}
+            aria-hidden
+          />{" "}
+          NEIN
+        </span>
+      </div>
+
+      {ja && variante === "vermittlung" && (
+        <p className="ber-io-sentence">
+          Teilnehmer*in geht zum{" "}
+          <span className="ber-io-value">{datum || "—"}</span> ein
+          Beschäftigungsverhältnis mit der Firma{" "}
+          <span className="ber-io-value">{ergebnis.firma || "—"}</span> ein.
+        </p>
+      )}
+      {ja && variante === "gruendung" && (
+        <p className="ber-io-sentence">
+          Gründung geplant zum:{" "}
+          <span className="ber-io-value">{datum || "—"}</span>
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -422,6 +500,57 @@ const berCss = `
   height: auto;
   object-fit: contain;
   pointer-events: none;
+}
+.ber-io {
+  margin-top: 14mm;
+  break-inside: avoid;
+  font-size: 10pt;
+  color: #18181b;
+}
+.ber-io-choice {
+  display: flex;
+  align-items: center;
+  gap: 6mm;
+}
+.ber-io-label {
+  font-weight: 700;
+}
+.ber-io-option {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+}
+.ber-io-box {
+  /* CSS-gezeichnet statt Unicode-Glyph (☒/☐) — Ballot-Box fehlt im
+     headless-Chromium-Font auf Vercel. Border + gefüllter Kern rendern
+     font-unabhängig. Siehe Memory pdf_no_unicode_symbols. */
+  display: inline-block;
+  width: 5mm;
+  height: 5mm;
+  border: 0.4mm solid #52525b;
+  box-sizing: border-box;
+  margin-right: 1.5mm;
+  vertical-align: -0.8mm;
+  background: #e4e4e7;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.ber-io-box.ja {
+  background: #7ac943;
+  border-color: #5fa32f;
+}
+.ber-io-box.nein {
+  background: #3f3f46;
+  border-color: #27272a;
+}
+.ber-io-sentence {
+  margin: 4mm 0 0 0;
+  line-height: 1.6;
+}
+.ber-io-value {
+  font-weight: 700;
+  border-bottom: 0.3mm solid #a1a1aa;
+  padding: 0 2mm;
 }
 @media print {
   @page {

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Eignungsanalyse } from "@/lib/eignung";
+import type { Integrationsergebnis } from "@/lib/integrationsergebnis";
 import {
   boolean,
   check,
@@ -1162,6 +1163,16 @@ export const abschlussberichte = pgTable(
      * explizit aus.
      */
     keineFehlzeiten: boolean("keine_fehlzeiten").notNull().default(false),
+    /**
+     * Integrationsergebnis am Berichtsende (nur EKC/ESC/EGC — ESCA hat keins).
+     * Variante ergibt sich aus `courses.massnahme_typ`: "vermittlung"
+     * (Vermittlungserfolg + Datum + Firma) bzw. "gruendung" (Gründungserfolg +
+     * geplantes Datum). NULL = noch nicht erfasst (Alt-Berichte, Entwürfe,
+     * ESCA). Beim Einreichen ist die Ja/Nein-Wahl Pflicht; Datum/Firma nur bei
+     * „Ja". Siehe `src/lib/integrationsergebnis.ts`.
+     */
+    integrationsergebnis:
+      jsonb("integrationsergebnis").$type<Integrationsergebnis>(),
     /**
      * Wenn ein Coach für eine sehr kurze AVGS-Maßnahme (z.B. 5 UE
      * "Bewerbungsunterlagen optimieren") nicht alle Pflicht-Bausteine
