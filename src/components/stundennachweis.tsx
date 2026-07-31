@@ -15,6 +15,7 @@ import {
   EIGNUNG_RATINGS,
   type Eignungsanalyse,
 } from "@/lib/eignung";
+import { signaturOrt } from "@/lib/signatur-ort";
 import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
 
 export type StundennachweisSheet = {
@@ -262,7 +263,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
                       <SignatureCell
                         url={s.coachSignatureUrl}
                         signedAt={s.coachSignedAt}
-                        ort={course.durchfuehrungsort}
+                        ort={signaturOrt(course.durchfuehrungsort)}
                       />
                     </td>
                     <td>
