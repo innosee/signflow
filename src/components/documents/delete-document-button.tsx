@@ -17,23 +17,29 @@ function Inner() {
 }
 
 /**
- * Löscht ein (noch nicht abgeschlossenes) Kunde-Dokument. Bewusst mit
- * Bestätigungsdialog, da der Klick soft-löscht und direkt zur Liste
- * zurückspringt. `action` ist die rollen-spezifische `deleteDocument`-Server-
- * Action (Coach- bzw. BT-Route).
+ * Löscht ein Kunde-Dokument (Soft-Delete). Bewusst mit Bestätigungsdialog, da
+ * der Klick direkt zur Liste zurückspringt. `signed` verschärft den Hinweis für
+ * bereits unterschriebene Dokumente. `action` ist die rollen-spezifische
+ * `deleteDocument`-Server-Action (Coach- bzw. BT-Route).
  */
 export function DeleteDocumentButton({
   action,
   documentId,
+  signed = false,
 }: {
   action: (formData: FormData) => Promise<void>;
   documentId: string;
+  /** Ist das Dokument bereits (beidseitig) unterschrieben? → stärkere Warnung. */
+  signed?: boolean;
 }) {
   return (
     <form
       action={action}
       onSubmit={(e) => {
-        if (!window.confirm("Dieses Dokument wirklich löschen?")) {
+        const message = signed
+          ? "Dieses Dokument ist bereits unterschrieben. Wirklich löschen? Es wird aus der Kunden-Akte entfernt."
+          : "Dieses Dokument wirklich löschen?";
+        if (!window.confirm(message)) {
           e.preventDefault();
         }
       }}
