@@ -13,9 +13,27 @@ import {
 } from "@/lib/documents/config";
 import { loadDocumentSheet } from "@/lib/documents/data";
 import { DocumentEditor } from "@/components/documents/document-editor";
+import { TnbEditor } from "@/components/documents/tnb-editor";
 import { DeleteDocumentButton } from "@/components/documents/delete-document-button";
 import { ReopenDocumentButton } from "@/components/documents/reopen-document-button";
-import { deleteDocument, reopenDocument, submitDocumentEditor } from "../actions";
+import {
+  deleteDocument,
+  reopenDocument,
+  submitDocumentEditor,
+  submitTnbCert,
+} from "../actions";
+
+function parseJsonKeys(raw: unknown): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +100,7 @@ export default async function CoachDocumentPage({ params }: Props) {
   // Der Coach verwaltet nur die STV; BT-Dokumente (Datenschutz/Teilnehmer-
   // vertrag/Merge) sieht er nur read-only + PDF.
   const canEdit = isDocumentOwnedBy(type, "coach");
+  const isCert = cfg.kind === "certificate";
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -130,7 +149,27 @@ export default async function CoachDocumentPage({ params }: Props) {
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
         <div>
-          {canEdit ? (
+          {isCert ? (
+            <TnbEditor
+              documentId={docId}
+              status={row.status}
+              massnahmeTyp={sheet.course.massnahmeTyp}
+              initialSelectedKeys={parseJsonKeys(
+                (row.formData as Record<string, unknown>)?.selectedKeys,
+              )}
+              initialCustomLines={parseJsonKeys(
+                (row.formData as Record<string, unknown>)?.customLines,
+              )}
+              courseInfo={{
+                von: sheet.course.startDate,
+                bis: sheet.course.endDate,
+                ue: sheet.course.anzahlBewilligteUe,
+                ort: sheet.course.durchfuehrungsort,
+              }}
+              hasOrgSignature={!!sheet.orgSignatureUrl}
+              action={submitTnbCert}
+            />
+          ) : canEdit ? (
             <DocumentEditor
               documentId={docId}
               type={type}
