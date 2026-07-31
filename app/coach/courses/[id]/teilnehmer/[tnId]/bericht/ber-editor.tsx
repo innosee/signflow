@@ -42,6 +42,10 @@ import {
   type Violation,
 } from "@/lib/checker/types";
 import { formatDateDE } from "@/lib/format-date";
+import {
+  integrationsergebnisVariante,
+  validateIntegrationsergebnis,
+} from "@/lib/integrationsergebnis";
 import type { Abschlussbericht } from "@/db/schema";
 
 import {
@@ -139,6 +143,31 @@ export function BerEditor({
   const [keineFehlzeiten, setKeineFehlzeiten] = useState(
     initialBer?.keineFehlzeiten ?? false,
   );
+
+  // Integrationsergebnis (nur EKC/ESC = Vermittlung, EGC = Gründung; ESCA hat
+  // keins → variante null, Block wird nicht gerendert). Ja/Nein ist Pflicht
+  // beim Einreichen; Datum (+ Firma bei Vermittlung) nur bei „Ja".
+  const ieVariante = integrationsergebnisVariante(massnahmeTyp);
+  const initialIe = initialBer?.integrationsergebnis ?? null;
+  const [ieErfolg, setIeErfolg] = useState<boolean | null>(
+    initialIe?.erfolg ?? null,
+  );
+  const [ieDatum, setIeDatum] = useState<string>(initialIe?.datum ?? "");
+  const [ieFirma, setIeFirma] = useState<string>(initialIe?.firma ?? "");
+
+  // Serialisiert den aktuellen IE-Zustand fürs FormData. Bei „Nein"/keiner
+  // Wahl werden Datum/Firma verworfen (Server normalisiert nochmals).
+  function buildIePayload(): string {
+    if (!ieVariante) return "";
+    return JSON.stringify({
+      erfolg: ieErfolg,
+      datum: ieErfolg === true ? ieDatum || null : null,
+      firma:
+        ieErfolg === true && ieVariante === "vermittlung"
+          ? ieFirma || null
+          : null,
+    });
+  }
   // Abschlussdatum (= Ende des Zeitraums im Dokument). Vorbelegt mit dem
   // gespeicherten Wert, sonst dem letzten Termin, sonst dem Bewilligungsende.
   // ISO 'yyyy-mm-dd' für das native <input type="date">.
@@ -355,6 +384,7 @@ export function BerEditor({
       fd.append("sonstiges", sonstiges);
       fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
       fd.append("abschlussDatum", abschlussDatum);
+      fd.append("integrationsergebnis", buildIePayload());
       startSaveTransition(async () => {
         const res = await saveBerDraftAction(undefined, fd);
         if (res?.savedAt) setSavedAt(new Date(res.savedAt));
@@ -362,11 +392,17 @@ export function BerEditor({
       });
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
+    // buildIePayload ist bewusst NICHT in den Deps — die IE-Rohwerte unten
+    // triggern den Autosave, der Payload wird beim Timeout-Fire frisch gebaut.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     input,
     sonstiges,
     keineFehlzeiten,
     abschlussDatum,
+    ieErfolg,
+    ieDatum,
+    ieFirma,
     courseId,
     participantId,
     impersonating,
@@ -527,6 +563,26 @@ export function BerEditor({
       );
       return;
     }
+    // Integrationsergebnis ist Pflicht (nur EKC/ESC/EGC). Ja/Nein muss gewählt
+    // sein; Datum (+ Firma bei Vermittlung) nur bei „Ja". Server validiert
+    // nochmals autoritativ.
+    if (ieVariante) {
+      const ieError = validateIntegrationsergebnis(
+        {
+          erfolg: ieErfolg,
+          datum: ieErfolg === true ? ieDatum || null : null,
+          firma:
+            ieErfolg === true && ieVariante === "vermittlung"
+              ? ieFirma || null
+              : null,
+        },
+        ieVariante,
+      );
+      if (ieError) {
+        setSubmitError(ieError);
+        return;
+      }
+    }
     // Begründung fürs Audit/Server-Gate: pro weggeklickter Sensibel-Stelle die
     // Coach-Begründung, zusammengeführt. Leer, wenn kein Hard-Block vorlag.
     const overrideTrim = result
@@ -563,6 +619,7 @@ export function BerEditor({
     fd.append("sonstiges", sonstiges);
     fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
     fd.append("abschlussDatum", abschlussDatum);
+    fd.append("integrationsergebnis", buildIePayload());
     if (overrideTrim.length > 0) {
       fd.append("mustHaveOverrideReason", overrideTrim);
     }
@@ -611,6 +668,7 @@ export function BerEditor({
         fd.append("sonstiges", sonstiges);
         fd.append("keineFehlzeiten", keineFehlzeiten ? "true" : "false");
         fd.append("abschlussDatum", abschlussDatum);
+        fd.append("integrationsergebnis", buildIePayload());
         const res = await saveBerDraftAction(undefined, fd);
         if (res?.berId) {
           id = res.berId;
@@ -819,6 +877,92 @@ export function BerEditor({
             Dokument{zeitraumAnzeige ? ` (${zeitraumAnzeige})` : ""}.
           </span>
         </div>
+
+        {ieVariante && (
+          <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
+            <div>
+              <p className="text-sm font-semibold text-zinc-900">
+                Integrationsergebnis
+                <span className="ml-1 font-normal text-rose-600">*</span>
+              </p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Erscheint am Ende des Berichts. Pflicht beim Einreichen — bei
+                „Ja&ldquo; zusätzlich das Datum
+                {ieVariante === "vermittlung" ? " und die Firma" : ""}.
+              </p>
+            </div>
+
+            <fieldset className="flex flex-wrap items-center gap-5">
+              <legend className="text-sm font-medium text-zinc-800">
+                {ieVariante === "vermittlung"
+                  ? "Vermittlungserfolg"
+                  : "Erfolgreiche Gründung"}
+                :
+              </legend>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800">
+                <input
+                  type="radio"
+                  name="ie-erfolg"
+                  checked={ieErfolg === true}
+                  onChange={() => setIeErfolg(true)}
+                  className="h-4 w-4 accent-zinc-900"
+                />
+                Ja
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800">
+                <input
+                  type="radio"
+                  name="ie-erfolg"
+                  checked={ieErfolg === false}
+                  onChange={() => setIeErfolg(false)}
+                  className="h-4 w-4 accent-zinc-900"
+                />
+                Nein
+              </label>
+            </fieldset>
+
+            {ieErfolg === true && (
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="ie-datum"
+                    className="block text-xs font-medium text-zinc-700"
+                  >
+                    {ieVariante === "vermittlung"
+                      ? "Beschäftigung beginnt am"
+                      : "Gründung geplant zum"}
+                  </label>
+                  <input
+                    id="ie-datum"
+                    type="date"
+                    value={ieDatum}
+                    onChange={(e) => setIeDatum(e.target.value)}
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                  />
+                </div>
+                {ieVariante === "vermittlung" && (
+                  <div className="min-w-[16rem] flex-1 space-y-1">
+                    <label
+                      htmlFor="ie-firma"
+                      className="block text-xs font-medium text-zinc-700"
+                    >
+                      Firma
+                    </label>
+                    <input
+                      id="ie-firma"
+                      type="text"
+                      value={ieFirma}
+                      onChange={(e) => setIeFirma(e.target.value)}
+                      maxLength={200}
+                      placeholder="Name der Firma"
+                      className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {hasHardBlock && status !== "submitted" && (
           <div className="rounded-xl border border-rose-300 bg-rose-50 p-5">
