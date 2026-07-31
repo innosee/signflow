@@ -8,6 +8,7 @@ import { getBranding } from "@/lib/branding";
 import { courseVisibleToCoach } from "@/lib/course-access";
 import { getTenantId, requireCoach } from "@/lib/dal";
 import { formatDateDE } from "@/lib/format-date";
+import { signaturOrt } from "@/lib/signatur-ort";
 import { resolveAssetUrl } from "@/lib/storage";
 
 import { PrintButton } from "./print-button";
@@ -123,8 +124,10 @@ export default async function CoachBerPrintPage({ params }: Props) {
   const datumDisplay = isAdhoc
     ? ""
     : formatDateDE(ber.submittedAt ?? new Date());
+  // Nur der Ort (Stadt) gehört in die „Ort, Datum"-Signaturzeile — nicht die
+  // volle Anschrift mit Straße/PLZ (siehe signaturOrt).
   const ortDatum = !isAdhoc
-    ? [row.courseOrt, datumDisplay].filter(Boolean).join(", ")
+    ? [signaturOrt(row.courseOrt), datumDisplay].filter(Boolean).join(", ")
     : "";
 
   return (

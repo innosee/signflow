@@ -420,6 +420,18 @@ async function validateCrossSessionRules(params: {
       ),
     )
     .limit(1);
+  // Kein Coaching-Termin ohne Erstgespräch: Bevor die erste reguläre UE
+  // angelegt werden darf, muss das Erstgespräch (Kennenlerngespräch) für die
+  // Maßnahme existieren. Nur beim ANLEGEN erzwingen (create → kein
+  // `excludeSessionId`); beim Bearbeiten bestehender Termine NICHT, sonst
+  // sperren wir Alt-Kunden ohne Erstgespräch aus der Korrektur aus.
+  if (!erstgespraech && !params.excludeSessionId) {
+    return {
+      ok: false,
+      error:
+        "Bitte zuerst das Erstgespräch (Kennenlerngespräch) für diese Maßnahme anlegen — ein Coaching-Termin ist erst danach möglich.",
+    };
+  }
   if (erstgespraech && sd <= erstgespraech.sessionDate) {
     return {
       ok: false,

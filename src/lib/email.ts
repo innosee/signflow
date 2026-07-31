@@ -7,13 +7,17 @@ type SendEmailInput = {
   text?: string;
 };
 
-// Absender. Default ist der in Resend verifizierte Signflow-Absender, damit
-// Mails auch dann zugestellt werden, wenn `EMAIL_FROM` nicht (oder leer)
-// gesetzt ist. WICHTIG: `||` statt `??`, damit ein LEERER String (`""`, kommt
-// bei Vercel-Env-Overrides vor) ebenfalls auf den Default fällt — sonst ginge
-// `from: ""` an Resend → 422 „The domain is invalid" und KEINE Mail käme an.
-const fromAddress =
-  process.env.EMAIL_FROM?.trim() || "Signflow <noreply@signflow.coach>";
+// Garantiert in Resend verifizierter Absender — signflow.coach ist die
+// verifizierte Sending-Domain. Dient als Default UND als Notfall-Fallback,
+// falls `EMAIL_FROM` auf eine NICHT verifizierte Domain zeigt (siehe unten).
+const VERIFIED_FALLBACK_FROM = "Signflow <noreply@signflow.coach>";
+
+// Absender. Default ist der verifizierte Signflow-Absender, damit Mails auch
+// dann zugestellt werden, wenn `EMAIL_FROM` nicht (oder leer) gesetzt ist.
+// WICHTIG: `||` statt `??`, damit ein LEERER String (`""`, kommt bei Vercel-
+// Env-Overrides vor) ebenfalls auf den Default fällt — sonst ginge `from: ""`
+// an Resend → 422 „The domain is invalid" und KEINE Mail käme an.
+const fromAddress = process.env.EMAIL_FROM?.trim() || VERIFIED_FALLBACK_FROM;
 
 const HTML_ESCAPE: Record<string, string> = {
   "&": "&amp;",
@@ -50,17 +54,45 @@ async function sendViaResend(input: SendEmailInput): Promise<void> {
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
 
-  const { error } = await resend.emails.send({
-    from: fromAddress,
+  const payload = {
     to: input.to,
     subject: input.subject,
     html: input.html,
     text: input.text,
-  });
+  };
 
-  if (error) {
-    throw new Error(`Resend error: ${error.message ?? String(error)}`);
+  const { error } = await resend.emails.send({ from: fromAddress, ...payload });
+  if (!error) return;
+
+  // Häufigste Prod-Fehlkonfiguration: `EMAIL_FROM` zeigt auf eine Domain, die
+  // in Resend NICHT verifiziert ist (z.B. eine erango.de-Adresse) → Resend
+  // lehnt mit „domain is not verified" ab und ALLE Mails fallen aus. Damit ein
+  // falsch gesetztes `EMAIL_FROM` nicht die gesamte Zustellung lahmlegt: einmal
+  // mit dem garantiert verifizierten Default-Absender neu versuchen. Der Betrieb
+  // sollte `EMAIL_FROM` trotzdem korrigieren (die Warnung landet im Log).
+  const message = error.message ?? String(error);
+  const domainNotVerified =
+    /not verified|domain is invalid|verify your domain/i.test(message);
+  if (domainNotVerified && fromAddress !== VERIFIED_FALLBACK_FROM) {
+    console.warn(
+      `[email] EMAIL_FROM "${fromAddress}" wird von Resend abgelehnt (${message}). ` +
+        `Fallback-Versand über ${VERIFIED_FALLBACK_FROM}. Bitte EMAIL_FROM in der ` +
+        `Prod-Umgebung auf eine verifizierte Domain (signflow.coach) setzen oder die ` +
+        `gewünschte Domain in Resend verifizieren.`,
+    );
+    const { error: retryError } = await resend.emails.send({
+      from: VERIFIED_FALLBACK_FROM,
+      ...payload,
+    });
+    if (!retryError) return;
+    throw new Error(
+      `Resend error (auch nach Fallback-Absender): ${
+        retryError.message ?? String(retryError)
+      }`,
+    );
   }
+
+  throw new Error(`Resend error: ${message}`);
 }
 
 function logToConsole(input: SendEmailInput): void {

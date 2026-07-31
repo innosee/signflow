@@ -262,7 +262,6 @@ export function Stundennachweis(props: StundennachweisSheet) {
                       <SignatureCell
                         url={s.coachSignatureUrl}
                         signedAt={s.coachSignedAt}
-                        ort={course.durchfuehrungsort}
                       />
                     </td>
                     <td>
@@ -432,40 +431,21 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Nur das Datum (ohne Uhrzeit) in deutscher Zeitzone — für die „Ort, Datum"-
- * Zeile über der Unterschrift. */
-function formatSignDate(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "Europe/Berlin",
-  });
-}
-
 function SignatureCell({
   url,
   signedAt,
-  ort,
 }: {
   url: string | null;
   signedAt: string | null;
-  /** Wenn gesetzt: „Ort, Datum"-Zeile über der Unterschrift (Coach-Spalte). */
-  ort?: string;
 }) {
   if (!url) return <span className="sig-pending">ausstehend</span>;
   return (
     <div className="sig-box">
-      {ort && signedAt && (
-        <span className="sig-ortdatum">
-          {ort}, {formatSignDate(signedAt)}
-        </span>
-      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={url} alt="Unterschrift" />
+      {/* Digitaler Stempel: Datum + Uhrzeit der Signatur. Bewusst KEIN Ort —
+          bei Online-Coachings / abweichenden Einreich-Orten wäre er irreführend;
+          Zeitstempel + Audit-Protokoll tragen die Beweiskraft. */}
       <span className="sig-timestamp">{formatDateTime(signedAt)}</span>
     </div>
   );
@@ -609,12 +589,6 @@ const printCss = `
        weichzeichnen — eine handschriftliche Linie verträgt Pixel-Schärfe
        besser als Anti-Aliasing-Blur. */
     image-rendering: -webkit-optimize-contrast;
-  }
-  .sig-ortdatum {
-    display: block;
-    margin-bottom: 0.5mm;
-    font-size: 7.5pt;
-    color: #333;
   }
   .sig-timestamp {
     display: block;
