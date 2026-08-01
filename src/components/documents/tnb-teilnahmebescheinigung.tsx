@@ -38,7 +38,8 @@ export function TnbTeilnahmebescheinigung({
       ? String(data.course.anzahlBewilligteUe)
       : "");
   const ort = fd.cert_ort || data.course.durchfuehrungsort || "";
-  const ausstellungsdatum = fd.cert_datum || "";
+  // Ausgestellt → eingefrorenes Datum; Entwurf-Vorschau → heute (statt „den —").
+  const ausstellungsdatum: string | Date = fd.cert_datum || new Date();
 
   const selectedKeys = parseJsonArray(fd.selectedKeys);
   const customLines = parseJsonArray(fd.customLines);
@@ -48,6 +49,7 @@ export function TnbTeilnahmebescheinigung({
 
   return (
     <article className="tnb" aria-label="Teilnahmebescheinigung">
+      <div className="tnb-body">
       <header className="tnb-head">
         <div className="tnb-logo">
           {data.branding.logoUrl ? (
@@ -107,7 +109,7 @@ export function TnbTeilnahmebescheinigung({
         <p className="tnb-sign-ort">
           erango GmbH Singen,
           <br />
-          den {formatDateDE(ausstellungsdatum) || "—"}
+          den {formatDateDE(ausstellungsdatum)}
         </p>
         <div className="tnb-sign-img">
           {data.orgSignatureUrl ? (
@@ -124,6 +126,7 @@ export function TnbTeilnahmebescheinigung({
           <br />
           Geschäftsführerin
         </p>
+      </div>
       </div>
 
       <footer className="tnb-foot">
@@ -167,10 +170,18 @@ const tnbCss = `
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #18181b;
   background: white;
-  max-width: 190mm;
+  max-width: 210mm;
   margin: 0 auto;
-  padding: 16mm 18mm 14mm 18mm;
+  padding: 16mm 18mm 0 18mm;
   text-align: center;
+  /* Volle A4-Höhe als Flex-Spalte: Inhalt oben, Footer per margin-top:auto
+     immer am Seitenboden. box-sizing → Padding zählt in die 297mm, sonst
+     rutscht es auf Seite 2. Inhalte sind auf max. 7 begrenzt → passt sicher
+     auf eine Seite. */
+  box-sizing: border-box;
+  min-height: 297mm;
+  display: flex;
+  flex-direction: column;
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }
@@ -291,7 +302,9 @@ const tnbCss = `
   margin: 1mm 0 0 0;
 }
 .tnb-foot {
-  margin-top: 16mm;
+  /* an den Seitenboden; Mindestabstand zum Inhalt via padding-top. */
+  margin-top: auto;
+  padding-top: 12mm;
 }
 .tnb-foot-services {
   font-size: 7.5pt;
@@ -320,7 +333,10 @@ const tnbCss = `
   color: #e8f0f1;
   font-size: 6.5pt;
   line-height: 1.5;
-  padding: 2.5mm 4mm;
+  /* full-bleed bis an die Seitenkanten (negatives Margin hebt das 18mm-
+     Seitenpadding von .tnb auf), bündig am unteren Rand. */
+  margin: 0 -18mm;
+  padding: 2.5mm 18mm;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
