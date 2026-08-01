@@ -49,7 +49,6 @@ export function TnbTeilnahmebescheinigung({
   return (
     <article className="tnb" aria-label="Teilnahmebescheinigung">
       <header className="tnb-head">
-        <h1 className="tnb-title">Teilnahmebescheinigung</h1>
         <div className="tnb-logo">
           {data.branding.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -68,6 +67,7 @@ export function TnbTeilnahmebescheinigung({
             </div>
           )}
         </div>
+        <h1 className="tnb-title">Teilnahmebescheinigung</h1>
       </header>
 
       <p className="tnb-name">
@@ -176,25 +176,18 @@ const tnbCss = `
 }
 .tnb-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  position: relative;
-  margin-bottom: 8mm;
-}
-.tnb-title {
-  font-size: 26pt;
-  font-weight: 800;
-  letter-spacing: 3px;
-  margin: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 5mm;
+  margin-bottom: 9mm;
 }
 .tnb-logo {
-  position: absolute;
-  right: 0;
-  top: 0;
+  display: flex;
+  justify-content: center;
 }
 .tnb-logo-img {
-  max-height: 20mm;
-  max-width: 34mm;
+  max-height: 24mm;
+  max-width: 60mm;
   object-fit: contain;
   display: block;
 }
@@ -202,11 +195,17 @@ const tnbCss = `
   border: 1.5pt solid #14545f;
   color: #14545f;
   font-weight: 800;
-  font-size: 12pt;
+  font-size: 13pt;
   line-height: 1.05;
   padding: 2mm 3mm;
   text-align: left;
   display: inline-block;
+}
+.tnb-title {
+  font-size: 21pt;
+  font-weight: 800;
+  letter-spacing: 2px;
+  margin: 0;
 }
 .tnb-name {
   font-size: 18pt;
