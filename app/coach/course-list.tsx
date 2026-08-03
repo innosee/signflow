@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
+import { formatDateDE } from "@/lib/format-date";
+
 const STATUS_LABELS: Record<string, string> = {
   active: "aktiv",
   completed: "abgeschlossen",
@@ -98,7 +100,7 @@ export function CoachCourseList({ courses }: { courses: CoachCourseListItem[] })
                   <div className="mt-1 text-xs text-zinc-500">
                     {c.title} · AVGS {c.avgsNummer} ·{" "}
                     {c.startDate && c.endDate
-                      ? `${c.startDate} bis ${c.endDate}`
+                      ? `${formatDateDE(c.startDate)} bis ${formatDateDE(c.endDate)}`
                       : "Zeitraum offen"}{" "}
                     · {c.anzahlBewilligteUe} UE bewilligt
                   </div>
