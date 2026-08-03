@@ -106,6 +106,8 @@ export const DELETABLE_AUDIT_ACTIONS = [
   "course.bewilligt.unset",
   // Anlage eines Kunde-Dokument-Drafts (vor jeder Signatur) — operativ.
   "document.created",
+  // Erinnerungs-Mail an den Teilnehmer (Magic-Link erneut) — operativ.
+  "document.participant_reminded",
 ] as const satisfies readonly AuditAction[];
 
 type ClassifiedAction =

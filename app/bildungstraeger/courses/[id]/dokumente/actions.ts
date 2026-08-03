@@ -10,8 +10,10 @@ import { logAudit } from "@/lib/audit";
 import {
   assertNotImpersonating,
   getTenantId,
+  isImpersonating,
   requireBildungstraeger,
 } from "@/lib/dal";
+import { sendParticipantInvite } from "@/lib/participant-tokens";
 import {
   isDocumentOwnedBy,
   isDocumentType,
@@ -318,4 +320,59 @@ export async function reopenDocument(formData: FormData): Promise<void> {
 
   revalidatePath(backToDoc);
   redirect(backToDoc);
+}
+
+// --- Teilnehmer erneut benachrichtigen (Signatur-Mail neu) -----------------
+
+export type NotifyDocState =
+  | { error?: string; success?: boolean }
+  | undefined;
+
+/**
+ * Schickt dem Teilnehmer die Signatur-Mail (kurs-weiter Magic-Link, 7 Tage
+ * gültig) erneut — für ein freigegebenes, aber noch nicht signiertes Dokument
+ * (`active`). Ändert das Dokument NICHT (keine Zurücknahme der erango-Signatur).
+ * Tenant-gescoped.
+ */
+export async function notifyDocumentParticipant(
+  _prev: NotifyDocState,
+  formData: FormData,
+): Promise<NotifyDocState> {
+  const session = await requireBildungstraeger();
+  if (isImpersonating(session)) {
+    return { error: "Während Impersonation nicht möglich." };
+  }
+  const tenantId = getTenantId(session);
+
+  const documentId = String(formData.get("documentId") ?? "").trim();
+  const doc = await loadTenantDocument(documentId, tenantId);
+  if (!doc) return { error: "Dokument nicht gefunden." };
+  if (doc.status !== "active") {
+    return {
+      error: "Nur möglich, solange auf die Teilnehmer-Unterschrift gewartet wird.",
+    };
+  }
+
+  try {
+    await sendParticipantInvite({
+      courseId: doc.courseId,
+      participantId: doc.participantId,
+      channel: "email",
+    });
+  } catch {
+    return {
+      error: "Mail konnte nicht gesendet werden. Bitte später erneut versuchen.",
+    };
+  }
+
+  await logAudit({
+    actorType: "bildungstraeger",
+    actorId: session.user.id,
+    action: "document.participant_reminded",
+    resourceType: "document",
+    resourceId: documentId,
+    metadata: { courseId: doc.courseId, type: doc.type },
+  });
+
+  return { success: true };
 }

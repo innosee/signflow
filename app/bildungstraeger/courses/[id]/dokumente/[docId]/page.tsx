@@ -14,8 +14,14 @@ import {
 import { loadDocumentSheet } from "@/lib/documents/data";
 import { DeleteDocumentButton } from "@/components/documents/delete-document-button";
 import { ReopenDocumentButton } from "@/components/documents/reopen-document-button";
+import { NotifyDocParticipantButton } from "@/components/documents/notify-doc-participant-button";
 
-import { deleteDocument, reopenDocument, submitDocumentEditor } from "../actions";
+import {
+  deleteDocument,
+  notifyDocumentParticipant,
+  reopenDocument,
+  submitDocumentEditor,
+} from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +123,13 @@ export default async function BildungstraegerDocumentPage({ params }: Props) {
             PDF
           </a>
           {canEdit && row.status === "active" && (
-            <ReopenDocumentButton action={reopenDocument} documentId={docId} />
+            <>
+              <NotifyDocParticipantButton
+                action={notifyDocumentParticipant}
+                documentId={docId}
+              />
+              <ReopenDocumentButton action={reopenDocument} documentId={docId} />
+            </>
           )}
           {canEdit && (
             <DeleteDocumentButton

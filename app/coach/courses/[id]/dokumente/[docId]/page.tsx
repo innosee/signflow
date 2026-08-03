@@ -16,8 +16,10 @@ import { DocumentEditor } from "@/components/documents/document-editor";
 import { TnbEditor } from "@/components/documents/tnb-editor";
 import { DeleteDocumentButton } from "@/components/documents/delete-document-button";
 import { ReopenDocumentButton } from "@/components/documents/reopen-document-button";
+import { NotifyDocParticipantButton } from "@/components/documents/notify-doc-participant-button";
 import {
   deleteDocument,
+  notifyDocumentParticipant,
   reopenDocument,
   submitDocumentEditor,
   submitTnbCert,
@@ -135,7 +137,13 @@ export default async function CoachDocumentPage({ params }: Props) {
             PDF
           </a>
           {canEdit && row.status === "active" && (
-            <ReopenDocumentButton action={reopenDocument} documentId={docId} />
+            <>
+              <NotifyDocParticipantButton
+                action={notifyDocumentParticipant}
+                documentId={docId}
+              />
+              <ReopenDocumentButton action={reopenDocument} documentId={docId} />
+            </>
           )}
           {canEdit && (
             <DeleteDocumentButton
