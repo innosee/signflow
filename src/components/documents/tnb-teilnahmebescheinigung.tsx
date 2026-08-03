@@ -15,9 +15,10 @@ import type { DocumentSheetData } from "@/components/documents/types";
  *
  * Design: offizielle Urkunde — dezenter Doppel-Zierrahmen, getrackte Versalien
  * (kein Custom-Serif, weil der Vercel-Chromium ihn unzuverlässig rendert →
- * Screen/PDF liefen sonst auseinander), erango-Teal als Akzent. Bank-/Legal-
- * Angaben bewusst NICHT auf der Urkunde (Briefkopf-Ballast). Footer/GF sind für
- * den Prototyp erango-fest verdrahtet.
+ * Screen/PDF liefen sonst auseinander), erango-Teal als Akzent. Bewusst kompakt
+ * dimensioniert, damit selbst die volle Inhalte-Liste sicher auf EINE A4-Seite
+ * passt (Footer per margin-top:auto am Boden). Bank-/Legal-Angaben gehören nicht
+ * auf die Urkunde; Footer/GF sind für den Prototyp erango-fest verdrahtet.
  */
 export function TnbTeilnahmebescheinigung({
   data,
@@ -166,6 +167,11 @@ function parseJsonArray(raw: string | undefined): string[] {
 
 const TEAL = "#14545f";
 
+/*
+ * Kompakt dimensioniert: selbst bei voller Inhalte-Liste bleibt Puffer auf der
+ * A4-Seite. Wenn hier Größen erhöht werden, unbedingt gegen die längste Liste
+ * (max. Punkte + eigene Zeilen) auf einer Seite gegenprüfen.
+ */
 const tnbCss = `
 .tnb {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -176,138 +182,133 @@ const tnbCss = `
   margin: 0 auto;
   box-sizing: border-box;
   min-height: 297mm;
-  padding: 9mm;
+  padding: 8mm;
   display: flex;
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }
-/* Offizieller Doppel-Zierrahmen; füllt die Seite, Footer sitzt unten drin. */
 .tnb-frame {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border: 2.5pt double ${TEAL};
-  padding: 16mm 18mm 10mm 18mm;
+  border: 2pt double ${TEAL};
+  padding: 12mm 15mm 8mm 15mm;
   text-align: center;
-}
-.tnb-body {
-  /* normaler Fluss (zentriert); Footer wird per margin-top:auto nach unten
-     gedrückt (steht als Geschwister außerhalb dieses Blocks). */
 }
 .tnb-head {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6mm;
-  margin-bottom: 11mm;
+  gap: 3.5mm;
+  margin-bottom: 7mm;
 }
 .tnb-logo { display: flex; justify-content: center; }
 .tnb-logo-img {
-  max-height: 22mm;
-  max-width: 55mm;
+  max-height: 16mm;
+  max-width: 46mm;
   object-fit: contain;
   display: block;
 }
 .tnb-logo-fallback {
-  border: 1.5pt solid ${TEAL};
+  border: 1.2pt solid ${TEAL};
   color: ${TEAL};
   font-weight: 800;
-  font-size: 12pt;
+  font-size: 10pt;
   line-height: 1.05;
-  padding: 2mm 3mm;
+  padding: 1.5mm 2.5mm;
   text-align: left;
 }
 .tnb-title {
-  font-size: 19pt;
+  font-size: 15pt;
   font-weight: 700;
-  letter-spacing: 6px;
+  letter-spacing: 4px;
   text-transform: uppercase;
   color: ${TEAL};
   margin: 0;
 }
 .tnb-rule {
-  width: 26mm;
-  height: 1.2pt;
+  width: 20mm;
+  height: 1pt;
   background: ${TEAL};
-  margin-top: -2mm;
+  margin-top: -1mm;
 }
 .tnb-eyebrow {
-  font-size: 10pt;
+  font-size: 8.5pt;
   color: #5b6b6e;
-  letter-spacing: 0.5px;
-  margin: 0 0 4mm 0;
+  letter-spacing: 0.4px;
+  margin: 0 0 2.5mm 0;
 }
 .tnb-name {
-  font-size: 20pt;
+  font-size: 15pt;
   font-weight: 700;
   color: #122326;
   letter-spacing: 0.3px;
-  margin: 0 0 9mm 0;
+  margin: 0 0 6mm 0;
 }
 .tnb-intro {
-  font-size: 11pt;
-  line-height: 1.6;
-  margin: 0 0 5mm 0;
+  font-size: 9.5pt;
+  line-height: 1.5;
+  margin: 0 0 3.5mm 0;
 }
 .tnb-intro strong, .tnb-ue strong { font-weight: 700; color: #12232e; }
 .tnb-massnahme {
-  font-size: 15pt;
+  font-size: 12.5pt;
   font-weight: 700;
   color: ${TEAL};
   letter-spacing: 0.3px;
-  margin: 0 0 3.5mm 0;
+  margin: 0 0 2.5mm 0;
 }
 .tnb-legal {
-  font-size: 9pt;
+  font-size: 8pt;
   color: #6b7b7e;
-  margin: 0 0 5mm 0;
+  margin: 0 0 3.5mm 0;
 }
 .tnb-ue {
-  font-size: 11pt;
-  line-height: 1.6;
-  margin: 0 0 12mm 0;
+  font-size: 9.5pt;
+  line-height: 1.5;
+  margin: 0 0 7mm 0;
 }
 .tnb-inhalte-head {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5mm;
-  margin: 0 0 6mm 0;
+  gap: 4mm;
+  margin: 0 0 4mm 0;
 }
 .tnb-inhalte-head-line {
-  height: 0.6pt;
-  width: 22mm;
+  height: 0.5pt;
+  width: 18mm;
   background: #c7d2d4;
 }
 .tnb-inhalte-head-label {
-  font-size: 10pt;
+  font-size: 8.5pt;
   font-weight: 700;
-  letter-spacing: 3px;
+  letter-spacing: 2.5px;
   text-transform: uppercase;
   color: ${TEAL};
 }
 .tnb-inhalte {
   display: inline-block;
   text-align: left;
-  margin: 0 auto 12mm auto;
+  margin: 0 auto 7mm auto;
   padding: 0;
   list-style: none;
-  max-width: 150mm;
+  max-width: 155mm;
 }
 .tnb-inhalte li {
   position: relative;
-  padding-left: 7mm;
-  margin-bottom: 2.5mm;
-  font-size: 10.5pt;
-  line-height: 1.45;
+  padding-left: 6mm;
+  margin-bottom: 1.8mm;
+  font-size: 9pt;
+  line-height: 1.4;
 }
 .tnb-inhalte li::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 1.5mm;
-  width: 2.2mm;
-  height: 2.2mm;
+  top: 1.3mm;
+  width: 1.9mm;
+  height: 1.9mm;
   transform: rotate(45deg);
   background: ${TEAL};
   -webkit-print-color-adjust: exact;
@@ -316,60 +317,60 @@ const tnbCss = `
 .tnb-inhalte-empty {
   color: #9aa7a9;
   font-style: italic;
-  margin: 0 0 12mm 0;
+  margin: 0 0 7mm 0;
 }
 .tnb-sign {
-  margin-top: 4mm;
+  margin-top: 2mm;
 }
 .tnb-sign-ort {
-  font-size: 10pt;
+  font-size: 9pt;
   color: #3f4f52;
-  margin: 0 0 1mm 0;
+  margin: 0 0 0.5mm 0;
 }
 .tnb-sign-img {
-  min-height: 15mm;
+  min-height: 10mm;
   display: flex;
   align-items: flex-end;
   justify-content: center;
 }
 .tnb-sign-signature {
-  max-height: 15mm;
-  max-width: 58mm;
+  max-height: 10mm;
+  max-width: 46mm;
   object-fit: contain;
 }
 .tnb-sign-line {
-  width: 62mm;
-  height: 0.8pt;
+  width: 50mm;
+  height: 0.6pt;
   background: #1c2b2e;
-  margin: 1mm auto 1.5mm auto;
+  margin: 1mm auto 1.2mm auto;
 }
 .tnb-sign-name {
-  font-size: 11pt;
+  font-size: 9.5pt;
   font-weight: 700;
   color: #12232e;
   margin: 0;
 }
 .tnb-sign-role {
-  font-size: 9pt;
+  font-size: 8pt;
   color: #6b7b7e;
-  margin: 0.5mm 0 0 0;
+  margin: 0.4mm 0 0 0;
 }
 .tnb-foot {
   margin-top: auto;
-  padding-top: 10mm;
+  padding-top: 7mm;
 }
 .tnb-foot-services {
-  font-size: 7.5pt;
+  font-size: 6.8pt;
   font-weight: 600;
   color: ${TEAL};
   letter-spacing: 0.3px;
-  margin: 0 0 2mm 0;
+  margin: 0 0 1.5mm 0;
 }
 .tnb-foot-contact {
-  font-size: 7.5pt;
+  font-size: 6.8pt;
   color: #6b7b7e;
   border-top: 0.4pt solid #d7dedf;
-  padding-top: 2.5mm;
+  padding-top: 2mm;
   margin: 0;
 }
 @media print {
