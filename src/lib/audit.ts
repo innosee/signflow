@@ -50,6 +50,7 @@ export type AuditAction =
   | "document.participant_signed"
   | "document.reopened"
   | "document.deleted"
+  | "document.participant_reminded"
   | "document.tnb_issued";
 
 export type AuditActorType =
