@@ -49,7 +49,9 @@ export type AuditAction =
   | "document.coach_signed"
   | "document.participant_signed"
   | "document.reopened"
-  | "document.deleted";
+  | "document.deleted"
+  | "document.participant_reminded"
+  | "document.tnb_issued";
 
 export type AuditActorType =
   | "bildungstraeger"

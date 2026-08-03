@@ -14,6 +14,11 @@ export type DocumentSheetData = {
     /** Aufgelöstes Logo-URL des Tenants oder null (dann Text-Fallback). */
     logoUrl: string | null;
   };
+  /**
+   * Aufgelöste geteilte Org-Signatur des Tenants (erango-Geschäftsführung) oder
+   * null. Für die Teilnahmebescheinigung die einzige Unterschrift.
+   */
+  orgSignatureUrl: string | null;
   participant: {
     name: string;
     vorname: string | null;
@@ -32,12 +37,16 @@ export type DocumentSheetData = {
   };
   course: {
     title: string;
+    /** Roh-Code (EKC/ESC/EGC/ESCA) — steuert Katalog + Bescheinigungs-Titel. */
+    massnahmeTyp: string;
     massnahmeLabel: string;
     durchfuehrungsort: string;
     avgsNummer: string;
     anzahlBewilligteUe: number;
     startDate: string | null;
     endDate: string | null;
+    /** Letzter tatsächlicher Termin (max session_date) oder null. */
+    letzterTermin: string | null;
   };
   coachName: string;
   signatures: {

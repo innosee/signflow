@@ -78,6 +78,9 @@ export const SIGNATURE_RELATED_AUDIT_ACTIONS = [
   // geändert hat.
   "document.reopened",
   "document.deleted",
+  // Ausstellung einer Teilnahmebescheinigung (mit erango-Org-Signatur) —
+  // Nachweiskette, wird aufbewahrt.
+  "document.tnb_issued",
 ] as const satisfies readonly AuditAction[];
 
 /**
@@ -103,6 +106,8 @@ export const DELETABLE_AUDIT_ACTIONS = [
   "course.bewilligt.unset",
   // Anlage eines Kunde-Dokument-Drafts (vor jeder Signatur) — operativ.
   "document.created",
+  // Erinnerungs-Mail an den Teilnehmer (Magic-Link erneut) — operativ.
+  "document.participant_reminded",
 ] as const satisfies readonly AuditAction[];
 
 type ClassifiedAction =

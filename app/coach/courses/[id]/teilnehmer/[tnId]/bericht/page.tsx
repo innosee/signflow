@@ -5,6 +5,7 @@ import { and, eq, isNull, max } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { courseVisibleToCoach } from "@/lib/course-access";
 import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
+import { formatDateDE } from "@/lib/format-date";
 import type { Abschlussbericht } from "@/db/schema";
 
 import { stopImpersonating } from "../../../../../../bildungstraeger/actions";
@@ -101,7 +102,7 @@ export default async function BerEditorPage({ params }: Props) {
           Kunden-Nr. {row.participant.kundenNr} · AVGS {row.course.avgsNummer}{" "}
           ·{" "}
           {row.course.startDate && row.course.endDate
-            ? `${row.course.startDate} bis ${row.course.endDate}`
+            ? `${formatDateDE(row.course.startDate)} bis ${formatDateDE(row.course.endDate)}`
             : "Bewilligungszeitraum offen"}{" "}
           · {row.course.anzahlBewilligteUe} UE bewilligt
         </p>
