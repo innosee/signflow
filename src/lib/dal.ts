@@ -93,7 +93,12 @@ async function resolveActiveMembership(
 export const getCurrentSession = cache(async (): Promise<SessionData> => {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
-  if (!session?.user) return session;
+  // „Eingeloggt" ist genau EIN Prädikat: eine Session MIT User. Ein truthy-
+  // aber-userloses Objekt (kaputtes/halbgültiges Cookie) wird hart auf null
+  // normalisiert — sonst würde `if (session)` in den Rein-Redirects (`/`,
+  // `/login`, …) greifen, während die Guards (`requireSession`) es als
+  // „nicht eingeloggt" behandeln → Redirect-Loop.
+  if (!session?.user) return null;
 
   // Aktiven Tenant + aktive Rolle EINMAL pro Request auflösen und auf die
   // Session legen. Ab hier liest die ganze App den aktiven Tenant aus
@@ -116,7 +121,7 @@ export const getCurrentSession = cache(async (): Promise<SessionData> => {
 
 export async function requireSession() {
   const session = await getCurrentSession();
-  if (!session) redirect("/login");
+  if (!session?.user) redirect("/login");
   // Soft-gelöschte Nutzer sollen ihre Session sofort verlieren — nicht erst
   // bei Ablauf. Ohne diesen Check dürfte ein grad deaktivierter Coach noch
   // weiter in seiner alten Session arbeiten.
@@ -124,6 +129,29 @@ export async function requireSession() {
     redirect("/login");
   }
   return session;
+}
+
+/**
+ * Ziel-Route für eine BEREITS eingeloggte Session — oder `null`, wenn die
+ * Session NICHT sauber in die App gehört (kein User, deaktiviert, oder keine
+ * bekannte Rolle). Jeder „logged-in → rein"-Redirect (`/`, `/login`,
+ * `/register`, `/forgot-password`) MUSS das hier benutzen, statt blind
+ * `/coach` anzunehmen.
+ *
+ * Warum: Die Guards (`requireSession`/`requireCoach`) werfen eine deaktivierte
+ * oder rollen-fremde Session wieder RAUS (nach `/login` bzw. `/`). Wenn die
+ * Rein-Redirects dieselbe Session unkritisch wieder REIN schicken, entsteht
+ * ein Redirect-Ping-Pong, das Chrome als „Throttling navigation" abbricht
+ * (weißer Screen). `null` = Seite normal rendern statt rein-redirecten bricht
+ * die Schleife.
+ */
+export function loggedInRedirectTarget(session: SessionData): string | null {
+  if (!session?.user) return null;
+  if ((session.user as { deletedAt?: Date | null }).deletedAt) return null;
+  const role = getActiveRole(session);
+  if (role === "bildungstraeger") return "/bildungstraeger";
+  if (role === "coach") return "/coach";
+  return null;
 }
 
 /**
