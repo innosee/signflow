@@ -19,7 +19,7 @@ const FEATURES = [
   {
     icon: ShieldIcon,
     title: "Einfache elektronische Signatur",
-    desc: "Coach und Teilnehmer:in signieren digital per Canvas — mit Zeitstempel, Identitätsnachweis und Audit-Protokoll. Das finale A4-PDF ist ausreichend für die AfA, ohne den Aufwand einer QES.",
+    desc: "Coach und Teilnehmer:in signieren digital per Canvas — mit Zeitstempel, IP-Adresse und E-Mail-basiertem Zugang (Magic-Link) im Audit-Protokoll. Das finale A4-PDF ist ausreichend für die AfA, ohne den Aufwand einer QES.",
   },
   {
     icon: ClockIcon,
@@ -29,7 +29,7 @@ const FEATURES = [
   {
     icon: GlobeIcon,
     title: "EU-Hosting + DSGVO",
-    desc: "Datenbank, Datei-Storage und E-Mail-Versand laufen in der EU (Frankfurt-Region). Auftragsverarbeitungsverträge vorhanden.",
+    desc: "Datenbank, Datei-Storage und E-Mail-Versand laufen in der EU. Auftragsverarbeitungsverträge nach Art. 28 DSGVO auf Anfrage.",
   },
   {
     icon: GateIcon,

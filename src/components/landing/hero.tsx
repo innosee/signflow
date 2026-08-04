@@ -9,13 +9,13 @@ export function LandingHero() {
           </span>
 
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-zinc-950 sm:text-5xl">
-            Rechtssichere AfA-Nachweise.{" "}
+            Digitale AfA-Nachweise.{" "}
             <span className="text-zinc-500">Ohne Papier.</span>
           </h1>
 
           <p className="max-w-xl text-base leading-relaxed text-zinc-600 sm:text-lg">
             Stundennachweise für AVGS-Maßnahmen digital erfassen, von Coach und
-            Teilnehmer:innen rechtssicher signieren und als A4-PDF an die
+            Teilnehmer:innen elektronisch signieren und als A4-PDF an die
             Agentur für Arbeit übermitteln — alles in einem Flow.
           </p>
 
