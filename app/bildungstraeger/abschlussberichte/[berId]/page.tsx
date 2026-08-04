@@ -148,7 +148,7 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
   const zeitraumDisplay =
     ber.tnZeitraum ||
     (course?.startDate && course?.endDate
-      ? `${course.startDate} – ${course.endDate}`
+      ? `${formatDateDE(course.startDate)} – ${formatDateDE(course.endDate)}`
       : "");
   const ueDisplay =
     ber.tnUe ||
