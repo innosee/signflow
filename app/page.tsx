@@ -10,7 +10,7 @@ import { LandingHowItWorks } from "@/components/landing/how-it-works";
 import { LandingNav } from "@/components/landing/nav";
 import { LandingPricing } from "@/components/landing/pricing";
 import { LandingWaitlist } from "@/components/landing/waitlist";
-import { getActiveRole, getCurrentSession } from "@/lib/dal";
+import { getCurrentSession, loggedInRedirectTarget } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +27,8 @@ export default async function Home() {
   // erreichbar bleibt. Setup-Route ist manuell aufrufbar, bis der
   // Multi-Tenant-Bildungsträger-Signup die Bootstrap-Story sauber ablöst.
   const session = await getCurrentSession();
-  if (session) {
-    redirect(
-      getActiveRole(session) === "bildungstraeger"
-        ? "/bildungstraeger"
-        : "/coach",
-    );
-  }
+  const target = loggedInRedirectTarget(session);
+  if (target) redirect(target);
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-zinc-900">
