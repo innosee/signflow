@@ -41,6 +41,7 @@ export async function loadStundennachweisSheet(params: {
       flagUeUnterschritten: schema.courses.flagUeUnterschritten,
       begruendungText: schema.courses.begruendungText,
       angabenText: schema.courses.angabenText,
+      signatureMode: schema.courses.signatureMode,
       bedarfstraegerName: schema.bedarfstraeger.name,
       bedarfstraegerType: schema.bedarfstraeger.type,
       coachName: schema.users.name,
@@ -229,8 +230,15 @@ export async function loadStundennachweisSheet(params: {
   }
   auditEntries.sort((a, b) => a.at.localeCompare(b.at));
 
+  // Analog-Modus: im Papier-Fallback werden die Unterschriftsfelder LEER
+  // gedruckt (händisch zu unterschreiben). Es gibt ohnehin keine digitalen
+  // Signaturen, aber wir zeigen dann eine leere, umrandete Signatur-Box mit
+  // „Ort, Datum / Unterschrift"-Zeile statt „ausstehend".
+  const analog = ctx.signatureMode === "analog";
+
   return {
     branding: { logoUrl: branding.logoUrl, name: ctx.tenantName },
+    analog,
     course: {
       title: ctx.title,
       avgsNummer: ctx.avgsNummer,

@@ -6,6 +6,7 @@ import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 import { renderPdfFromUrl } from "@/lib/pdf";
+import { streamAnalogScan } from "@/lib/analog-scan";
 
 // Node-Runtime (Puppeteer/Chromium kann nicht auf Edge laufen).
 export const runtime = "nodejs";
@@ -35,6 +36,7 @@ export async function GET(
       courseId: schema.documents.courseId,
       type: schema.documents.type,
       courseTitle: schema.courses.title,
+      analogScanUrl: schema.documents.analogScanUrl,
     })
     .from(schema.documents)
     .innerJoin(schema.courses, eq(schema.courses.id, schema.documents.courseId))
@@ -56,6 +58,15 @@ export async function GET(
       { error: "Dokument nicht gefunden." },
       { status: 404 },
     );
+  }
+
+  // Analog-Modus + bestätigter Scan: den hochgeladenen Scan ausliefern statt
+  // des HTML-Renders (siehe Coach-Endpoint).
+  if (doc.analogScanUrl) {
+    const cfg = getDocumentConfig(doc.type as DocumentTypeId);
+    const filename = `${safeFilename(cfg.formNumber)}-${safeFilename(cfg.label)}-${safeFilename(doc.courseTitle)}.pdf`;
+    const streamed = await streamAnalogScan(doc.analogScanUrl, filename);
+    if (streamed) return streamed;
   }
 
   const h = await headers();

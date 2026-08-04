@@ -15,8 +15,17 @@ export type DocumentSheetData = {
     logoUrl: string | null;
   };
   /**
+   * Analog-Modus (Kurs `signature_mode = 'analog'`): das Dokument wird auf
+   * Papier unterschrieben. Alle Unterschriften bleiben leer; die
+   * `SignatureLine`/TNB-Blöcke zeichnen dann eine leere Box mit
+   * „Ort, Datum / Unterschrift"-Caption. Templates können den Flag zusätzlich
+   * für einen expliziten „Analoge Unterschrift"-Hinweis nutzen.
+   */
+  analog?: boolean;
+  /**
    * Aufgelöste geteilte Org-Signatur des Tenants (erango-Geschäftsführung) oder
-   * null. Für die Teilnahmebescheinigung die einzige Unterschrift.
+   * null. Für die Teilnahmebescheinigung die einzige Unterschrift. Im
+   * Analog-Modus immer null.
    */
   orgSignatureUrl: string | null;
   participant: {

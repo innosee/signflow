@@ -22,6 +22,7 @@ import {
 } from "@/lib/documents/config";
 import {
   collectAllFormValues,
+  confirmDocumentAnalog,
   submitDocument,
 } from "@/lib/documents/editor-core";
 import {
@@ -326,6 +327,53 @@ export async function reopenDocument(formData: FormData): Promise<void> {
 
   revalidatePath(backToDoc);
   redirect(backToDoc);
+}
+
+export type ConfirmDocAnalogState =
+  | { error?: string; success?: boolean }
+  | undefined;
+
+/**
+ * Analog-Modus: Der Coach lädt den unterschriebenen STV-Scan (PDF) hoch und
+ * schließt das Dokument damit ab (Status → `completed`). Delegiert an den
+ * rollen-übergreifenden Kern (`confirmDocumentAnalog`), der Owner/Modus/Status
+ * prüft.
+ */
+export async function confirmDocumentAnalogAction(
+  _prev: ConfirmDocAnalogState,
+  formData: FormData,
+): Promise<ConfirmDocAnalogState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const documentId = String(formData.get("documentId") ?? "").trim();
+  const doc = await loadOwnedDocument(documentId, coachId);
+  if (!doc) return { error: "Dokument nicht gefunden." };
+
+  const ipAddress =
+    (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+
+  const result = await confirmDocumentAnalog({
+    doc: {
+      id: doc.id,
+      courseId: doc.courseId,
+      participantId: doc.participantId,
+      type: doc.type as DocumentTypeId,
+      status: doc.status,
+      formData: doc.formData as Record<string, unknown> | null,
+    },
+    actor: { type: "coach", userId: coachId },
+    file: formData.get("scan"),
+    ipAddress,
+  });
+
+  if (result.status === "error") return { error: result.message };
+
+  revalidatePath(`/coach/courses/${doc.courseId}/dokumente/${documentId}`);
+  revalidatePath(`/coach/courses/${doc.courseId}`);
+  return { success: true };
 }
 
 // --- Teilnahmebescheinigung (F 05, kind: certificate) ----------------------

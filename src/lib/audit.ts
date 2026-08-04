@@ -28,6 +28,9 @@ export type AuditAction =
   | "course.delete"
   | "course.bewilligt.set"
   | "course.bewilligt.unset"
+  | "course.signature_mode.analog"
+  | "course.signature_mode.digital"
+  | "course.analog_confirmed"
   | "anw.soft_flags.acknowledged"
   | "session.topic_corrected"
   | "session.deleted"
@@ -51,6 +54,7 @@ export type AuditAction =
   | "document.reopened"
   | "document.deleted"
   | "document.participant_reminded"
+  | "document.analog_confirmed"
   | "document.tnb_issued";
 
 export type AuditActorType =

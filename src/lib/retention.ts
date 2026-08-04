@@ -81,6 +81,11 @@ export const SIGNATURE_RELATED_AUDIT_ACTIONS = [
   // Ausstellung einer Teilnahmebescheinigung (mit erango-Org-Signatur) —
   // Nachweiskette, wird aufbewahrt.
   "document.tnb_issued",
+  // Analog-Modus: Bestätigung des händisch unterschriebenen Papier-Scans
+  // (ANW bzw. Dokument) — tritt an die Stelle der digitalen Signatur und
+  // gehört damit zur Nachweiskette, wird aufbewahrt.
+  "course.analog_confirmed",
+  "document.analog_confirmed",
 ] as const satisfies readonly AuditAction[];
 
 /**
@@ -104,6 +109,11 @@ export const DELETABLE_AUDIT_ACTIONS = [
   "bildungstraeger.onboard",
   "course.bewilligt.set",
   "course.bewilligt.unset",
+  // Umschalten des Unterschrifts-Modus (digital ⇄ analog) durch den BT —
+  // Konfiguration, operativ. Die eigentliche Analog-Bestätigung
+  // (course.analog_confirmed) ist dagegen signaturbezogen (oben).
+  "course.signature_mode.analog",
+  "course.signature_mode.digital",
   // Anlage eines Kunde-Dokument-Drafts (vor jeder Signatur) — operativ.
   "document.created",
   // Erinnerungs-Mail an den Teilnehmer (Magic-Link erneut) — operativ.

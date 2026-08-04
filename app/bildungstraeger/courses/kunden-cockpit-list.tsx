@@ -7,7 +7,12 @@ import { ANW_TONE_BADGE, type AnwTone } from "@/lib/anw-status";
 import { track } from "@/lib/analytics";
 import { buildSearchEventPayload } from "@/lib/analytics-privacy";
 
-import { archiveCourse, setCourseBewilligt, unarchiveCourse } from "./actions";
+import {
+  archiveCourse,
+  setCourseBewilligt,
+  setCourseSignatureMode,
+  unarchiveCourse,
+} from "./actions";
 import { DeleteCourseButton } from "./delete-course-button";
 
 const BER_BADGE: Record<CockpitRow["berStatus"], { label: string; cls: string }> =
@@ -28,6 +33,8 @@ export type CockpitRow = {
   statusLabel: string;
   isArchived: boolean;
   bewilligt: boolean;
+  // Unterschrifts-Modus: 'analog' = Papier-Fallback (leere PDFs → Scan-Upload).
+  signatureMode: "digital" | "analog";
   avgsStageLabel: string | null;
   avgsStageBadge: string | null;
   // ANW / Stundennachweis
@@ -283,6 +290,37 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
                         }
                       >
                         {c.bewilligt ? "✓ Bewilligt" : "Bewilligt setzen"}
+                      </button>
+                    </form>
+                    {/* Unterschrifts-Modus umschalten (digital ⇄ analog/Papier).
+                        Nach dem finalen Abschluss eingefroren (Server prüft es
+                        zusätzlich). */}
+                    <form action={setCourseSignatureMode}>
+                      <input type="hidden" name="courseId" value={c.id} />
+                      <input
+                        type="hidden"
+                        name="mode"
+                        value={c.signatureMode === "analog" ? "digital" : "analog"}
+                      />
+                      <button
+                        type="submit"
+                        disabled={c.anwSealed}
+                        title={
+                          c.anwSealed
+                            ? "Nach dem Abschluss nicht mehr änderbar"
+                            : c.signatureMode === "analog"
+                              ? "Zurück auf digitale Unterschrift stellen"
+                              : "Auf analoge Unterschrift (Papier) umstellen: PDFs werden mit leeren Unterschriftsfeldern gedruckt und der Scan wieder hochgeladen"
+                        }
+                        className={
+                          c.signatureMode === "analog"
+                            ? "rounded-lg border border-amber-500 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 enabled:hover:bg-amber-100 disabled:opacity-50"
+                            : "rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 enabled:hover:bg-zinc-50 disabled:opacity-50"
+                        }
+                      >
+                        {c.signatureMode === "analog"
+                          ? "✎ Analog (Papier)"
+                          : "Analog freigeben"}
                       </button>
                     </form>
                     <Link

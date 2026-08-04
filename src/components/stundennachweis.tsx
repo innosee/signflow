@@ -27,6 +27,14 @@ export type StundennachweisSheet = {
     logoUrl: string | null;
     name?: string | null;
   };
+  /**
+   * Analog-Modus (Kurs `signature_mode = 'analog'`): statt der digitalen
+   * Signaturen werden LEERE, umrandete Unterschriftsfelder mit „Ort, Datum /
+   * Unterschrift"-Zeile gedruckt — zum händischen Unterschreiben auf Papier.
+   * Default/undefined = digital (bisheriges Verhalten: „ausstehend" bzw. das
+   * Signatur-Bild).
+   */
+  analog?: boolean;
   course: {
     title: string;
     avgsNummer: string;
@@ -120,8 +128,16 @@ function formatDateTime(iso: string | null): string {
 }
 
 export function Stundennachweis(props: StundennachweisSheet) {
-  const { course, bedarfstraeger, coach, participant, sessions, audit, branding } =
-    props;
+  const {
+    course,
+    bedarfstraeger,
+    coach,
+    participant,
+    sessions,
+    audit,
+    branding,
+    analog = false,
+  } = props;
 
   // Kompetenzteams: sind mehrere Coaches im Spiel, wird der Coach PRO Termin
   // ausgewiesen (statt eines globalen Coaches). Bei genau einem Coach bleibt
@@ -262,12 +278,14 @@ export function Stundennachweis(props: StundennachweisSheet) {
                       <SignatureCell
                         url={s.coachSignatureUrl}
                         signedAt={s.coachSignedAt}
+                        analog={analog}
                       />
                     </td>
                     <td>
                       <SignatureCell
                         url={s.participantSignatureUrl}
                         signedAt={s.participantSignedAt}
+                        analog={analog}
                       />
                     </td>
                   </tr>
@@ -435,11 +453,25 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 function SignatureCell({
   url,
   signedAt,
+  analog = false,
 }: {
   url: string | null;
   signedAt: string | null;
+  analog?: boolean;
 }) {
-  if (!url) return <span className="sig-pending">ausstehend</span>;
+  if (!url) {
+    // Analog-Modus: leere, umrandete Box zum händischen Unterschreiben, mit
+    // „Ort, Datum / Unterschrift"-Zeile darunter. Sonst wie bisher „ausstehend".
+    if (analog) {
+      return (
+        <div className="sig-analog">
+          <div className="sig-analog-box" />
+          <span className="sig-analog-caption">Ort, Datum / Unterschrift</span>
+        </div>
+      );
+    }
+    return <span className="sig-pending">ausstehend</span>;
+  }
   return (
     <div className="sig-box">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -598,6 +630,18 @@ const printCss = `
     color: #555;
   }
   .sig-pending { color: #999; font-style: italic; font-size: 9pt; }
+  /* Analog-Modus: leeres Unterschriftsfeld zum händischen Ausfüllen. */
+  .sig-analog { display: block; }
+  .sig-analog-box {
+    height: 12mm;
+    border-bottom: 0.4mm solid #333;
+  }
+  .sig-analog-caption {
+    display: block;
+    margin-top: 0.5mm;
+    font-size: 7pt;
+    color: #666;
+  }
   /* Kompetenzteams: Coach-Name pro Zeile (nur bei >1 Coach gerendert). */
   .sig-coach-name {
     font-size: 7.5pt;

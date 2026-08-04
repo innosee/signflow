@@ -644,6 +644,59 @@ export async function setCourseBewilligt(formData: FormData): Promise<void> {
 }
 
 /**
+ * Unterschrifts-Modus einer Maßnahme umschalten (Schnell-Button im Cockpit).
+ * `mode="analog"` schaltet den Papier-Fallback frei (leere PDFs → drucken →
+ * unterschreiben → Scan hochladen); `mode="digital"` ist der Standard. Nur der
+ * Bildungsträger darf das setzen, nur solange der Nachweis noch nicht final
+ * abgeschlossen ist (kein `final_documents`-Eintrag mit `fes_status='completed'`)
+ * — nach dem Abschluss würde ein Moduswechsel den geleisteten Signatur-/Scan-
+ * Stand widersprüchlich machen. Jede Änderung wird auditiert.
+ */
+export async function setCourseSignatureMode(formData: FormData): Promise<void> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  const mode = String(formData.get("mode") ?? "").trim();
+  if (mode !== "analog" && mode !== "digital") {
+    revalidatePath("/bildungstraeger/courses");
+    redirect("/bildungstraeger/courses");
+  }
+  if (courseId && (await requireOwnedCourse(courseId, tenantId))) {
+    // Nach dem finalen Abschluss (BT-Freigabe → final_documents completed) ist
+    // der Modus eingefroren.
+    const [sealed] = await db
+      .select({ id: schema.finalDocuments.id })
+      .from(schema.finalDocuments)
+      .where(
+        and(
+          eq(schema.finalDocuments.courseId, courseId),
+          eq(schema.finalDocuments.fesStatus, "completed"),
+        ),
+      )
+      .limit(1);
+    if (!sealed) {
+      await db
+        .update(schema.courses)
+        .set({ signatureMode: mode })
+        .where(eq(schema.courses.id, courseId));
+      await logAudit({
+        actorType: "bildungstraeger",
+        actorId: session.user.id,
+        action:
+          mode === "analog"
+            ? "course.signature_mode.analog"
+            : "course.signature_mode.digital",
+        resourceType: "course",
+        resourceId: courseId,
+      });
+    }
+  }
+  revalidatePath("/bildungstraeger/courses");
+  redirect("/bildungstraeger/courses");
+}
+
+/**
  * Kunden HART löschen — unwiderruflich (v.a. zum Aufräumen in der Testphase).
  * Anders als „Archivieren" (status) oder Soft-Delete (deletedAt) verschwindet
  * der Kurs physisch aus der DB; der FK-Cascade räumt Termine, Signaturen,
