@@ -13,6 +13,7 @@ import { innereWochenUnter2, randWochenUnter2 } from "@/lib/termine-pro-woche";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ReviewThread } from "@/components/review-thread";
 
+import { AnalogConfirmPanel } from "./analog-confirm-panel";
 import { AngabenEditor } from "./angaben-editor";
 import { AnwCheckButton } from "./anw-check-button";
 import { DocumentsSection, type DocumentListItem } from "./documents-section";
@@ -71,6 +72,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       reviewStatus: schema.courses.reviewStatus,
       reviewRequestedAt: schema.courses.reviewRequestedAt,
       reviewDecidedAt: schema.courses.reviewDecidedAt,
+      signatureMode: schema.courses.signatureMode,
+      analogConfirmedAt: schema.courses.analogConfirmedAt,
+      analogScanUrl: schema.courses.analogScanUrl,
       bedarfstraegerName: schema.bedarfstraeger.name,
       bedarfstraegerType: schema.bedarfstraeger.type,
     })
@@ -179,9 +183,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       ).length > 0
     : false;
   // Offene Termine warten auf eine TN-Unterschrift (Coach signiert, TN noch
-  // nicht). Nur dann ist eine (erneute) Einladung sinnvoll.
+  // nicht). Nur dann ist eine (erneute) Einladung sinnvoll. Im Analog-Modus
+  // gibt es keine Magic-Links → nie eine Einladungs-Aufforderung.
   const needsInvite =
-    !hasActiveInvite && sessions.some((s) => s.status === "coach_signed");
+    course.signatureMode !== "analog" &&
+    !hasActiveInvite &&
+    sessions.some((s) => s.status === "coach_signed");
 
   // Mehrere Coaches im Spiel? Dann zeigen wir pro Termin, wer zugewiesen ist.
   const distinctCoachIds = new Set(
@@ -308,8 +315,18 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     )
     .orderBy(desc(schema.documents.createdAt));
 
+  // Analog-Modus (Papier): kein digitales Signieren. Statt „alle Termine
+  // signiert" zählt die Scan-Bestätigung (`analogConfirmedAt`). Die Sign-/
+  // Notify-Buttons werden ausgeblendet, ein Analog-Panel übernimmt.
+  const analog = course.signatureMode === "analog";
+  const analogConfirmed = !!course.analogConfirmedAt;
   const allSessionsCompleted =
     sessions.length > 0 && sessions.every((s) => s.status === "completed");
+  // Freigabe-Gate für Schritt 4: digital = alle Termine signiert; analog =
+  // Scan bestätigt. In beiden Modi muss ≥1 Termin existieren.
+  const readyForReview = analog
+    ? sessions.length > 0 && analogConfirmed
+    : allSessionsCompleted;
   const allApproved =
     participants.length > 0 &&
     participants.every((p) => approvalByParticipant.has(p.id));
@@ -535,8 +552,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                     </div>
                   </div>
                   {/* Kompetenzteams: nur der dem Termin zugewiesene Coach
-                      signiert (Lead-Fallback für Alt-Termine ohne Zuweisung). */}
-                  {!coachSigned && canSignThis && coachHasSignature && (
+                      signiert (Lead-Fallback für Alt-Termine ohne Zuweisung).
+                      Im Analog-Modus wird gar nicht digital signiert. */}
+                  {!analog && !coachSigned && canSignThis && coachHasSignature && (
                     <div className="pl-28">
                       {isFuture ? (
                         <p className="text-xs text-zinc-500">
@@ -548,7 +566,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       )}
                     </div>
                   )}
-                  {!coachSigned && canSignThis && !coachHasSignature && (
+                  {!analog && !coachSigned && canSignThis && !coachHasSignature && (
                     <p className="pl-28 text-xs text-amber-700">
                       Zum Signieren bitte zuerst{" "}
                       <Link
@@ -621,16 +639,41 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           </div>
         </div>
         <div className="divide-y divide-zinc-200">
-          <Step
-            index={1}
-            title="Termine vollständig signiert"
-            done={allSessionsCompleted}
-            subtitle={
-              allSessionsCompleted
-                ? "Alle Termine von Coach und Teilnehmer bestätigt."
-                : `${sessions.filter((s) => s.status === "completed").length} von ${sessions.length} vollständig.`
-            }
-          />
+          {analog ? (
+            <Step
+              index={1}
+              title="Analog-Unterschriften (Papier)"
+              done={analogConfirmed}
+              subtitle={
+                analogConfirmed
+                  ? `Scan hochgeladen & bestätigt${course.analogConfirmedAt ? ` am ${new Date(course.analogConfirmedAt).toLocaleString("de-DE")}` : ""}.`
+                  : "PDF drucken, auf Papier unterschreiben lassen, Scan hochladen."
+              }
+            >
+              {!impersonating && participantId && (
+                <AnalogConfirmPanel
+                  courseId={course.id}
+                  anwPdfUrl={`/api/courses/${course.id}/participants/${participantId}/pdf`}
+                  confirmedAt={
+                    course.analogConfirmedAt
+                      ? new Date(course.analogConfirmedAt).toISOString()
+                      : null
+                  }
+                />
+              )}
+            </Step>
+          ) : (
+            <Step
+              index={1}
+              title="Termine vollständig signiert"
+              done={allSessionsCompleted}
+              subtitle={
+                allSessionsCompleted
+                  ? "Alle Termine von Coach und Teilnehmer bestätigt."
+                  : `${sessions.filter((s) => s.status === "completed").length} von ${sessions.length} vollständig.`
+              }
+            />
+          )}
           <Step
             index={2}
             title="ANW-Compliance-Check"
@@ -698,13 +741,15 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   courseId={course.id}
                   resubmit={course.reviewStatus === "changes_requested"}
                   disabled={
-                    !allSessionsCompleted ||
+                    !readyForReview ||
                     !course.anwCheckPassedAt ||
                     !course.abgeschlossenAt
                   }
                   disabledReason={
-                    !allSessionsCompleted
-                      ? "Erst wenn alle Termine signiert sind"
+                    !readyForReview
+                      ? analog
+                        ? "Erst den unterschriebenen Scan hochladen & bestätigen"
+                        : "Erst wenn alle Termine signiert sind"
                       : !course.anwCheckPassedAt
                         ? "ANW-Compliance-Check muss durchlaufen sein"
                         : !course.abgeschlossenAt
@@ -741,7 +786,8 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
           <h2 className="text-lg font-semibold">
             Teilnehmer ({participants.length})
           </h2>
-          {canManage && (
+          {/* Analog-Modus: kein Magic-Link → keine Benachrichtigen-Aktion. */}
+          {canManage && !analog && (
             <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-start">
               {/* 1:1: Kein nachträgliches Hinzufügen — der Kunde wird bei der
                   Anlage durch den Bildungsträger gesetzt. */}
@@ -837,18 +883,21 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   </Link>
                   {canManage && (
                     <>
-                      {smsEnabled && p.phone && (
+                      {/* Analog-Modus: keine Magic-Link-Übergabe (SMS/QR). */}
+                      {!analog && smsEnabled && p.phone && (
                         <SmsResendButton
                           courseId={course.id}
                           participantId={p.id}
                           phone={p.phone}
                         />
                       )}
-                      <QrHandoverButton
-                        courseId={course.id}
-                        participantId={p.id}
-                        participantName={p.name}
-                      />
+                      {!analog && (
+                        <QrHandoverButton
+                          courseId={course.id}
+                          participantId={p.id}
+                          participantName={p.name}
+                        />
+                      )}
                       <Link
                         href={`/coach/courses/${course.id}/teilnehmer/${p.id}/edit`}
                         className="text-zinc-700 underline-offset-2 hover:underline"

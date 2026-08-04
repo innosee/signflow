@@ -34,6 +34,7 @@ export async function loadDocumentSheet(
       // Kurs
       courseTitle: schema.courses.title,
       massnahmeTyp: schema.courses.massnahmeTyp,
+      signatureMode: schema.courses.signatureMode,
       durchfuehrungsort: schema.courses.durchfuehrungsort,
       avgsNummer: schema.courses.avgsNummer,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
@@ -119,6 +120,13 @@ export async function loadDocumentSheet(
     ? MASSNAHME_TYP_LABEL[doc.massnahmeTyp]
     : doc.courseTitle;
 
+  // Analog-Modus (Kurs `signature_mode = 'analog'`): das Dokument wird auf Papier
+  // unterschrieben. ALLE Unterschriften (Org/Coach + Teilnehmer) bleiben im PDF
+  // leer — `SignatureLine`/der TNB-Block zeichnen dann bereits eine leere Box mit
+  // „Ort, Datum / Unterschrift"-Caption. Die eigentliche Beweiskraft trägt der
+  // separat hochgeladene, unterschriebene Scan (documents.analog_scan_url).
+  const analog = doc.signatureMode === "analog";
+
   // Legal-Integrität: ab Coach-Signatur (`status !== 'draft'`) liegen die
   // Teilnehmer-Stammdaten als Snapshot (`tn_*`) in `form_data` — ein danach
   // geänderter Teilnehmer-Datensatz darf das signierte Dokument NICHT mehr
@@ -135,7 +143,8 @@ export async function loadDocumentSheet(
     status: doc.status,
     formData: snap,
     branding: { logoUrl: brandingLogo },
-    orgSignatureUrl: orgSigUrl,
+    analog,
+    orgSignatureUrl: analog ? null : orgSigUrl,
     participant: {
       name: pick("tn_name", doc.pName) ?? doc.pName,
       vorname: pick("tn_vorname", doc.pVorname),
@@ -163,15 +172,17 @@ export async function loadDocumentSheet(
     },
     coachName: coachSig?.coachName ?? doc.leadCoachName,
     signatures: {
-      coach: coachSig
-        ? { url: coachSigUrl, signedAt: coachSig.signedAt.toISOString() }
-        : null,
-      participant: participantSig
-        ? {
-            url: participantSigUrl,
-            signedAt: participantSig.signedAt.toISOString(),
-          }
-        : null,
+      coach:
+        analog || !coachSig
+          ? null
+          : { url: coachSigUrl, signedAt: coachSig.signedAt.toISOString() },
+      participant:
+        analog || !participantSig
+          ? null
+          : {
+              url: participantSigUrl,
+              signedAt: participantSig.signedAt.toISOString(),
+            },
     },
   };
 }

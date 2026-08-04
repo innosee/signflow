@@ -188,6 +188,36 @@ export async function uploadBrandingLogo(
 }
 
 /**
+ * Lädt einen händisch unterschriebenen Formular-Scan (PDF) hoch — für den
+ * analogen Unterschrifts-Modus (ANW / F08 / F21). Wie `uploadSignature` gibt
+ * der Rückgabewert je nach aktivem Provider Object-Key (R2) oder Public-URL
+ * (Vercel-Blob) zurück; beim Render/Download macht `resolveAssetUrl()` daraus
+ * eine abrufbare URL.
+ */
+export async function uploadSignedScan(
+  ownerKey: string,
+  pdf: Blob,
+): Promise<string> {
+  const ts = Date.now();
+  const path = `signed-scans/${ownerKey}/${ts}-${randomSuffix()}.pdf`;
+
+  if (activeProvider() === "r2") {
+    const buf = Buffer.from(await pdf.arrayBuffer());
+    await r2Put(path, buf, "application/pdf");
+    return path;
+  }
+
+  vercelBlobAssertToken();
+  const { url } = await vercelBlobPut(path, pdf, {
+    access: "public",
+    contentType: "application/pdf",
+    addRandomSuffix: true,
+    cacheControlMaxAge: 60 * 60 * 24 * 365,
+  });
+  return url;
+}
+
+/**
  * Löscht ein Asset aus dem Storage. Akzeptiert sowohl Object-Keys (R2,
  * neue Uploads) als auch vollständige URLs (Vercel-Blob, Bestand).
  */

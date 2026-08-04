@@ -7,6 +7,7 @@ import { courseVisibleToCoach } from "@/lib/course-access";
 import { requireCoach } from "@/lib/dal";
 import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 import { renderPdfFromUrl } from "@/lib/pdf";
+import { streamAnalogScan } from "@/lib/analog-scan";
 
 // Node-Runtime (Puppeteer/Chromium kann nicht auf Edge laufen).
 export const runtime = "nodejs";
@@ -35,6 +36,7 @@ export async function GET(
       courseId: schema.documents.courseId,
       type: schema.documents.type,
       courseTitle: schema.courses.title,
+      analogScanUrl: schema.documents.analogScanUrl,
     })
     .from(schema.documents)
     .innerJoin(schema.courses, eq(schema.courses.id, schema.documents.courseId))
@@ -49,6 +51,16 @@ export async function GET(
     .limit(1);
   if (!doc) {
     return NextResponse.json({ error: "Dokument nicht gefunden." }, { status: 404 });
+  }
+
+  // Analog-Modus + bestätigter Scan: den hochgeladenen, unterschriebenen Scan
+  // ausliefern statt des HTML-Renders. Vor der Bestätigung (analogScanUrl null)
+  // rendert der normale Pfad das Formular mit leeren Unterschriftsfeldern.
+  if (doc.analogScanUrl) {
+    const cfg = getDocumentConfig(doc.type as DocumentTypeId);
+    const filename = `${safeFilename(cfg.formNumber)}-${safeFilename(cfg.label)}-${safeFilename(doc.courseTitle)}.pdf`;
+    const streamed = await streamAnalogScan(doc.analogScanUrl, filename);
+    if (streamed) return streamed;
   }
 
   const h = await headers();

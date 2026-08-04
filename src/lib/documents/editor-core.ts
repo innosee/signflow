@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { sendParticipantInvite } from "@/lib/participant-tokens";
+import { uploadSignedScan } from "@/lib/storage";
 import {
   getDocumentConfig,
   MASTER_FIELD_LABELS,
@@ -134,6 +135,18 @@ export async function submitDocument(params: {
   const { doc, formData, intent, actor, ipAddress } = params;
   const cfg = getDocumentConfig(doc.type);
 
+  // Analog-Modus (Kurs `signature_mode = 'analog'`): das Dokument wird auf Papier
+  // unterschrieben. Die Freigabe friert nur den Inhalt ein (Status `active`,
+  // Snapshot) — OHNE digitale Org-/Coach-Signatur und OHNE Teilnehmer-Magic-Link.
+  // Die eigentliche Unterschrift kommt später als hochgeladener Scan
+  // (`confirmDocumentAnalog` → Status `completed`).
+  const [courseMode] = await db
+    .select({ signatureMode: schema.courses.signatureMode })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, doc.courseId))
+    .limit(1);
+  const analog = courseMode?.signatureMode === "analog";
+
   if (cfg.owner !== actor.type) {
     return {
       status: "error",
@@ -203,9 +216,11 @@ export async function submitDocument(params: {
     };
   }
 
-  // Zweite Signatur (erango-Seite) — nur bei Formularen, die sie vorsehen.
+  // Zweite Signatur (erango-Seite) — nur bei Formularen, die sie vorsehen und
+  // NUR im digitalen Modus. Im Analog-Modus wird auch die erango-Seite auf
+  // Papier unterschrieben, das Feld bleibt leer.
   let orgSignatureUrl: string | null = null;
-  if (cfg.signers.coach) {
+  if (cfg.signers.coach && !analog) {
     orgSignatureUrl = await params.resolveOrgSignature();
     if (!orgSignatureUrl) {
       return {
@@ -300,18 +315,141 @@ export async function submitDocument(params: {
   // — ein stilles Überspringen (weil noch ein Link gültig ist) verwirrt und lässt
   // den UI-Hinweis „wurde benachrichtigt" lügen. Typisch sind eh nur 1–2
   // Dokumente pro Kunde, also kein Spam.
-  try {
-    await sendParticipantInvite({
-      courseId: doc.courseId,
-      participantId: doc.participantId,
-      channel: "email",
-    });
-  } catch (err) {
-    console.error(
-      "submitDocument: automatische Teilnehmer-Benachrichtigung fehlgeschlagen",
-      err,
-    );
+  // Analog-Modus: KEIN Magic-Link — der Kunde unterschreibt auf Papier.
+  if (!analog) {
+    try {
+      await sendParticipantInvite({
+        courseId: doc.courseId,
+        participantId: doc.participantId,
+        channel: "email",
+      });
+    } catch (err) {
+      console.error(
+        "submitDocument: automatische Teilnehmer-Benachrichtigung fehlgeschlagen",
+        err,
+      );
+    }
   }
 
   return { status: "released" };
+}
+
+export type ConfirmAnalogResult =
+  | { status: "confirmed" }
+  | { status: "error"; message: string };
+
+const MAX_SCAN_BYTES = 15_000_000; // 15 MB — reicht für einen mehrseitigen Scan
+
+/**
+ * Analog-Modus für Kunde-Dokumente (F08/F21): Der Owner (BT bzw. Coach) lädt den
+ * händisch unterschriebenen Formular-Scan (PDF) hoch. Voraussetzung: Der Kurs
+ * ist analog UND das Dokument ist freigegeben (`active` = Inhalt eingefroren).
+ * Setzt `analog_scan_url`/`analog_confirmed_at` und Status → `completed`; die
+ * Dokument-PDF-Endpoints liefern ab dann den Scan statt des Blank-Renders.
+ * Owner-agnostischer Kern — die Routen prüfen Auth/Scope vorher.
+ */
+export async function confirmDocumentAnalog(params: {
+  doc: EditableDocument;
+  actor: DocActor;
+  file: unknown;
+  ipAddress: string;
+}): Promise<ConfirmAnalogResult> {
+  const { doc, actor, file, ipAddress } = params;
+  const cfg = getDocumentConfig(doc.type);
+
+  if (cfg.owner !== actor.type) {
+    return {
+      status: "error",
+      message: "Für dieses Dokument bist du nicht berechtigt.",
+    };
+  }
+
+  const [courseMode] = await db
+    .select({ signatureMode: schema.courses.signatureMode })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, doc.courseId))
+    .limit(1);
+  if (courseMode?.signatureMode !== "analog") {
+    return {
+      status: "error",
+      message:
+        "Diese Maßnahme läuft nicht im Analog-Modus. Der Bildungsträger muss sie zuerst freigeben.",
+    };
+  }
+  if (doc.status !== "active") {
+    return {
+      status: "error",
+      message:
+        "Bitte das Dokument zuerst freigeben (Inhalt einfrieren), dann den Scan hochladen.",
+    };
+  }
+
+  if (!(file instanceof Blob) || file.size === 0) {
+    return {
+      status: "error",
+      message: "Bitte den unterschriebenen Scan als PDF hochladen.",
+    };
+  }
+  if (file.type !== "application/pdf") {
+    return { status: "error", message: "Der Scan muss eine PDF-Datei sein." };
+  }
+  if (file.size > MAX_SCAN_BYTES) {
+    return { status: "error", message: "Die PDF ist zu groß (max. 15 MB)." };
+  }
+
+  let scanKey: string;
+  try {
+    scanKey = await uploadSignedScan(`document-${doc.id}`, file);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("confirmDocumentAnalog upload failed:", err);
+    return { status: "error", message: `Upload fehlgeschlagen (${message}).` };
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      const [fresh] = await tx
+        .select({ status: schema.documents.status })
+        .from(schema.documents)
+        .where(eq(schema.documents.id, doc.id))
+        .limit(1);
+      if (!fresh || fresh.status !== "active") throw new Error("NOT_ACTIVE");
+      await tx
+        .update(schema.documents)
+        .set({
+          analogScanUrl: scanKey,
+          analogConfirmedAt: new Date(),
+          status: "completed",
+          completedAt: new Date(),
+        })
+        .where(eq(schema.documents.id, doc.id));
+      await logAudit(
+        {
+          actorType: actor.type,
+          actorId: actor.userId,
+          action: "document.analog_confirmed",
+          resourceType: "document",
+          resourceId: doc.id,
+          metadata: { type: doc.type, owner: cfg.owner },
+          ipAddress,
+        },
+        tx,
+      );
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "NOT_ACTIVE") {
+      return {
+        status: "error",
+        message: "Dokument ist nicht (mehr) im freigegebenen Zustand.",
+      };
+    }
+    console.error("confirmDocumentAnalog failed:", err);
+    return {
+      status: "error",
+      message: "Bestätigung fehlgeschlagen. Bitte erneut versuchen.",
+    };
+  }
+
+  return { status: "confirmed" };
 }
