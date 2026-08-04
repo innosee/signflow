@@ -17,6 +17,12 @@ type DbOrTx = typeof db | Tx;
  *   - `anwCheckPassedAt`  (ANW-Compliance-Check, FES-Gate 2)
  *   - die Bildungsträger-Prüfung (FES-Gate 3): `reviewStatus` → 'none' plus die
  *     drei Review-Zeitstempel/Entscheider-Felder.
+ *   - die Analog-Scan-Bestätigung (`analogScanUrl`/`analogConfirmedAt`/
+ *     `analogConfirmedBy`): der bestätigte Papier-Scan bezeugt einen konkreten
+ *     Inhalts-Stand; ändert sich der Inhalt, muss neu unterschrieben + neu
+ *     hochgeladen werden. No-op für digitale Kurse (Felder sind dort ohnehin
+ *     NULL). Das alte Scan-Objekt im Storage wird bewusst NICHT gelöscht
+ *     (best-effort-Cleanup wäre möglich, orphan ist harmlos).
  *
  * `abgeschlossenAt` (FES-Gate 1) wird nur bei `keepAbgeschlossen: false`
  * (Default) genullt. Bei reinen Inhalts-Korrekturen am Themen-Text
@@ -42,6 +48,9 @@ export async function resetFesGates(
       reviewRequestedAt: null,
       reviewDecidedAt: null,
       reviewDecidedBy: null,
+      analogScanUrl: null,
+      analogConfirmedAt: null,
+      analogConfirmedBy: null,
     })
     .where(eq(schema.courses.id, courseId));
 }

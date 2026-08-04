@@ -86,12 +86,21 @@ export async function submitParticipantSignature(
       // Eine Session-Anwesenheits-Auswahl gibt es nicht mehr — jeder Termin
       // des Kurses gehört dem einen Kunden.
       const [courseRow] = await tx
-        .select({ participantId: schema.courses.participantId })
+        .select({
+          participantId: schema.courses.participantId,
+          signatureMode: schema.courses.signatureMode,
+        })
         .from(schema.courses)
         .where(eq(schema.courses.id, tok.courseId))
         .limit(1);
       if (!courseRow || courseRow.participantId !== tok.participantId) {
         throw new Error("NOT_ENROLLED");
+      }
+      // Analog-Modus (Papier): digitales Signieren ist gesperrt. Im Normalfall
+      // wird gar kein Magic-Link verschickt; dieser Guard fängt einen alten,
+      // noch gültigen Link aus einer Zeit vor der Umstellung ab.
+      if (courseRow.signatureMode === "analog") {
+        throw new Error("ANALOG_MODE");
       }
 
       // Teilnehmer muss seine Canvas-Signatur bereits einmalig angelegt
@@ -153,6 +162,12 @@ export async function submitParticipantSignature(
     }
     if (message === "NOT_ENROLLED") {
       return { error: "Du bist in diesem Kurs nicht eingeschrieben." };
+    }
+    if (message === "ANALOG_MODE") {
+      return {
+        error:
+          "Dieser Nachweis wird auf Papier unterschrieben. Bitte wende dich an deinen Coach — hier ist keine digitale Unterschrift nötig.",
+      };
     }
     if (message === "NO_SIGNATURE") {
       return {
@@ -225,6 +240,14 @@ export async function submitDocumentSignature(
         .limit(1);
       if (!doc) throw new Error("NOT_FOUND");
       if (doc.status !== "active") throw new Error("NOT_SIGNABLE");
+      // Analog-Modus (Papier): keine digitale Dokument-Signatur. Normalerweise
+      // wird kein Magic-Link verschickt; dieser Guard fängt Alt-Links ab.
+      const [courseMode] = await tx
+        .select({ signatureMode: schema.courses.signatureMode })
+        .from(schema.courses)
+        .where(eq(schema.courses.id, resolved.courseId))
+        .limit(1);
+      if (courseMode?.signatureMode === "analog") throw new Error("ANALOG_MODE");
       signedDocType = doc.type as DocumentTypeId;
 
       const [existing] = await tx
@@ -269,6 +292,12 @@ export async function submitDocumentSignature(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === "NOT_FOUND") return { error: "Dokument nicht gefunden." };
+    if (message === "ANALOG_MODE") {
+      return {
+        error:
+          "Dieses Dokument wird auf Papier unterschrieben. Bitte wende dich an deinen Coach — hier ist keine digitale Unterschrift nötig.",
+      };
+    }
     if (message === "NOT_SIGNABLE") {
       return {
         error:

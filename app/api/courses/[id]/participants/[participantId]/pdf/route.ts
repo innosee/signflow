@@ -6,6 +6,7 @@ import { db, schema } from "@/db";
 import { requireCoach } from "@/lib/dal";
 import { courseVisibleToCoach } from "@/lib/course-access";
 import { renderPdfFromUrl } from "@/lib/pdf";
+import { streamAnalogScan } from "@/lib/analog-scan";
 
 // Serverless-Function-Runtime: Node (Edge kann keine nativen Binärpakete
 // wie `@sparticuz/chromium` laden). Max. 60s auf Vercel Pro — PDF-Render
@@ -32,7 +33,12 @@ export async function GET(
   // Coach keine fremden Nachweise headless rendern + downloaden kann.
   // Kompetenzteams: Lead ODER zugewiesener Team-Coach.
   const [ctxRow] = await db
-    .select({ id: schema.courses.id, title: schema.courses.title })
+    .select({
+      id: schema.courses.id,
+      title: schema.courses.title,
+      signatureMode: schema.courses.signatureMode,
+      analogScanUrl: schema.courses.analogScanUrl,
+    })
     .from(schema.courses)
     .where(
       and(
@@ -68,6 +74,16 @@ export async function GET(
       { error: "Teilnehmer nicht im Kurs eingeschrieben." },
       { status: 404 },
     );
+  }
+
+  // Analog-Modus + bestätigter Scan: den hochgeladenen, unterschriebenen Scan
+  // ausliefern (finales PDF) statt des HTML-Renders. Vor der Bestätigung
+  // (analogScanUrl null) fällt es auf den normalen Render durch → dann wird das
+  // Blatt mit LEEREN Unterschriftsfeldern gedruckt (zum Ausdrucken).
+  if (ctxRow.signatureMode === "analog" && ctxRow.analogScanUrl) {
+    const filename = `stundennachweis-${safeFilename(ctxRow.title)}-${safeFilename(enrolled.participantName)}.pdf`;
+    const streamed = await streamAnalogScan(ctxRow.analogScanUrl, filename);
+    if (streamed) return streamed;
   }
 
   // Absolute URL für Puppeteer — entweder der konfigurierte App-URL

@@ -117,4 +117,52 @@ describe("evaluateSealReadiness", () => {
       }),
     ).toBe("anw_check_missing");
   });
+
+  describe("Analog-Modus", () => {
+    // Im Analog-Modus sind die Sessions nie digital signiert; stattdessen zählt
+    // die Scan-Bestätigung. Kein Session-Status ist 'completed'.
+    const analogOk = {
+      anwCheckPassedAt: new Date("2026-06-20"),
+      abgeschlossenAt: new Date("2026-06-21"),
+      reviewStatus: "approved",
+      sessionStatuses: ["pending", "pending"] as SessionStatus[],
+      signatureMode: "analog" as const,
+      analogConfirmedAt: new Date("2026-06-22"),
+    };
+
+    it("gibt null zurück, wenn der Scan bestätigt ist — trotz unsignierter Sessions", () => {
+      expect(evaluateSealReadiness(analogOk)).toBeNull();
+    });
+
+    it("blockt 'analog_not_confirmed', solange kein Scan bestätigt ist", () => {
+      expect(
+        evaluateSealReadiness({ ...analogOk, analogConfirmedAt: null }),
+      ).toBe("analog_not_confirmed");
+    });
+
+    it("blockt auch analog einen Kurs ohne Termine", () => {
+      expect(
+        evaluateSealReadiness({ ...analogOk, sessionStatuses: [] }),
+      ).toBe("no_sessions");
+    });
+
+    it("prüft die vorgelagerten Gates (ANW/Abschluss/Review) auch analog zuerst", () => {
+      expect(
+        evaluateSealReadiness({ ...analogOk, anwCheckPassedAt: null }),
+      ).toBe("anw_check_missing");
+      expect(
+        evaluateSealReadiness({ ...analogOk, reviewStatus: "pending" }),
+      ).toBe("review_not_approved");
+    });
+
+    it("wendet die digitale Session-Regel NICHT an, wenn signatureMode fehlt (Default digital)", () => {
+      // Ohne signatureMode gilt weiter die Session-Vollständigkeit.
+      expect(
+        evaluateSealReadiness({
+          ...ok,
+          sessionStatuses: ["completed", "coach_signed"],
+        }),
+      ).toBe("sessions_incomplete");
+    });
+  });
 });

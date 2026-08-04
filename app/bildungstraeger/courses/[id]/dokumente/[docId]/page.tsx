@@ -17,6 +17,7 @@ import { ReopenDocumentButton } from "@/components/documents/reopen-document-but
 import { NotifyDocParticipantButton } from "@/components/documents/notify-doc-participant-button";
 
 import {
+  confirmDocumentAnalogAction,
   deleteDocument,
   notifyDocumentParticipant,
   reopenDocument,
@@ -56,6 +57,7 @@ export default async function BildungstraegerDocumentPage({ params }: Props) {
       geburtsort: schema.participants.geburtsort,
       phone: schema.participants.phone,
       festnetz: schema.participants.festnetz,
+      signatureMode: schema.courses.signatureMode,
     })
     .from(schema.documents)
     .innerJoin(schema.courses, eq(schema.courses.id, schema.documents.courseId))
@@ -74,6 +76,7 @@ export default async function BildungstraegerDocumentPage({ params }: Props) {
     )
     .limit(1);
   if (!row) notFound();
+  const analog = row.signatureMode === "analog";
 
   const sheet = await loadDocumentSheet(docId);
   if (!sheet) notFound();
@@ -124,10 +127,13 @@ export default async function BildungstraegerDocumentPage({ params }: Props) {
           </a>
           {canEdit && row.status === "active" && (
             <>
-              <NotifyDocParticipantButton
-                action={notifyDocumentParticipant}
-                documentId={docId}
-              />
+              {/* Analog-Modus: kein Magic-Link → kein Benachrichtigen. */}
+              {!analog && (
+                <NotifyDocParticipantButton
+                  action={notifyDocumentParticipant}
+                  documentId={docId}
+                />
+              )}
               <ReopenDocumentButton action={reopenDocument} documentId={docId} />
             </>
           )}
@@ -165,6 +171,9 @@ export default async function BildungstraegerDocumentPage({ params }: Props) {
               submitAction={submitDocumentEditor}
               role="bildungstraeger"
               signatureHref={`/bildungstraeger/signature?returnTo=/bildungstraeger/courses/${courseId}/dokumente/${docId}`}
+              analog={analog}
+              confirmAnalogAction={confirmDocumentAnalogAction}
+              blankPdfUrl={`/api/bildungstraeger/documents/${docId}/pdf`}
             />
           ) : (
             <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
