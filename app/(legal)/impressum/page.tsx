@@ -4,7 +4,7 @@ import { legal } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Impressum — Signflow",
-  description: "Anbieterkennzeichnung nach § 5 TMG und § 18 MStV.",
+  description: "Anbieterkennzeichnung nach § 5 DDG und § 18 MStV.",
 };
 
 const { company } = legal;
@@ -20,7 +20,7 @@ export default function ImpressumPage() {
           Impressum
         </h1>
         <p className="text-sm text-zinc-500">
-          Angaben gemäß § 5 TMG und § 18 MStV.
+          Angaben gemäß § 5 DDG und § 18 MStV.
         </p>
       </header>
 
@@ -102,9 +102,9 @@ export default function ImpressumPage() {
 
       <Section title="Haftung für Inhalte">
         <p>
-          Als Diensteanbieter sind wir gemäß § 7 Abs. 1 TMG für eigene Inhalte auf
+          Als Diensteanbieter sind wir gemäß § 7 Abs. 1 DDG für eigene Inhalte auf
           diesen Seiten nach den allgemeinen Gesetzen verantwortlich. Nach
-          §§ 8 bis 10 TMG sind wir als Diensteanbieter jedoch nicht verpflichtet,
+          §§ 8 bis 10 DDG sind wir als Diensteanbieter jedoch nicht verpflichtet,
           übermittelte oder gespeicherte fremde Informationen zu überwachen oder nach
           Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen.
         </p>

@@ -240,9 +240,11 @@ export default function DatenschutzPage() {
 
       <Section title="6. Empfänger und Auftragsverarbeiter">
         <p>
-          Wir setzen sorgfältig ausgewählte Dienstleister ein. Mit allen Empfängern
-          bestehen Auftragsverarbeitungsverträge nach Art. 28 DSGVO. Für Empfänger
-          in Drittländern bestehen zusätzlich EU-Standardvertragsklauseln (SCCs).
+          Wir setzen sorgfältig ausgewählte Dienstleister ein. Mit unseren
+          Auftragsverarbeitern schließen wir Verträge nach Art. 28 DSGVO ab; bei
+          Übermittlungen in Drittländer stützen wir uns auf die
+          EU-Standardvertragsklauseln (SCCs) und – soweit vorhanden –
+          Angemessenheitsbeschlüsse der EU-Kommission.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

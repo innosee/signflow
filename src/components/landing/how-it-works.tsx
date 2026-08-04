@@ -30,7 +30,7 @@ export function LandingHowItWorks() {
             Workflow
           </p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">
-            In vier Schritten vom Termin zum rechtssicheren Nachweis.
+            In vier Schritten vom Termin zum fertigen AfA-Nachweis.
           </h2>
         </div>
 

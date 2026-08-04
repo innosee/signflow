@@ -23,7 +23,7 @@ const COACH_FAQ: Q[] = [
   },
   {
     q: "Was passiert mit meinen Daten?",
-    a: "Alle Daten liegen in der EU (Frankfurt-Region): Neon Postgres für die Kunden-/Termin-Daten, Vercel Blob für die Unterschriftsbilder, Resend für den E-Mail-Versand. Pro Signatur wird IP-Adresse + Zeitstempel + Signer-Rolle (Coach/TN) im Audit-Log festgehalten — DSGVO-konform und rechtssicher.",
+    a: "Alle Daten liegen in der EU: Neon Postgres für die Kunden-/Termin-Daten, Cloudflare R2 (privater EU-Objektspeicher) für die Unterschriftsbilder, Resend für den E-Mail-Versand. Pro Signatur wird IP-Adresse + Zeitstempel + Signer-Rolle (Coach/TN) im Audit-Log festgehalten — DSGVO-konform.",
   },
   {
     q: "Kann ich eine Maßnahme nach Abschluss korrigieren?",
@@ -34,11 +34,11 @@ const COACH_FAQ: Q[] = [
 const BILDUNGSTRAEGER_FAQ: Q[] = [
   {
     q: "Ist die elektronische Signatur rechtsgültig für die AfA?",
-    a: "Ja. Die Anwesenheitslisten werden digital von Coach und Teilnehmer:in signiert (einfache elektronische Signatur nach eIDAS, EU-Verordnung 910/2014) — abgesichert durch Zeitstempel, Identitätsnachweis und Audit-Protokoll. Eine qualifizierte Signatur (QES) ist für AfA-Stundennachweise nicht erforderlich und würde deutlich höhere Kosten verursachen.",
+    a: "Ja. Die Anwesenheitslisten werden digital von Coach und Teilnehmer:in signiert (einfache elektronische Signatur nach eIDAS, EU-Verordnung 910/2014) — abgesichert durch Zeitstempel, IP-Adresse und E-Mail-basierten Zugang (Magic-Link) im Audit-Protokoll. Eine qualifizierte Signatur (QES) ist für AfA-Stundennachweise nicht erforderlich und würde deutlich höhere Kosten verursachen.",
   },
   {
     q: "Wo werden die Daten gespeichert?",
-    a: "Ausschließlich in der EU (Frankfurt-Region): Neon für die Postgres-Datenbank, Vercel für App-Hosting + Blob-Storage, Resend für transaktionale E-Mails. Auftragsverarbeitungsverträge (AVV / DPA) sind mit allen Unterauftragsverarbeitern abgeschlossen und werden euch auf Anfrage bereitgestellt.",
+    a: "Ausschließlich in der EU: Neon für die Postgres-Datenbank, Vercel für das App-Hosting, Cloudflare R2 für den Datei-Storage, Resend für transaktionale E-Mails. Die vollständige Liste der Auftragsverarbeiter steht in der Datenschutzerklärung. Mit unseren Unterauftragsverarbeitern schließen wir Auftragsverarbeitungsverträge (AVV / DPA) nach Art. 28 DSGVO; das AVV-Angebot für euch als Bildungsträger stellen wir auf Anfrage bereit.",
   },
   {
     q: "Wie übernimmt Signflow die Daten-Isolation zwischen Coaches?",

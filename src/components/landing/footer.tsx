@@ -17,7 +17,7 @@ export function LandingFooter() {
             </span>
           </div>
           <p className="mt-3 text-sm text-zinc-400">
-            Digitale Anwesenheitsnachweise für AVGS-Maßnahmen — rechtssicher
+            Digitale Anwesenheitsnachweise für AVGS-Maßnahmen — elektronisch
             unterschreiben, abschließen, an die AfA übermitteln.
           </p>
         </div>

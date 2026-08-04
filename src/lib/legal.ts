@@ -26,7 +26,7 @@ export const legal = {
     // Geschäftsführung (vertretungsberechtigt).
     represented: "Benjamin Dennis Konopka",
     email: "info@innosee.de",
-    // Rechtlich optional (E-Mail genügt für § 5 TMG) — bewusst leer.
+    // Rechtlich optional (E-Mail genügt für § 5 DDG) — bewusst leer.
     phone: "",
     vatId: "DE400092577",
     register: {
