@@ -8,7 +8,6 @@ import { NextResponse, type NextRequest } from "next/server";
  * security boundary.
  */
 const PROTECTED_PREFIXES = ["/bildungstraeger", "/coach"];
-const AUTH_ONLY_PAGES = ["/login", "/setup"];
 
 function hasSessionCookie(req: NextRequest): boolean {
   const cookies = req.cookies;
@@ -23,19 +22,18 @@ export default function proxy(req: NextRequest): NextResponse {
   const isProtected = PROTECTED_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
-  const isAuthOnly = AUTH_ONLY_PAGES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
   const authed = hasSessionCookie(req);
 
   if (isProtected && !authed) {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 
-  if (isAuthOnly && authed && pathname !== "/setup") {
-    return NextResponse.redirect(new URL("/coach", req.nextUrl));
-  }
-
+  // Bewusst KEIN optimistisches „hat Cookie → weg von /login nach /coach" mehr.
+  // Cookie-Präsenz ≠ gültige Session: ein Stale-/Deleted-Session-Cookie würde
+  // sonst mit dem DAL pingpongen (Middleware schickt /login→/coach, das DAL
+  // schickt /coach→/login → Endlosschleife, Chrome „Throttling navigation").
+  // Die maßgebliche „schon eingeloggt?"-Entscheidung trifft die /login-Page
+  // selbst über `loggedInRedirectTarget`, die die Session wirklich validiert.
   return NextResponse.next();
 }
 
