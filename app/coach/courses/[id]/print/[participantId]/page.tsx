@@ -65,6 +65,7 @@ export default async function PrintSheetPage({ params }: Props) {
 
       <Stundennachweis
         branding={sheet.branding}
+        analog={sheet.analog}
         course={sheet.course}
         bedarfstraeger={sheet.bedarfstraeger}
         coach={sheet.coach}

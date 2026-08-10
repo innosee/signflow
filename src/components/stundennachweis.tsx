@@ -31,7 +31,7 @@ export type StundennachweisSheet = {
    * Analog-Modus (Kurs `signature_mode = 'analog'`): statt der digitalen
    * Signaturen werden LEERE, umrandete Unterschriftsfelder mit „Ort, Datum /
    * Unterschrift"-Zeile gedruckt — zum händischen Unterschreiben auf Papier.
-   * Default/undefined = digital (bisheriges Verhalten: „ausstehend" bzw. das
+   * Default/undefined = digital (bisheriges Verhalten: leere Zelle bzw. das
    * Signatur-Bild).
    */
   analog?: boolean;
@@ -460,7 +460,9 @@ function SignatureCell({
 }) {
   if (!url) {
     // Analog-Modus: leere, umrandete Box zum händischen Unterschreiben, mit
-    // „Ort, Datum / Unterschrift"-Zeile darunter. Sonst wie bisher „ausstehend".
+    // „Ort, Datum / Unterschrift"-Zeile darunter — bewusst SCHWARZ (Grau ist auf
+    // dem eingescannten Ausdruck nicht sichtbar). Digital: leere Zelle; das
+    // frühere „ausstehend" wird auf User-Wunsch nicht mehr angezeigt.
     if (analog) {
       return (
         <div className="sig-analog">
@@ -469,7 +471,7 @@ function SignatureCell({
         </div>
       );
     }
-    return <span className="sig-pending">ausstehend</span>;
+    return null;
   }
   return (
     <div className="sig-box">
@@ -629,17 +631,19 @@ const printCss = `
     color: #555;
   }
   .sig-pending { color: #999; font-style: italic; font-size: 9pt; }
-  /* Analog-Modus: leeres Unterschriftsfeld zum händischen Ausfüllen. */
+  /* Analog-Modus: leeres Unterschriftsfeld zum händischen Ausfüllen. Bewusst
+     durchgehend SCHWARZ — hellgraue Linien/Beschriftung verschwinden auf dem
+     eingescannten Ausdruck. */
   .sig-analog { display: block; }
   .sig-analog-box {
     height: 12mm;
-    border-bottom: 0.4mm solid #333;
+    border-bottom: 0.4mm solid #000;
   }
   .sig-analog-caption {
     display: block;
     margin-top: 0.5mm;
     font-size: 7pt;
-    color: #666;
+    color: #000;
   }
   /* Kompetenzteams: Coach-Name pro Zeile (nur bei >1 Coach gerendert). */
   .sig-coach-name {
