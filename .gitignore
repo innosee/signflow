@@ -54,3 +54,6 @@ next-env.d.ts
 /proxy/node_modules/
 /proxy/python/.venv/
 /proxy/.env
+
+# Session-Scratchpad (nie committen — kann Secrets enthalten)
+scratchpad/
