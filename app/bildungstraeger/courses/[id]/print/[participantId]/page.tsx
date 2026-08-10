@@ -70,6 +70,7 @@ export default async function BildungstraegerPrintSheetPage({ params }: Props) {
 
       <Stundennachweis
         branding={sheet.branding}
+        analog={sheet.analog}
         course={sheet.course}
         bedarfstraeger={sheet.bedarfstraeger}
         coach={sheet.coach}
