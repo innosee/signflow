@@ -22,6 +22,7 @@ import {
 } from "@/lib/documents/config";
 import {
   collectAllFormValues,
+  confirmDocumentAnalog,
   submitDocument,
 } from "@/lib/documents/editor-core";
 import {
@@ -211,6 +212,54 @@ export async function submitDocumentEditor(
       ? { error: outcome.message, values: submitted }
       : { error: outcome.message };
   }
+
+  revalidatePath(
+    `/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`,
+  );
+  revalidatePath(`/bildungstraeger/courses/${doc.courseId}/dokumente`);
+  return { success: true };
+}
+
+export type ConfirmDocAnalogState =
+  | { error?: string; success?: boolean }
+  | undefined;
+
+/**
+ * Analog-Modus: Der Bildungsträger lädt den unterschriebenen F08-Scan (PDF)
+ * hoch und schließt das Dokument ab (Status → `completed`). Delegiert an den
+ * rollen-übergreifenden Kern (`confirmDocumentAnalog`).
+ */
+export async function confirmDocumentAnalogAction(
+  _prev: ConfirmDocAnalogState,
+  formData: FormData,
+): Promise<ConfirmDocAnalogState> {
+  const session = await requireBildungstraeger();
+  assertNotImpersonating(session);
+  const tenantId = getTenantId(session);
+
+  const documentId = String(formData.get("documentId") ?? "").trim();
+  const doc = await loadTenantDocument(documentId, tenantId);
+  if (!doc) return { error: "Dokument nicht gefunden." };
+
+  const ipAddress =
+    (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+
+  const result = await confirmDocumentAnalog({
+    doc: {
+      id: doc.id,
+      courseId: doc.courseId,
+      participantId: doc.participantId,
+      type: doc.type as DocumentTypeId,
+      status: doc.status,
+      formData: doc.formData as Record<string, unknown> | null,
+    },
+    actor: { type: "bildungstraeger", userId: session.user.id },
+    file: formData.get("scan"),
+    ipAddress,
+  });
+
+  if (result.status === "error") return { error: result.message };
 
   revalidatePath(
     `/bildungstraeger/courses/${doc.courseId}/dokumente/${documentId}`,

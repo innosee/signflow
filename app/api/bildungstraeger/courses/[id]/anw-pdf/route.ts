@@ -5,6 +5,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { renderPdfFromUrl } from "@/lib/pdf";
+import { streamAnalogScan } from "@/lib/analog-scan";
 
 // Node-Runtime: Puppeteer/@sparticuz/chromium läuft nicht auf Edge.
 export const runtime = "nodejs";
@@ -41,6 +42,8 @@ export async function GET(
       title: schema.courses.title,
       participantName: schema.participants.name,
       fesStatus: schema.finalDocuments.fesStatus,
+      signatureMode: schema.courses.signatureMode,
+      analogScanUrl: schema.courses.analogScanUrl,
     })
     .from(schema.courses)
     .innerJoin(schema.users, eq(schema.users.id, schema.courses.coachId))
@@ -68,6 +71,14 @@ export async function GET(
   // ziehen (auch vor der Freigabe), z. B. um sie vor dem Abschließen zu
   // prüfen. Das PDF rendert den aktuellen Stand. Zugriff bleibt tenant-scoped
   // (siehe innerJoin auf users.tenant_id oben).
+
+  // Analog-Modus + bestätigter Scan: den hochgeladenen Scan ausliefern statt
+  // des HTML-Renders (siehe Coach-Endpoint).
+  if (row.signatureMode === "analog" && row.analogScanUrl) {
+    const filename = `stundennachweis-${safeFilename(row.title)}-${safeFilename(row.participantName)}.pdf`;
+    const streamed = await streamAnalogScan(row.analogScanUrl, filename);
+    if (streamed) return streamed;
+  }
 
   const h = await headers();
   const hostHeader = h.get("host");

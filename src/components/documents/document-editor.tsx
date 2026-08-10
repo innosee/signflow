@@ -11,6 +11,8 @@ import {
   type ParticipantMasterField,
 } from "@/lib/documents/config";
 
+import { AnalogDocConfirm } from "./analog-doc-confirm";
+
 type MasterData = Partial<Record<ParticipantMasterField, string>>;
 
 /**
@@ -48,6 +50,16 @@ type Props = {
   role: "coach" | "bildungstraeger";
   /** Pfad zur Unterschrift-Setup-Seite (Rollen-spezifisch). */
   signatureHref: string;
+  /**
+   * Analog-Modus (Kurs `signature_mode = 'analog'`): kein digitales Signieren,
+   * kein Magic-Link. Die Freigabe friert nur den Inhalt ein; danach lädt der
+   * Owner den unterschriebenen Papier-Scan hoch.
+   */
+  analog?: boolean;
+  /** Analog: Server-Action zum Scan-Upload/Abschluss (nur im Analog-Modus). */
+  confirmAnalogAction?: DocumentEditorAction;
+  /** Analog: Download-Link für das leere Formular-PDF (zum Ausdrucken). */
+  blankPdfUrl?: string;
 };
 
 export function DocumentEditor({
@@ -61,6 +73,9 @@ export function DocumentEditor({
   submitAction,
   role,
   signatureHref,
+  analog = false,
+  confirmAnalogAction,
+  blankPdfUrl,
 }: Props) {
   const cfg = getDocumentConfig(type);
   const coachSigns = cfg.signers.coach;
@@ -70,6 +85,43 @@ export function DocumentEditor({
     role === "bildungstraeger" ? "Bildungsträger-Unterschrift" : "Unterschrift";
 
   if (status !== "draft") {
+    // Analog-Modus: nach der Freigabe (Inhalt eingefroren) lädt der Owner den
+    // unterschriebenen Papier-Scan hoch, statt auf eine digitale
+    // Teilnehmer-Unterschrift zu warten.
+    if (analog) {
+      return (
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
+          {status === "completed" ? (
+            <>
+              <p className="font-medium text-zinc-900">
+                ✓ Abgeschlossen — unterschriebener Scan abgelegt.
+              </p>
+              <p className="mt-1 text-zinc-600">
+                Der Papier-Scan ist hinterlegt und wird als finales Dokument-PDF
+                ausgeliefert.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-zinc-900">
+                Freigegeben (Inhalt eingefroren) — auf Papier unterschreiben.
+              </p>
+              <p className="mt-1 mb-3 text-zinc-600">
+                Analog-Modus: Bitte das Formular ausdrucken, unterschreiben
+                lassen und den Scan hochladen.
+              </p>
+              {confirmAnalogAction && blankPdfUrl && (
+                <AnalogDocConfirm
+                  documentId={documentId}
+                  confirmAction={confirmAnalogAction}
+                  blankPdfUrl={blankPdfUrl}
+                />
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
         <p className="font-medium text-zinc-900">
@@ -189,11 +241,13 @@ export function DocumentEditor({
 
       <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
         <p className="text-xs text-zinc-600">
-          {coachSigns
-            ? "Mit dem Unterschreiben werden die Angaben eingefroren, das Dokument freigegeben und die Teilnehmer:in automatisch per E-Mail mit ihrem Signier-Link benachrichtigt."
-            : "Mit der Freigabe werden die Angaben eingefroren und die Teilnehmer:in automatisch per E-Mail mit ihrem Signier-Link benachrichtigt."}
+          {analog
+            ? "Analog-Modus: Mit der Freigabe werden die Angaben eingefroren. Danach das Formular ausdrucken, auf Papier unterschreiben lassen und den Scan hochladen — keine E-Mail an die Teilnehmer:in."
+            : coachSigns
+              ? "Mit dem Unterschreiben werden die Angaben eingefroren, das Dokument freigegeben und die Teilnehmer:in automatisch per E-Mail mit ihrem Signier-Link benachrichtigt."
+              : "Mit der Freigabe werden die Angaben eingefroren und die Teilnehmer:in automatisch per E-Mail mit ihrem Signier-Link benachrichtigt."}
         </p>
-        {coachSigns && !hasSignerSignature && (
+        {coachSigns && !hasSignerSignature && !analog && (
           <p className="mt-2 text-xs text-red-700">
             Es ist noch keine {signatureNoun} hinterlegt — lege sie unter{" "}
             <a href={signatureHref} className="underline">
@@ -206,9 +260,11 @@ export function DocumentEditor({
         <label className="mt-3 flex items-start gap-2 text-xs text-zinc-700">
           <input type="checkbox" name="confirm" className="mt-0.5" />
           <span>
-            {coachSigns
-              ? "Ich bestätige die Angaben und unterschreibe dieses Dokument."
-              : "Ich bestätige die Angaben und gebe das Dokument frei."}
+            {analog
+              ? "Ich bestätige die Angaben und friere sie für den Papier-Druck ein."
+              : coachSigns
+                ? "Ich bestätige die Angaben und unterschreibe dieses Dokument."
+                : "Ich bestätige die Angaben und gebe das Dokument frei."}
           </span>
         </label>
 
@@ -226,10 +282,14 @@ export function DocumentEditor({
             type="submit"
             name="intent"
             value="release"
-            disabled={pending || (coachSigns && !hasSignerSignature)}
+            disabled={pending || (coachSigns && !hasSignerSignature && !analog)}
             className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white enabled:hover:bg-zinc-800 disabled:opacity-40"
           >
-            {coachSigns ? "Unterschreiben & freigeben" : "An Teilnehmer freigeben"}
+            {analog
+              ? "Freigeben (für Papier)"
+              : coachSigns
+                ? "Unterschreiben & freigeben"
+                : "An Teilnehmer freigeben"}
           </button>
           {state?.success && (
             <span className="text-xs text-green-700">✓ gespeichert</span>

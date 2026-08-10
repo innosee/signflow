@@ -31,6 +31,7 @@ import { resetFesGates } from "@/lib/fes-gates";
 import { recomputeSessionStatus } from "@/lib/session-status";
 import { evaluateSealReadiness, type SealBlock } from "@/lib/sign-state";
 import { isValidE164, normalizePhoneInput } from "@/lib/sms";
+import { uploadSignedScan } from "@/lib/storage";
 
 export type SessionFormValues = {
   sessionDate: string;
@@ -1776,6 +1777,95 @@ export async function markCourseAbgeschlossen(
   return { success: true };
 }
 
+export type ConfirmAnalogState =
+  | { error?: string; success?: boolean }
+  | undefined;
+
+const MAX_SCAN_BYTES = 15_000_000; // 15 MB — reicht für einen mehrseitigen Scan
+
+/**
+ * Analog-Modus: Der Coach lädt den händisch unterschriebenen ANW-Scan (PDF)
+ * hoch und bestätigt „Papier unterschrieben & abgelegt". Diese Bestätigung
+ * ersetzt die fehlenden digitalen Session-Signaturen als Voraussetzung für die
+ * BT-Einreichung (siehe `requestBildungstraegerReview`) und liefert das finale
+ * PDF (die ANW-PDF-Endpoints streamen ab jetzt den Scan statt des Blank-Renders).
+ * Nur im Analog-Modus erlaubt; während Impersonation hart blockiert.
+ */
+export async function confirmCourseAnalog(
+  _prev: ConfirmAnalogState,
+  formData: FormData,
+): Promise<ConfirmAnalogState> {
+  const session = await requireSigningEnabled();
+  assertNotImpersonating(session);
+  const coachId = session.user.id;
+
+  const courseId = String(formData.get("courseId") ?? "").trim();
+  if (!courseId) return { error: "Kurs fehlt." };
+  if (formData.get("confirm") !== "on") {
+    return { error: "Bitte aktiv bestätigen." };
+  }
+
+  const ownedCourseId = await requireOwnedCourseId(courseId, coachId);
+  if (!ownedCourseId) return { error: "Kurs nicht gefunden." };
+
+  const [course] = await db
+    .select({ signatureMode: schema.courses.signatureMode })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (!course) return { error: "Kurs nicht auflösbar." };
+  if (course.signatureMode !== "analog") {
+    return {
+      error:
+        "Diese Maßnahme läuft nicht im Analog-Modus. Der Bildungsträger muss sie zuerst freigeben.",
+    };
+  }
+
+  const file = formData.get("scan");
+  if (!(file instanceof Blob) || file.size === 0) {
+    return { error: "Bitte den unterschriebenen Scan als PDF hochladen." };
+  }
+  if (file.type !== "application/pdf") {
+    return { error: "Der Scan muss eine PDF-Datei sein." };
+  }
+  if (file.size > MAX_SCAN_BYTES) {
+    return { error: "Die PDF ist zu groß (max. 15 MB)." };
+  }
+
+  let scanKey: string;
+  try {
+    scanKey = await uploadSignedScan(`course-${ownedCourseId}`, file);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("confirmCourseAnalog upload failed:", err);
+    return { error: `Upload fehlgeschlagen (${message}).` };
+  }
+
+  try {
+    await db
+      .update(schema.courses)
+      .set({
+        analogScanUrl: scanKey,
+        analogConfirmedAt: new Date(),
+        analogConfirmedBy: coachId,
+      })
+      .where(eq(schema.courses.id, ownedCourseId));
+    await logAudit({
+      actorType: "coach",
+      actorId: coachId,
+      action: "course.analog_confirmed",
+      resourceType: "course",
+      resourceId: ownedCourseId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Bestätigung fehlgeschlagen (${message}).` };
+  }
+
+  revalidatePath(`/coach/courses/${ownedCourseId}`);
+  return { success: true };
+}
+
 export type RequestReviewState =
   | { error?: string; success?: boolean }
   | undefined;
@@ -1813,6 +1903,8 @@ export async function requestBildungstraegerReview(
       flagUnter2Termine: schema.courses.flagUnter2Termine,
       begruendungText: schema.courses.begruendungText,
       participantId: schema.courses.participantId,
+      signatureMode: schema.courses.signatureMode,
+      analogConfirmedAt: schema.courses.analogConfirmedAt,
     })
     .from(schema.courses)
     .where(eq(schema.courses.id, ownedCourseId))
@@ -1832,7 +1924,9 @@ export async function requestBildungstraegerReview(
     return { error: "ANW-Compliance-Check muss zuerst durchlaufen sein." };
   }
 
-  // Sessions-Gate: alle nicht-gelöschten Sessions vollständig signiert.
+  // Sessions-Gate. Im Analog-Modus (Papier) gibt es keine digitalen Signaturen;
+  // die Vollständigkeit wird stattdessen durch die Scan-Bestätigung des Coaches
+  // (`analogConfirmedAt`) bezeugt. In beiden Modi muss ≥1 Termin existieren.
   const allSessions = await db
     .select({ status: schema.sessions.status })
     .from(schema.sessions)
@@ -1845,7 +1939,14 @@ export async function requestBildungstraegerReview(
   if (allSessions.length === 0) {
     return { error: "Kurs hat keine Sessions." };
   }
-  if (allSessions.some((s) => s.status !== "completed")) {
+  if (course.signatureMode === "analog") {
+    if (!course.analogConfirmedAt) {
+      return {
+        error:
+          "Analog-Modus: Bitte zuerst den unterschriebenen Scan hochladen und „Papier unterschrieben & abgelegt“ bestätigen.",
+      };
+    }
+  } else if (allSessions.some((s) => s.status !== "completed")) {
     return { error: "Mindestens eine Session ist noch nicht vollständig signiert." };
   }
 
@@ -1955,6 +2056,8 @@ const SEAL_BLOCK_MESSAGES: Record<SealBlock, string> = {
   no_sessions: "Kurs hat keine Sessions — nichts abzuschließen.",
   sessions_incomplete:
     "Mindestens eine Session ist noch nicht vollständig signiert.",
+  analog_not_confirmed:
+    "Analog-Modus: Der unterschriebene Scan muss vor dem Abschluss hochgeladen und bestätigt werden.",
 };
 
 export async function sealCourse(
@@ -1998,6 +2101,8 @@ export async function sealCourse(
       anwCheckPassedAt: schema.courses.anwCheckPassedAt,
       abgeschlossenAt: schema.courses.abgeschlossenAt,
       reviewStatus: schema.courses.reviewStatus,
+      signatureMode: schema.courses.signatureMode,
+      analogConfirmedAt: schema.courses.analogConfirmedAt,
     })
     .from(schema.courses)
     .where(eq(schema.courses.id, ownedCourseId))
@@ -2023,6 +2128,8 @@ export async function sealCourse(
     abgeschlossenAt: courseGates?.abgeschlossenAt ?? null,
     reviewStatus: courseGates?.reviewStatus ?? "none",
     sessionStatuses: allSessions.map((s) => s.status),
+    signatureMode: courseGates?.signatureMode,
+    analogConfirmedAt: courseGates?.analogConfirmedAt ?? null,
   });
   if (sealBlock) {
     return { error: SEAL_BLOCK_MESSAGES[sealBlock] };
@@ -2232,6 +2339,20 @@ export async function signSessionAsCoach(
   const canAccess = await coachCanAccessCourse(courseId, coachId);
   if (!canAccess) return { error: "Kurs nicht gefunden." };
   const ownedCourseId = courseId;
+
+  // Analog-Modus (Papier): digitales Signieren ist hart gesperrt — die UI blendet
+  // die Sign-Formulare aus, dieser Server-Guard fängt alte/parallele Requests ab.
+  const [modeRow] = await db
+    .select({ signatureMode: schema.courses.signatureMode })
+    .from(schema.courses)
+    .where(eq(schema.courses.id, ownedCourseId))
+    .limit(1);
+  if (modeRow?.signatureMode === "analog") {
+    return {
+      error:
+        "Diese Maßnahme läuft im Analog-Modus (Papier). Es wird nicht digital signiert — bitte das PDF drucken, unterschreiben lassen und den Scan hochladen.",
+    };
+  }
 
   const [coach] = await db
     .select({ signatureUrl: schema.users.signatureUrl })

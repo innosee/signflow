@@ -125,6 +125,17 @@ export const courseReviewNoteKind = pgEnum("course_review_note_kind", [
  */
 export const berStatus = pgEnum("ber_status", ["draft", "submitted"]);
 /**
+ * Unterschrifts-Modus einer Maßnahme (pro Kurs, vom Bildungsträger gesetzt):
+ *   - `digital` = Standard: Coach + Teilnehmer signieren in Signflow per Canvas.
+ *   - `analog`  = Papier-Fallback: ANW, F08 (TNV) und F21 (STV) werden mit LEEREN
+ *                 Unterschriftsfeldern gedruckt, händisch unterschrieben und als
+ *                 Scan wieder hochgeladen. Kein digitales Signieren, keine Magic-
+ *                 Links; der Abschluss läuft über die Scan-Bestätigung + die
+ *                 normale Bildungsträger-Prüfung. Der hochgeladene Scan wird das
+ *                 finale PDF (AfA). Default `digital` → Bestandskurse unverändert.
+ */
+export const signatureMode = pgEnum("signature_mode", ["digital", "analog"]);
+/**
  * Typ eines vom Bildungsträger digitalisierten Formulars („Kunde-Dokumente").
  * Jeder Wert entspricht einer erango-Vorlage, die als HTML-as-Source-of-Truth
  * nachgebaut ist (identische Screen-/Print-Ansicht, A4-PDF via Puppeteer):
@@ -593,6 +604,31 @@ export const courses = pgTable("courses", {
   reviewDecidedBy: uuid("review_decided_by").references(() => users.id, {
     onDelete: "set null",
   }),
+  /**
+   * Unterschrifts-Modus dieser Maßnahme. `digital` (Default) = heutiges
+   * Verhalten. `analog` = Papier-Fallback (siehe `signatureMode`-Enum): vom
+   * Bildungsträger pro Kunde freigeschaltet, unterdrückt das digitale Signieren
+   * und schaltet den Scan-Upload-Abschluss frei.
+   */
+  signatureMode: signatureMode("signature_mode").notNull().default("digital"),
+  /**
+   * Analog-Modus: Object-Key/URL des hochgeladenen, händisch unterschriebenen
+   * Stundennachweis-Scans (PDF). Wird — statt des HTML-Renders — als finales
+   * ANW-PDF ausgeliefert. NULL bis der Coach den Scan bestätigt.
+   */
+  analogScanUrl: text("analog_scan_url"),
+  /**
+   * Analog-Modus: Zeitpunkt, an dem der Coach „Papier unterschrieben & abgelegt"
+   * bestätigt hat. Ersetzt die fehlenden digitalen Session-Signaturen als
+   * Voraussetzung für die BT-Einreichung. Bei jeder Inhalts-/Session-Änderung
+   * (via `resetFesGates`) zurückgesetzt — die Bestätigung gilt nur für den
+   * bestätigten Stand.
+   */
+  analogConfirmedAt: timestamp("analog_confirmed_at", { withTimezone: true }),
+  /** Analog-Modus: Coach-User, der den Scan zuletzt bestätigt hat (Audit). */
+  analogConfirmedBy: uuid("analog_confirmed_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -981,6 +1017,16 @@ export const documents = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    /**
+     * Analog-Modus (Kurs `signature_mode = 'analog'`): Object-Key/URL des
+     * hochgeladenen, händisch unterschriebenen Formular-Scans (PDF). Da
+     * Dokumente KEINE `final_documents`-Zeile haben, ist dies der einzige
+     * Final-PDF-Pointer — die Doc-PDF-Endpoints liefern ihn statt des
+     * HTML-Renders. NULL bis der Owner (F21 = Coach, F08 = BT) bestätigt.
+     */
+    analogScanUrl: text("analog_scan_url"),
+    /** Analog-Modus: Zeitpunkt der Scan-Bestätigung durch den Dokument-Owner. */
+    analogConfirmedAt: timestamp("analog_confirmed_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
