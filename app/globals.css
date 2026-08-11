@@ -51,3 +51,21 @@ input:-webkit-autofill:focus {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* Tailwind v4 hat den Default `cursor: pointer` für Buttons aus dem Preflight
+   entfernt (jetzt `cursor: default`). Das nimmt dem Nutzer den Hover-Hinweis
+   „hier kann ich klicken". Wir stellen ihn global wieder her — für aktive
+   Buttons und alles mit role="button"/[role=link]. `<a href>` hat den Pointer
+   ohnehin. Deaktivierte Elemente bekommen bewusst `not-allowed` (Signal „nicht
+   klickbar"), kein Pointer — konsistent mit „kein Hover auf disabled". */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label[for],
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
