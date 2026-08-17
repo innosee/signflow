@@ -104,6 +104,17 @@ export function SignatureCanvas({
     const canvas = canvasRef.current;
     if (!pad || !canvas || pad.isEmpty()) return;
 
+    // Einen einzelnen Tipp/Punkt zurückweisen — der ist als Unterschrift
+    // wertlos (AfA-Nachweis) und war die Ursache echter Support-Fälle: der
+    // TN tippt einmal, „speichert", und kommt danach nicht mehr an den
+    // Zeichnen-Schritt. Lieber hier hart prüfen als einen Punkt persistieren.
+    if (isSignatureTooSmall(pad)) {
+      setError(
+        "Das sieht aus wie ein einzelner Punkt. Bitte zeichne deine Unterschrift als durchgehenden Strich — etwas größer.",
+      );
+      return;
+    }
+
     setStatus("uploading");
     setError(null);
     try {
@@ -175,6 +186,36 @@ export function SignatureCanvas({
       </div>
     </div>
   );
+}
+
+/**
+ * Prüft, ob die Zeichnung zu klein/kurz ist, um eine echte Unterschrift zu
+ * sein (typisch: ein einzelner Tipp = „Punkt"). Arbeitet auf den Roh-Punkten
+ * von signature_pad in CSS-Pixeln (DPR-unabhängig): verlangt eine Mindest-
+ * Ausdehnung der Bounding-Box UND eine Mindestzahl erfasster Punkte. Eine
+ * echte Unterschrift überschreitet beides mühelos; ein Punkt/Kurz-Tipp nicht.
+ */
+function isSignatureTooSmall(pad: SignaturePad): boolean {
+  const MIN_EXTENT_PX = 40; // größere Kante der Bounding-Box
+  const MIN_POINTS = 8;
+  const groups = pad.toData();
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let points = 0;
+  for (const group of groups) {
+    for (const p of group.points) {
+      points++;
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  if (points === 0) return true;
+  const extent = Math.max(maxX - minX, maxY - minY);
+  return points < MIN_POINTS || extent < MIN_EXTENT_PX;
 }
 
 /**
