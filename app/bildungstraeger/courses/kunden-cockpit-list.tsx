@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import { ANW_TONE_BADGE, type AnwTone } from "@/lib/anw-status";
 import { track } from "@/lib/analytics";
@@ -52,9 +53,38 @@ export type CockpitRow = {
 };
 
 export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
-  const [query, setQuery] = useState("");
-  const [coachFilter, setCoachFilter] = useState("");
-  const [bedarfstraegerFilter, setBedarfstraegerFilter] = useState("");
+  // Filter aus der URL initialisieren, damit sie eine Navigation (Dokumente /
+  // Bearbeiten öffnen → zurück) und ein revalidate (Bewilligt/Archiv-Toggle)
+  // überleben. Ohne das remountet die Liste mit leerem Filter und der BT muss
+  // den Kunden neu suchen (User-Feedback 2026-08).
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  const [coachFilter, setCoachFilter] = useState(
+    () => searchParams.get("coach") ?? "",
+  );
+  const [bedarfstraegerFilter, setBedarfstraegerFilter] = useState(
+    () => searchParams.get("bt") ?? "",
+  );
+
+  // Filterzustand in die URL spiegeln — via history.replaceState (KEINE Next-
+  // Navigation, kein Server-Roundtrip pro Tastendruck). Beim Wegnavigieren
+  // bleibt die URL in der History; ein Zurück mountet die Liste mit denselben
+  // Parametern neu → Suche + Position sind wieder da.
+  const persistFilters = (q: string, coach: string, bt: string) => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const setOrDel = (key: string, value: string) =>
+      value ? params.set(key, value) : params.delete(key);
+    setOrDel("q", q.trim());
+    setOrDel("coach", coach);
+    setOrDel("bt", bt);
+    const qs = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      qs ? `${window.location.pathname}?${qs}` : window.location.pathname,
+    );
+  };
 
   // Such-Event entkoppelt vom Tippen: erst ~600 ms nach der letzten Eingabe
   // feuern (sonst ein Event pro Tastendruck → Analytics-Kontingent). Payload
@@ -63,6 +93,7 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearch = (value: string) => {
     setQuery(value);
+    persistFilters(value, coachFilter, bedarfstraegerFilter);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     const payload = buildSearchEventPayload(value);
     if (!payload) return;
@@ -126,7 +157,10 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
         <div className="flex flex-col gap-2 sm:flex-row">
           <select
             value={coachFilter}
-            onChange={(e) => setCoachFilter(e.target.value)}
+            onChange={(e) => {
+              setCoachFilter(e.target.value);
+              persistFilters(query, e.target.value, bedarfstraegerFilter);
+            }}
             aria-label="Nach Coach filtern"
             className="w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black sm:w-1/2"
           >
@@ -139,7 +173,10 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
           </select>
           <select
             value={bedarfstraegerFilter}
-            onChange={(e) => setBedarfstraegerFilter(e.target.value)}
+            onChange={(e) => {
+              setBedarfstraegerFilter(e.target.value);
+              persistFilters(query, coachFilter, e.target.value);
+            }}
             aria-label="Nach Bedarfsträger filtern"
             className="w-full rounded-lg border border-zinc-400 bg-white px-3 py-2 text-sm outline-none focus:border-black sm:w-1/2"
           >
