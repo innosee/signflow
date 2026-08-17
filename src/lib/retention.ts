@@ -51,6 +51,10 @@ export const AUDIT_LOG_RETENTION_MONTHS = 12;
 export const SIGNATURE_RELATED_AUDIT_ACTIONS = [
   // Finale Freigabe des Teilnehmers für das Enddokument
   "participant.approve",
+  // Korrektur der Teilnehmer-Unterschrift (Neu-Zeichnen) — biegt die
+  // Snapshots auf bereits bestätigten Terminen/Dokumenten um und gehört damit
+  // zur Nachweiskette (belegt, was sich am Unterschriftsbild geändert hat).
+  "signature.participant_corrected",
   // Abschluss des Nachweises (Bridge-Modus: BT-Freigabe; später FES-Siegel)
   "course.seal",
   // Übermittlung des signierten PDFs an die Agentur für Arbeit

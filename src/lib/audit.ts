@@ -20,6 +20,7 @@ import { db, schema } from "@/db";
  */
 export type AuditAction =
   | "participant.approve"
+  | "signature.participant_corrected"
   | "course.seal"
   | "course.submit_afa"
   | "course.review_requested"
