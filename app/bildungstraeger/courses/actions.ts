@@ -594,8 +594,10 @@ export async function archiveCourse(formData: FormData): Promise<void> {
       .set({ status: "archived" })
       .where(eq(schema.courses.id, courseId));
   }
+  // Kein redirect: die Aktion läuft als Inline-Form im Cockpit — ein Redirect
+  // auf die (nackte) Liste würde die Client-Komponente remounten und Suche +
+  // Scrollposition wegwerfen. `revalidatePath` aktualisiert die Zeile in-place.
   revalidatePath("/bildungstraeger/courses");
-  redirect("/bildungstraeger/courses");
 }
 
 /** Archivierung rückgängig machen (status zurück auf 'active'). */
@@ -610,8 +612,8 @@ export async function unarchiveCourse(formData: FormData): Promise<void> {
       .set({ status: "active" })
       .where(eq(schema.courses.id, courseId));
   }
+  // Kein redirect (Inline-Cockpit-Aktion) — siehe archiveCourse.
   revalidatePath("/bildungstraeger/courses");
-  redirect("/bildungstraeger/courses");
 }
 
 /**
@@ -639,8 +641,8 @@ export async function setCourseBewilligt(formData: FormData): Promise<void> {
       resourceId: courseId,
     });
   }
+  // Kein redirect (Inline-Cockpit-Aktion) — siehe archiveCourse.
   revalidatePath("/bildungstraeger/courses");
-  redirect("/bildungstraeger/courses");
 }
 
 /**
@@ -660,7 +662,7 @@ export async function setCourseSignatureMode(formData: FormData): Promise<void> 
   const mode = String(formData.get("mode") ?? "").trim();
   if (mode !== "analog" && mode !== "digital") {
     revalidatePath("/bildungstraeger/courses");
-    redirect("/bildungstraeger/courses");
+    return;
   }
   if (courseId && (await requireOwnedCourse(courseId, tenantId))) {
     // Nach dem finalen Abschluss (BT-Freigabe → final_documents completed) ist
@@ -692,8 +694,8 @@ export async function setCourseSignatureMode(formData: FormData): Promise<void> 
       });
     }
   }
+  // Kein redirect (Inline-Cockpit-Aktion) — siehe archiveCourse.
   revalidatePath("/bildungstraeger/courses");
-  redirect("/bildungstraeger/courses");
 }
 
 /**
