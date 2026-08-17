@@ -7,6 +7,7 @@ import { resolveParticipantToken } from "@/lib/participant-tokens";
 
 import { getDocumentConfig, type DocumentTypeId } from "@/lib/documents/config";
 
+import { ChangeSignature } from "./change-signature";
 import { DocumentSignForm } from "./document-sign-form";
 import { ParticipantSignatureOnboarding } from "./signature-onboarding";
 import { SignForm } from "./sign-form";
@@ -89,6 +90,13 @@ export default async function ParticipantSignPage({ params }: Props) {
           Du hast alle Termine und Dokumente unterschrieben. Du musst nichts
           weiter tun.
         </div>
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-zinc-500">
+            Ist deine Unterschrift nicht richtig übernommen worden? Du kannst
+            sie neu zeichnen — sie wird dann auf alle Termine übernommen.
+          </p>
+          <ChangeSignature token={token} />
+        </div>
         <DataProtectionNotice />
       </div>
     );
@@ -140,10 +148,13 @@ export default async function ParticipantSignPage({ params }: Props) {
       )}
 
       {hasSignature && (
-        <p className="text-xs text-zinc-500">
-          Bestätigung per aktivem Klick + Zeitstempel — deine einmal angelegte
-          Unterschrift wird dabei als Snapshot in den AfA-Nachweis übernommen.
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-zinc-500">
+            Bestätigung per aktivem Klick + Zeitstempel — deine einmal angelegte
+            Unterschrift wird dabei als Snapshot in den AfA-Nachweis übernommen.
+          </p>
+          <ChangeSignature token={token} />
+        </div>
       )}
 
       {hasSignature && (openDocs.length > 0 || doneDocs.length > 0) && (

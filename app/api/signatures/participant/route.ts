@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
+import { logAudit } from "@/lib/audit";
 import { shouldDeleteReplacedSignatureBlob } from "@/lib/signature-blob-cleanup";
 import { deleteBlob, uploadSignature } from "@/lib/storage";
 
@@ -49,7 +50,10 @@ export async function POST(req: Request) {
 
   const tokenHash = hashToken(token);
   const [tok] = await db
-    .select({ participantId: schema.participantAccessTokens.participantId })
+    .select({
+      participantId: schema.participantAccessTokens.participantId,
+      courseId: schema.participantAccessTokens.courseId,
+    })
     .from(schema.participantAccessTokens)
     .where(
       and(
@@ -70,6 +74,7 @@ export async function POST(req: Request) {
   }
 
   const participantId = tok.participantId;
+  const courseId = tok.courseId;
   let url: string;
   try {
     url = await uploadSignature(`participant-${participantId}`, file);
@@ -95,10 +100,111 @@ export async function POST(req: Request) {
     .where(eq(schema.participants.id, participantId))
     .limit(1);
 
-  await db
-    .update(schema.participants)
-    .set({ signatureUrl: url })
-    .where(eq(schema.participants.id, participantId));
+  const ipAddress =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const userAgent = req.headers.get("user-agent") ?? undefined;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.participants)
+      .set({ signatureUrl: url })
+      .where(eq(schema.participants.id, participantId));
+
+    // Beim ERSTEN Anlegen gibt es noch keine Signatur-Snapshots (die Termine
+    // werden erst danach bestätigt) — dann ist das hier ein No-Op. Der
+    // relevante Fall ist das ÄNDERN einer bereits genutzten Unterschrift
+    // (z.B. ein versehentlicher „Punkt"): das finale PDF rendert pro Termin
+    // die gespeicherte Snapshot-URL aus `signatures`/`document_signatures`
+    // (siehe sheet-data.ts), NICHT die aktuelle `participants.signature_url`.
+    // Ohne Nachziehen bliebe die alte Unterschrift auf allen schon bestätigten
+    // Terminen/Dokumenten stehen. Wir biegen deshalb die Teilnehmer-Snapshots
+    // dieses Kurses auf die neue URL um — derselbe Bestätigungs-Akt
+    // (Zeitstempel + IP) bleibt erhalten, nur das Bild wird korrigiert.
+    if (previous?.signatureUrl && previous.signatureUrl !== url) {
+      // Guard: einen bereits abgeschlossenen/übermittelten Nachweis NICHT
+      // still nachträglich verändern. Ist der Kurs finalisiert
+      // (final_documents.fes_status = 'completed'), bleibt die Korrektur
+      // Coach-seitig über „Signaturen zurücksetzen" — hier nur die
+      // wiederverwendbare Unterschrift aktualisieren, keine Snapshots.
+      const [finalDoc] = await tx
+        .select({ id: schema.finalDocuments.id })
+        .from(schema.finalDocuments)
+        .where(
+          and(
+            eq(schema.finalDocuments.courseId, courseId),
+            eq(schema.finalDocuments.fesStatus, "completed"),
+          ),
+        )
+        .limit(1);
+
+      if (!finalDoc) {
+        const sessionRows = await tx
+          .select({ id: schema.sessions.id })
+          .from(schema.sessions)
+          .where(
+            and(
+              eq(schema.sessions.courseId, courseId),
+              isNull(schema.sessions.deletedAt),
+            ),
+          );
+        const sessionIds = sessionRows.map((s) => s.id);
+
+        const docRows = await tx
+          .select({ id: schema.documents.id })
+          .from(schema.documents)
+          .where(
+            and(
+              eq(schema.documents.courseId, courseId),
+              isNull(schema.documents.deletedAt),
+            ),
+          );
+        const documentIds = docRows.map((d) => d.id);
+
+        if (sessionIds.length > 0) {
+          await tx
+            .update(schema.signatures)
+            .set({ signatureUrl: url })
+            .where(
+              and(
+                eq(schema.signatures.participantId, participantId),
+                eq(schema.signatures.signerType, "participant"),
+                inArray(schema.signatures.sessionId, sessionIds),
+              ),
+            );
+        }
+        if (documentIds.length > 0) {
+          await tx
+            .update(schema.documentSignatures)
+            .set({ signatureUrl: url })
+            .where(
+              and(
+                eq(schema.documentSignatures.participantId, participantId),
+                eq(schema.documentSignatures.signerType, "participant"),
+                inArray(schema.documentSignatures.documentId, documentIds),
+              ),
+            );
+        }
+
+        await logAudit(
+          {
+            actorType: "participant",
+            actorId: participantId,
+            action: "signature.participant_corrected",
+            resourceType: "participant",
+            resourceId: participantId,
+            metadata: {
+              courseId,
+              sessionsRepointed: sessionIds.length,
+              documentsRepointed: documentIds.length,
+            },
+            ipAddress,
+            userAgent,
+          },
+          tx,
+        );
+      }
+    }
+  });
 
   if (previous?.signatureUrl && previous.signatureUrl !== url) {
     // Nur löschen, wenn keine signatures-Zeile den alten Object-Key mehr als
