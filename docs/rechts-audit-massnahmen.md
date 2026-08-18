@@ -73,7 +73,9 @@ Reine Text-/Doku-Fixes, kein Verhaltens-Code. **Auf Prod live (PR #191, 2026-08-
   Beleg: `app/api/webhooks/resend/route.ts:31`. — _wir, klein_
 - ☐ **AZAV-Träger-Zulassungs-/Zertifikatsnummer** + Träger-Anschrift aufs Nachweis-PDF;
   erst AfA-Formularstandard bestätigen. Beleg: `src/components/stundennachweis.tsx:168`. — _du → wir_
-- ☐ **Unternehmer-Checkbox** bei `/register` (schließt Verbraucherwiderruf aus). — _wir, klein_
+- ☑ **Unternehmer-Checkbox** bei `/register` (2026-08): Pflicht-Bestätigung §14 BGB,
+  client controlled + serverseitig erzwungen + Audit-Log. Schließt Verbraucher-
+  widerruf (§312g BGB) aus. PR #193.
 
 ## 🟢 P3 — später
 
