@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import {
@@ -57,6 +57,10 @@ export default async function CoachDashboard() {
       and(
         eq(schema.participants.tenantId, tenantId),
         isNull(schema.courses.deletedAt),
+        // Archivierte Kunden sind für den Coach erledigt-und-weggeräumt —
+        // sie gehören nicht mehr ins Coach-Dashboard (Coach-Feedback). Zugriff
+        // bleibt auf der Bildungsträger-Seite (/bildungstraeger/archive).
+        ne(schema.courses.status, "archived"),
         courseVisibleToCoach(session.user.id),
       ),
     )
