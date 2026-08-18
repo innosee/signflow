@@ -54,6 +54,248 @@ export type CockpitRow = {
   docChips: { label: string; done: boolean }[] | null;
 };
 
+// ─── Board-Ansicht: Lebenszyklus-Phasen ──────────────────────────────────────
+// Rein aus den vorhandenen Zeilen-Feldern abgeleitet (kein Server-/DB-Bedarf).
+// Reihenfolge der Prüfung = Reihenfolge der Phasen von hinten: der am weitesten
+// fortgeschrittene Zustand gewinnt (z.B. abgeschlossen UND bewilligt → „abgeschlossen").
+type Phase = "neu" | "laeuft" | "abgeschlossen" | "afa";
+
+function phaseOf(c: CockpitRow): Phase {
+  if (c.afaSubmitted) return "afa";
+  if (c.abgeschlossen) return "abgeschlossen";
+  if (c.bewilligt) return "laeuft";
+  return "neu";
+}
+
+const PHASES: { key: Phase; label: string; hint: string; dot: string }[] = [
+  { key: "neu", label: "Neu / offen", hint: "Noch nicht bewilligt", dot: "bg-zinc-400" },
+  {
+    key: "laeuft",
+    label: "Läuft",
+    hint: "Bewilligt, in Durchführung",
+    dot: "bg-blue-500",
+  },
+  {
+    key: "abgeschlossen",
+    label: "Abgeschlossen",
+    hint: "Maßnahme abgeschlossen",
+    dot: "bg-emerald-500",
+  },
+  {
+    key: "afa",
+    label: "An AfA übermittelt",
+    hint: "Nachweis versendet",
+    dot: "bg-zinc-900",
+  },
+];
+
+// ─── Gemeinsame Bausteine (Liste + Board teilen sich dieselben) ───────────────
+
+/** Status-Matrix: ANW (Stundennachweis) + BER + AfA + AVGS + Status + Dok. */
+function CockpitBadges({ c }: { c: CockpitRow }) {
+  const ber = BER_BADGE[c.berStatus];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-medium ${ANW_TONE_BADGE[c.anwTone]}`}
+        title="Stand der Anwesenheitsliste (Stundennachweis)"
+      >
+        ANW: {c.anwLabel}
+      </span>
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-medium ${ber.cls}`}
+        title="Stand des Abschlussberichts"
+      >
+        {ber.label}
+      </span>
+      {c.afaSubmitted && (
+        <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-medium text-white">
+          an AfA übermittelt
+        </span>
+      )}
+      {c.avgsStageLabel && c.avgsStageBadge && (
+        <span className={`rounded-full px-2 py-0.5 text-xs ${c.avgsStageBadge}`}>
+          {c.avgsStageLabel}
+        </span>
+      )}
+      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+        {c.statusLabel}
+      </span>
+      {c.docChips && (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full bg-zinc-50 px-2 py-0.5 text-xs"
+          title="Kunde-Dokumente — komplett signiert (✓) oder noch offen (○): TNV = Teilnehmervertrag, STV = Strategievereinbarung"
+        >
+          <span className="text-zinc-500">Dok:</span>
+          {c.docChips.map((d) => (
+            <span
+              key={d.label}
+              className={
+                d.done ? "font-medium text-emerald-700" : "text-zinc-400"
+              }
+            >
+              {d.done ? "✓" : "○"} {d.label}
+            </span>
+          ))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Downloads für den Versand ans Jobcenter / die AfA. */
+function CockpitDownloads({ c }: { c: CockpitRow }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs">
+      {c.anwPdfUrl && (
+        <a
+          href={c.anwPdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-zinc-900 underline-offset-2 hover:underline"
+          title={
+            c.anwSealed
+              ? "Anwesenheitsnachweis als PDF"
+              : "Anwesenheitsnachweis als PDF — Entwurfsstand, noch nicht freigegeben"
+          }
+        >
+          ↓ ANW-PDF{!c.anwSealed && " (Entwurf)"}
+        </a>
+      )}
+      {c.berStatus === "submitted" && c.berId ? (
+        <a
+          href={`/api/bildungstraeger/abschlussberichte/${c.berId}/pdf`}
+          className="font-medium text-zinc-900 underline-offset-2 hover:underline"
+        >
+          ↓ BER-PDF
+        </a>
+      ) : (
+        <span className="text-zinc-400">BER-PDF erst nach Einreichung</span>
+      )}
+    </div>
+  );
+}
+
+/** Verwaltung des Kunden — identische Aktionen in Liste und Board. */
+function CockpitCardActions({ c }: { c: CockpitRow }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Schnell-Umschalter für den Bewilligungsstatus. */}
+      <form action={setCourseBewilligt}>
+        <input type="hidden" name="courseId" value={c.id} />
+        <input type="hidden" name="next" value={c.bewilligt ? "0" : "1"} />
+        <button
+          type="submit"
+          title={
+            c.bewilligt
+              ? "Bewilligung zurücknehmen (Status wieder „ausstehend“)"
+              : "Als bewilligt markieren"
+          }
+          className={
+            c.bewilligt
+              ? "rounded-lg border border-green-500 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-100"
+              : "rounded-lg border border-green-500 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-50"
+          }
+        >
+          {c.bewilligt ? "✓ Bewilligt" : "Bewilligt setzen"}
+        </button>
+      </form>
+      {/* Unterschrifts-Modus umschalten (digital ⇄ analog/Papier).
+          Nach dem finalen Abschluss eingefroren (Server prüft es zusätzlich). */}
+      <form action={setCourseSignatureMode}>
+        <input type="hidden" name="courseId" value={c.id} />
+        <input
+          type="hidden"
+          name="mode"
+          value={c.signatureMode === "analog" ? "digital" : "analog"}
+        />
+        <button
+          type="submit"
+          disabled={c.anwSealed}
+          title={
+            c.anwSealed
+              ? "Nach dem Abschluss nicht mehr änderbar"
+              : c.signatureMode === "analog"
+                ? "Zurück auf digitale Unterschrift stellen"
+                : "Auf analoge Unterschrift (Papier) umstellen: PDFs werden mit leeren Unterschriftsfeldern gedruckt und der Scan wieder hochgeladen"
+          }
+          className={
+            c.signatureMode === "analog"
+              ? "rounded-lg border border-amber-500 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 enabled:hover:bg-amber-100 disabled:opacity-50"
+              : "rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 enabled:hover:bg-zinc-50 disabled:opacity-50"
+          }
+        >
+          {c.signatureMode === "analog"
+            ? "✎ Analog (Papier)"
+            : "Analog freigeben"}
+        </button>
+      </form>
+      <Link
+        href={`/bildungstraeger/courses/${c.id}/berichte`}
+        className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+      >
+        Berichte
+      </Link>
+      <Link
+        href={`/bildungstraeger/courses/${c.id}/dokumente`}
+        className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+      >
+        Dokumente
+      </Link>
+      <Link
+        href={`/bildungstraeger/courses/${c.id}/edit`}
+        className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+      >
+        Bearbeiten
+      </Link>
+      {c.isArchived ? (
+        <form action={unarchiveCourse}>
+          <input type="hidden" name="courseId" value={c.id} />
+          <button
+            type="submit"
+            className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+          >
+            Wiederherstellen
+          </button>
+        </form>
+      ) : (
+        <form action={archiveCourse}>
+          <input type="hidden" name="courseId" value={c.id} />
+          <button
+            type="submit"
+            className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+          >
+            Archivieren
+          </button>
+        </form>
+      )}
+      <DeleteCourseButton courseId={c.id} participantName={c.participantName} />
+    </div>
+  );
+}
+
+/** Kompakte Karte für die Board-Ansicht. */
+function CockpitCard({ c }: { c: CockpitRow }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
+      <div className="text-sm font-medium">{c.participantName}</div>
+      <div className="text-xs text-zinc-600">{c.title}</div>
+      <div className="mt-0.5 text-xs text-zinc-500">
+        Kd-Nr. {c.kundenNr} · {c.coachName}
+      </div>
+      <div className="mt-2">
+        <CockpitBadges c={c} />
+      </div>
+      <div className="mt-2">
+        <CockpitDownloads c={c} />
+      </div>
+      <div className="mt-3 border-t border-zinc-100 pt-2">
+        <CockpitCardActions c={c} />
+      </div>
+    </div>
+  );
+}
+
 export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
   // Filter aus der URL initialisieren, damit sie eine Navigation (Dokumente /
   // Bearbeiten öffnen → zurück) und ein revalidate (Bewilligt/Archiv-Toggle)
@@ -67,11 +309,29 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
   const [bedarfstraegerFilter, setBedarfstraegerFilter] = useState(
     () => searchParams.get("bt") ?? "",
   );
+  // Ansicht (Liste ↔ Board) — ebenfalls in der URL gespiegelt, damit sie eine
+  // Navigation überlebt (?view=board).
+  const [view, setView] = useState<"list" | "board">(() =>
+    searchParams.get("view") === "board" ? "board" : "list",
+  );
 
-  // Filterzustand in die URL spiegeln — via history.replaceState (KEINE Next-
-  // Navigation, kein Server-Roundtrip pro Tastendruck). Beim Wegnavigieren
-  // bleibt die URL in der History; ein Zurück mountet die Liste mit denselben
-  // Parametern neu → Suche + Position sind wieder da.
+  // Einen einzelnen URL-Parameter setzen/löschen via history.replaceState
+  // (KEINE Next-Navigation, kein Server-Roundtrip). Beim Wegnavigieren bleibt
+  // die URL in der History; ein Zurück mountet die Liste mit denselben
+  // Parametern neu → Suche, Filter, Ansicht sind wieder da.
+  const setUrlParam = (key: string, value: string) => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (value) params.set(key, value);
+    else params.delete(key);
+    const qs = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      qs ? `${window.location.pathname}?${qs}` : window.location.pathname,
+    );
+  };
+
   const persistFilters = (q: string, coach: string, bt: string) => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -86,6 +346,11 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
       "",
       qs ? `${window.location.pathname}?${qs}` : window.location.pathname,
     );
+  };
+
+  const changeView = (next: "list" | "board") => {
+    setView(next);
+    setUrlParam("view", next === "board" ? "board" : "");
   };
 
   // Such-Event entkoppelt vom Tippen: erst ~600 ms nach der letzten Eingabe
@@ -153,9 +418,55 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
   const ordered = [...laufend, ...abgeschlossen];
   const firstAbgeschlossenId = abgeschlossen[0]?.id;
 
+  // Board: Kunden auf die Lebenszyklus-Spalten verteilen (Reihenfolge innerhalb
+  // einer Spalte = gefilterte Reihenfolge, also createdAt desc).
+  const byPhase = useMemo(() => {
+    const map: Record<Phase, CockpitRow[]> = {
+      neu: [],
+      laeuft: [],
+      abgeschlossen: [],
+      afa: [],
+    };
+    for (const c of filtered) map[phaseOf(c)].push(c);
+    return map;
+  }, [filtered]);
+
   return (
     <section className="rounded-xl border border-zinc-300 bg-white">
       <div className="space-y-2 border-b border-zinc-200 px-6 py-3">
+        <div className="flex justify-end">
+          {/* Ansichts-Umschalter Liste ↔ Board */}
+          <div
+            className="inline-flex rounded-lg border border-zinc-300 p-0.5"
+            role="group"
+            aria-label="Ansicht wählen"
+          >
+            <button
+              type="button"
+              onClick={() => changeView("list")}
+              aria-pressed={view === "list"}
+              className={`rounded-md px-3 py-1 text-xs font-medium ${
+                view === "list"
+                  ? "bg-zinc-900 text-white"
+                  : "text-zinc-600 hover:bg-zinc-100"
+              }`}
+            >
+              Liste
+            </button>
+            <button
+              type="button"
+              onClick={() => changeView("board")}
+              aria-pressed={view === "board"}
+              className={`rounded-md px-3 py-1 text-xs font-medium ${
+                view === "board"
+                  ? "bg-zinc-900 text-white"
+                  : "text-zinc-600 hover:bg-zinc-100"
+              }`}
+            >
+              Board
+            </button>
+          </div>
+        </div>
         <input
           type="search"
           value={query}
@@ -209,221 +520,71 @@ export function KundenCockpitList({ rows }: { rows: CockpitRow[] }) {
             ? "Keine Treffer für die aktuelle Auswahl."
             : "Keine Kunden."}
         </p>
+      ) : view === "board" ? (
+        <div className="overflow-x-auto px-6 py-4">
+          <div className="flex gap-4">
+            {PHASES.map((p) => (
+              <div key={p.key} className="flex w-72 shrink-0 flex-col gap-3">
+                <div className="flex items-center gap-2 border-b border-zinc-200 pb-2">
+                  <span className={`h-2 w-2 rounded-full ${p.dot}`} />
+                  <span
+                    className="text-xs font-semibold uppercase tracking-wide text-zinc-600"
+                    title={p.hint}
+                  >
+                    {p.label}
+                  </span>
+                  <span className="text-xs text-zinc-400">
+                    {byPhase[p.key].length}
+                  </span>
+                </div>
+                {byPhase[p.key].length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-zinc-200 px-3 py-6 text-center text-xs text-zinc-400">
+                    —
+                  </p>
+                ) : (
+                  byPhase[p.key].map((c) => <CockpitCard key={c.id} c={c} />)
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <ul className="divide-y divide-zinc-200">
-          {ordered.map((c) => {
-            const ber = BER_BADGE[c.berStatus];
-            return (
-              <Fragment key={c.id}>
-                {c.id === firstAbgeschlossenId && (
-                  <li className="bg-zinc-50 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    Abgeschlossen ({abgeschlossen.length})
-                  </li>
-                )}
-                <li className="px-6 py-4 text-sm">
+          {ordered.map((c) => (
+            <Fragment key={c.id}>
+              {c.id === firstAbgeschlossenId && (
+                <li className="bg-zinc-50 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Abgeschlossen ({abgeschlossen.length})
+                </li>
+              )}
+              <li className="px-6 py-4 text-sm">
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
                   <div className="min-w-0 flex-1 basis-64">
                     <div className="font-medium">
-                      {c.participantName}{" "}
-                      <span className="text-zinc-400">·</span>{" "}
-                      <span className="font-normal text-zinc-600">
-                        {c.title}
-                      </span>
+                      {c.participantName} <span className="text-zinc-400">·</span>{" "}
+                      <span className="font-normal text-zinc-600">{c.title}</span>
                     </div>
                     <div className="mt-0.5 text-xs text-zinc-500">
                       Kd-Nr. {c.kundenNr} · Coach: {c.coachName} ·{" "}
                       {c.bedarfstraegerName}
                     </div>
 
-                    {/* Status-Matrix: ANW (Stundennachweis) + BER + AfA */}
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${ANW_TONE_BADGE[c.anwTone]}`}
-                        title="Stand der Anwesenheitsliste (Stundennachweis)"
-                      >
-                        ANW: {c.anwLabel}
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${ber.cls}`}
-                        title="Stand des Abschlussberichts"
-                      >
-                        {ber.label}
-                      </span>
-                      {c.afaSubmitted && (
-                        <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-medium text-white">
-                          an AfA übermittelt
-                        </span>
-                      )}
-                      {c.avgsStageLabel && c.avgsStageBadge && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs ${c.avgsStageBadge}`}
-                        >
-                          {c.avgsStageLabel}
-                        </span>
-                      )}
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
-                        {c.statusLabel}
-                      </span>
-                      {c.docChips && (
-                        <span
-                          className="inline-flex items-center gap-1.5 rounded-full bg-zinc-50 px-2 py-0.5 text-xs"
-                          title="Kunde-Dokumente — komplett signiert (✓) oder noch offen (○): TNV = Teilnehmervertrag, STV = Strategievereinbarung"
-                        >
-                          <span className="text-zinc-500">Dok:</span>
-                          {c.docChips.map((d) => (
-                            <span
-                              key={d.label}
-                              className={
-                                d.done
-                                  ? "font-medium text-emerald-700"
-                                  : "text-zinc-400"
-                              }
-                            >
-                              {d.done ? "✓" : "○"} {d.label}
-                            </span>
-                          ))}
-                        </span>
-                      )}
+                    <div className="mt-2">
+                      <CockpitBadges c={c} />
                     </div>
 
-                    {/* Downloads für den Versand ans Jobcenter / die AfA */}
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                      {c.anwPdfUrl && (
-                        <a
-                          href={c.anwPdfUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-zinc-900 underline-offset-2 hover:underline"
-                          title={
-                            c.anwSealed
-                              ? "Anwesenheitsnachweis als PDF"
-                              : "Anwesenheitsnachweis als PDF — Entwurfsstand, noch nicht freigegeben"
-                          }
-                        >
-                          ↓ ANW-PDF{!c.anwSealed && " (Entwurf)"}
-                        </a>
-                      )}
-                      {c.berStatus === "submitted" && c.berId ? (
-                        <a
-                          href={`/api/bildungstraeger/abschlussberichte/${c.berId}/pdf`}
-                          className="font-medium text-zinc-900 underline-offset-2 hover:underline"
-                        >
-                          ↓ BER-PDF
-                        </a>
-                      ) : (
-                        <span className="text-zinc-400">
-                          BER-PDF erst nach Einreichung
-                        </span>
-                      )}
+                    <div className="mt-2">
+                      <CockpitDownloads c={c} />
                     </div>
                   </div>
 
-                  {/* Verwaltung des Kunden */}
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {/* Schnell-Umschalter für den Bewilligungsstatus. */}
-                    <form action={setCourseBewilligt}>
-                      <input type="hidden" name="courseId" value={c.id} />
-                      <input
-                        type="hidden"
-                        name="next"
-                        value={c.bewilligt ? "0" : "1"}
-                      />
-                      <button
-                        type="submit"
-                        title={
-                          c.bewilligt
-                            ? "Bewilligung zurücknehmen (Status wieder „ausstehend“)"
-                            : "Als bewilligt markieren"
-                        }
-                        className={
-                          c.bewilligt
-                            ? "rounded-lg border border-green-500 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-100"
-                            : "rounded-lg border border-green-500 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-50"
-                        }
-                      >
-                        {c.bewilligt ? "✓ Bewilligt" : "Bewilligt setzen"}
-                      </button>
-                    </form>
-                    {/* Unterschrifts-Modus umschalten (digital ⇄ analog/Papier).
-                        Nach dem finalen Abschluss eingefroren (Server prüft es
-                        zusätzlich). */}
-                    <form action={setCourseSignatureMode}>
-                      <input type="hidden" name="courseId" value={c.id} />
-                      <input
-                        type="hidden"
-                        name="mode"
-                        value={c.signatureMode === "analog" ? "digital" : "analog"}
-                      />
-                      <button
-                        type="submit"
-                        disabled={c.anwSealed}
-                        title={
-                          c.anwSealed
-                            ? "Nach dem Abschluss nicht mehr änderbar"
-                            : c.signatureMode === "analog"
-                              ? "Zurück auf digitale Unterschrift stellen"
-                              : "Auf analoge Unterschrift (Papier) umstellen: PDFs werden mit leeren Unterschriftsfeldern gedruckt und der Scan wieder hochgeladen"
-                        }
-                        className={
-                          c.signatureMode === "analog"
-                            ? "rounded-lg border border-amber-500 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 enabled:hover:bg-amber-100 disabled:opacity-50"
-                            : "rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 enabled:hover:bg-zinc-50 disabled:opacity-50"
-                        }
-                      >
-                        {c.signatureMode === "analog"
-                          ? "✎ Analog (Papier)"
-                          : "Analog freigeben"}
-                      </button>
-                    </form>
-                    <Link
-                      href={`/bildungstraeger/courses/${c.id}/berichte`}
-                      className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                    >
-                      Berichte
-                    </Link>
-                    <Link
-                      href={`/bildungstraeger/courses/${c.id}/dokumente`}
-                      className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                    >
-                      Dokumente
-                    </Link>
-                    <Link
-                      href={`/bildungstraeger/courses/${c.id}/edit`}
-                      className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                    >
-                      Bearbeiten
-                    </Link>
-                    {c.isArchived ? (
-                      <form action={unarchiveCourse}>
-                        <input type="hidden" name="courseId" value={c.id} />
-                        <button
-                          type="submit"
-                          className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                        >
-                          Wiederherstellen
-                        </button>
-                      </form>
-                    ) : (
-                      <form action={archiveCourse}>
-                        <input type="hidden" name="courseId" value={c.id} />
-                        <button
-                          type="submit"
-                          className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                        >
-                          Archivieren
-                        </button>
-                      </form>
-                    )}
-                    <DeleteCourseButton
-                      courseId={c.id}
-                      participantName={c.participantName}
-                    />
+                  <div className="flex shrink-0">
+                    <CockpitCardActions c={c} />
                   </div>
                 </div>
               </li>
-              </Fragment>
-            );
-          })}
+            </Fragment>
+          ))}
         </ul>
       )}
     </section>
