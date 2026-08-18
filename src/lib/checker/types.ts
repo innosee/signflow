@@ -41,7 +41,7 @@ export const MASSNAHME_TYPEN: { id: MassnahmeTyp; label: string; hint: string }[
   },
   {
     id: "ESC",
-    label: "ESC — Erango Standort-Coaching",
+    label: "ESC — Erango systemisches Coaching",
     hint: "Standortbestimmungs-Coaching (gleiches Baustein-Set wie EKC)",
   },
   {
