@@ -178,6 +178,43 @@ export default function DatenschutzPage() {
             festgehalten wird.
           </p>
         </Subsection>
+        <Subsection title="4.5 KI-gestützter ANW-Compliance-Check">
+          <p>
+            Vor der Freigabe eines Nachweises kann der Coach optional einen
+            KI-gestützten Compliance-Check auslösen. Dabei werden die
+            stichwortartigen Termin-Einträge der Anwesenheitsliste auf
+            AZAV-Konformität und inhaltliche Plausibilität geprüft. Zu diesem
+            Zweck werden folgende Daten an unseren Auftragsverarbeiter{" "}
+            <strong>Microsoft (Azure OpenAI Service, EU-Region)</strong>{" "}
+            übermittelt:
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>der Maßnahmentyp und die Bezeichnung der Bildungsträgerin,</li>
+            <li>
+              je Termin: Datum, Anzahl der Unterrichtseinheiten und der vom Coach
+              eingetragene Themen-Stichworttext.
+            </li>
+          </ul>
+          <p>
+            <strong>Nicht</strong> übermittelt werden Stammdaten der
+            Teilnehmer:innen (Name, E-Mail, Kunden-Nr.), Unterschriftsbilder oder
+            Signatur-Metadaten. Anders als beim Abschlussbericht-Checker (Ziffer 5)
+            werden die Termin-Stichworte <strong>nicht anonymisiert</strong>, da es
+            sich um kurze, sachbezogene Themenangaben ohne Personenbezug handelt;
+            Coaches sind angehalten, in diese Felder keine Klarnamen oder sensiblen
+            Angaben einzutragen. Die Übermittlung erfolgt an ein Rechenzentrum in
+            der EU auf Grundlage eines Auftragsverarbeitungsvertrags mit Microsoft
+            samt EU-Standardvertragsklauseln (vgl. Ziffer 6). Die Prüf-Ergebnisse
+            werden nur temporär zur Anzeige verarbeitet und{" "}
+            <strong>nicht dauerhaft gespeichert</strong>.
+          </p>
+          <p>
+            Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse
+            an der Qualitätssicherung und AZAV-Konformität der Nachweise). Der
+            Check hat rein unterstützenden Charakter; die Entscheidung über den
+            Nachweis trifft stets der Coach.
+          </p>
+        </Subsection>
       </Section>
 
       <Section title="5. Verarbeitungen im Abschlussbericht-Checker">

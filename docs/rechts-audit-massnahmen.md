@@ -13,8 +13,8 @@ Punkte schrittweise ab und haken hier ab.
 ## ☑ Erledigt
 
 ### Easy Wins #1–8 — Wahrheits-Korrekturen an Rechtstexten & Claims
-Reine Text-/Doku-Fixes, kein Verhaltens-Code. **Auf Staging live (2026-08).**
-Branch `fix/legal-text-truth-corrections` · Commit `8571637`.
+Reine Text-/Doku-Fixes, kein Verhaltens-Code. **Auf Prod live (PR #191, 2026-08-18)**
+— auf Staging + signflow.coach verifiziert.
 - ☑ PDF-Audit-Trail: falsche Normzitate „§126a BGB / eIDAS Art. 26" (QES/AES) →
   zutreffende einfache eSig (Art. 3 Nr. 10 i.V.m. Art. 25 eIDAS)
 - ☑ „Identitätsnachweis"-Claim raus → IP + E-Mail-Zugang (Magic-Link)
@@ -23,7 +23,7 @@ Branch `fix/legal-text-truth-corrections` · Commit `8571637`.
 - ☑ AVV-Claim „mit allen abgeschlossen" entschärft (Datenschutz §6, FAQ, Features)
 - ☑ Veraltete Normen: TMG → DDG, TTDSG → TDDDG
 - ☑ Doku-Drift Magic-Link „24 h" → „7 Tage" (CLAUDE.md)
-- ☐ **PR nach `main` öffnen** (damit auch auf Prod) — _wir_ · **← nächster Klick**
+- ☑ **PR #191 nach `main` gemergt → auf Prod live** (2026-08-18)
 
 ---
 
@@ -54,15 +54,19 @@ Branch `fix/legal-text-truth-corrections` · Commit `8571637`.
   Art. 37/§ 38 BDSG) + **DSFA** (Art. 35). — _du/DSB_
 - ☐ **Datenschutzerklärung aus „Entwurf" freigeben** + 2 Platzhalter füllen
   (DSB-Kontakt, Controller/Processor-Abgrenzung); Entwurf-Banner entfernen. — _DSGVO-Beratung → wir_
-- ☐ **ANW-Check-Transfer offenlegen.** Termintexte gehen im Klartext an Azure OpenAI
-  (US-Konzern); DSE §4 (Signatur-Modul) erwähnt das nicht. §4 ergänzen (+ ggf.
-  anonymisieren). Beleg: `src/lib/checker/anw-check.ts:14`. — _wir_
+- ☑ **ANW-Check-Transfer offengelegt (2026-08).** Neue DSE-Subsection §4.5:
+  benennt was an Azure OpenAI (EU, MS-DPA+SCC) geht (Maßnahmentyp, Träger-Name,
+  je Termin Datum/UE/Themen-Stichwort), stellt klar dass **keine** TN-Stammdaten
+  übermittelt und die Stichworte nicht anonymisiert werden, Rechtsgrundlage
+  Art. 6 Abs. 1 lit. f, keine Speicherung der Ergebnisse. Beleg: `src/lib/checker/anw-check.ts`.
 
 ## 🟡 P2 — Verifikation & kleinere Fixes
 
-- ☐ **Prod-DB read-only prüfen:** keine `*.public.blob.vercel-storage.com`-URLs mehr
-  in `users/participants/tenants/signatures/document_signatures.signature_url` +
-  `users.pdf_logo_url` (sonst öffentlich abrufbar). Beleg: `src/lib/storage.ts:224`. — _ich, auf dein OK_
+- ☑ **Prod-DB read-only geprüft (2026-08):** **0 öffentliche
+  `*.public.blob.vercel-storage.com`-URLs** über alle 9 URL-/Logo-Spalten
+  (2187 signatures, 323 document_signatures, 166 participants, 94 users,
+  24 final_documents u.a. — alle R2-nativ/privat). Kein Handlungsbedarf.
+  Geprüft via `neonctl` Rolle `backup_ro` (read-only). Beleg: `src/lib/storage.ts:224`.
 - ☐ **Azure-Vertragskonto klären:** Abo läuft auf privatem MS-Konto (`info@innosee.de`)
   → greift MS-DPA/SCC? DSE nennt „Microsoft Ireland". — _du_
 - ☐ **Resend-Webhook** von Query-Secret auf Svix-Signatur umstellen.
