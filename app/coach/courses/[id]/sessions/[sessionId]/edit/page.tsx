@@ -51,6 +51,7 @@ export default async function EditSessionPage({ params }: Props) {
       anzahlUe: schema.sessions.anzahlUe,
       modus: schema.sessions.modus,
       isErstgespraech: schema.sessions.isErstgespraech,
+      abgesagt: schema.sessions.abgesagt,
       geeignet: schema.sessions.geeignet,
       eignungsanalyse: schema.sessions.eignungsanalyse,
     })
@@ -118,6 +119,7 @@ export default async function EditSessionPage({ params }: Props) {
           anzahlUe: sess.anzahlUe,
           modus: sess.modus,
           isErstgespraech: sess.isErstgespraech,
+          abgesagt: sess.abgesagt,
           geeignet: sess.geeignet,
           eignungsanalyse: sess.eignungsanalyse,
         }}
