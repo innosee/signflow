@@ -18,7 +18,7 @@ export type AblaufDraftSession = {
 
 const INTRO: Record<MassnahmeTyp, string> = {
   EKC: "Im Rahmen des Karriere-Coachings",
-  ESC: "Im Rahmen des Standort-Coachings",
+  ESC: "Im Rahmen des systemischen Coachings",
   EGC: "Im Rahmen des Gründungs-Coachings",
   ESCA: "Im Rahmen des Ausbildungs-Coachings",
 };

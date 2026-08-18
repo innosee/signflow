@@ -73,7 +73,7 @@ function renderMustHaveEnum(massnahmeTyp: MassnahmeTyp): string {
 
 const MASSNAHME_KONTEXT: Record<MassnahmeTyp, string> = {
   EKC: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango systemisches Karrierecoaching (EKC)"',
-  ESC: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango Standort-Coaching (ESC)"',
+  ESC: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango systemisches Coaching (ESC)"',
   EGC: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango Gründungs-Coaching (EGC)" — Schwerpunkt liegt auf der Vorbereitung einer selbständigen Tätigkeit, nicht auf Vermittlung in Anstellung',
   ESCA: 'AVGS-Einzelcoachings (MAT) der Maßnahme "erango Ausbildungs-Coaching (ESCA)" — Schwerpunkt liegt auf Begleitung während einer Ausbildung, nicht auf Vermittlung in Anstellung',
 };
@@ -166,7 +166,7 @@ Prüfe, ob die im Bericht beschriebenen Inhalte zur **tatsächlich gewählten** 
 
 **Erwartete Schwerpunkte pro Maßnahme:**
 - **EKC** (Karriere-Coaching): Standortbestimmung, Bewerbungsstrategie, Vermittlung in Anstellung, Stellenmarkt-Analyse, Selbstmarketing
-- **ESC** (Standort-Coaching): wie EKC, Schwerpunkt liegt auf der Klärungsphase
+- **ESC** (systemisches Coaching): wie EKC, Schwerpunkt liegt auf der Klärungsphase
 - **EGC** (Gründungs-Coaching): Geschäfts-Idee, Businessplan, Markt-Analyse, Finanzierung, Rechtsform, Gewerbeanmeldung, Tragfähigkeit — TN strebt **Selbständigkeit** an, NICHT Anstellung
 - **ESCA** (Ausbildungs-Coaching): Lernziele, Ausbildungs-Etappen, Prüfungsvorbereitung, Konflikte im Ausbildungs-Verhältnis — TN ist in **laufender Ausbildung**
 
