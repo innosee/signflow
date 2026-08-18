@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { bildungstraegerAc } from "@/lib/auth-access";
-import { sendResetPasswordEmail } from "@/lib/email";
+import { sendCoachWelcomeEmail, sendResetPasswordEmail } from "@/lib/email";
 
 if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET is not set");
@@ -81,10 +81,26 @@ export const auth = betterAuth({
     // und ein Passwort gesetzt. Das ist unser Signal „Einladung angenommen",
     // auf das die Bildungsträger-UI über `emailVerified` prüft.
     onPasswordReset: async ({ user }) => {
+      // Erst-Setup (Einladung angenommen) vs. echter „Passwort vergessen":
+      // Vor diesem Hook ist emailVerified bei einem frisch eingeladenen Coach
+      // noch false — nur dann ist das die INITIALE Registrierung → Willkommens-
+      // Mail. Bei einem späteren Reset ist emailVerified längst true → keine.
+      const isInitialSetup = !user.emailVerified;
       await db
         .update(schema.users)
         .set({ emailVerified: true })
         .where(eq(schema.users.id, user.id));
+      const role = (user as { role?: string | null }).role;
+      if (isInitialSetup && role === "coach") {
+        // Fehler beim Versand darf das erfolgreiche Passwort-Setzen NICHT
+        // kippen — nur loggen.
+        await sendCoachWelcomeEmail({
+          to: user.email,
+          name: user.name,
+        }).catch((err) => {
+          console.error("sendCoachWelcomeEmail failed:", err);
+        });
+      }
     },
   },
 

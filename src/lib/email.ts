@@ -169,6 +169,36 @@ export async function sendInviteEmail(params: {
   });
 }
 
+/**
+ * Willkommens-Mail an den Coach NACH abgeschlossener Registrierung (er hat über
+ * den Einladungs-Link sein Passwort gesetzt). Bewusst ohne Aktion/Token — nur
+ * ein herzlicher Einstieg + der Link zur Seite mit dem Hinweis, ihn als
+ * Lesezeichen zu speichern. Ausgelöst aus `onPasswordReset` (nur beim
+ * Erst-Setup, nicht bei späteren „Passwort vergessen").
+ */
+export async function sendCoachWelcomeEmail(params: {
+  to: string;
+  name: string;
+}): Promise<void> {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.BETTER_AUTH_URL ??
+    "https://signflow.coach";
+  const body = `
+    <p>Hallo ${esc(params.name)},</p>
+    <p>herzlich willkommen bei Signflow! 🎉 Dein Zugang ist eingerichtet — ab jetzt erfasst du Termine und Unterschriften komplett digital.</p>
+    <p>Über den Button unten kommst du jederzeit zu deinem Bereich. Speichere ihn dir am besten gleich als <strong>Lesezeichen / Favorit</strong> im Browser, dann hast du Signflow immer griffbereit:</p>
+    ${renderButton(appUrl, "Zu Signflow")}
+    <p style="font-size:13px; color:#555;">Tipp: Auf dem Smartphone kannst du die Seite über „Zum Startbildschirm hinzufügen" wie eine App ablegen.</p>
+    <p>Viel Erfolg mit deinen Coachings!<br />Dein Signflow-Team</p>
+  `;
+  await sendEmail({
+    to: params.to,
+    subject: "Herzlich willkommen bei Signflow 🎉",
+    html: renderLayout("Willkommen bei Signflow", body),
+  });
+}
+
 export async function sendResetPasswordEmail(params: {
   to: string;
   name: string;
