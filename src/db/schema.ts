@@ -62,7 +62,7 @@ export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
  * AVGS-Maßnahmentyp gemäß § 45 SGB III. Werte-Set parallel zu
  * `MassnahmeTyp` in `src/lib/checker/types.ts`:
  *   - EKC = Erango Karriere-Coaching
- *   - ESC = Erango Standort-Coaching (gleiches Baustein-Set wie EKC)
+ *   - ESC = Erango systemisches Coaching (gleiches Baustein-Set wie EKC)
  *   - EGC = Erango Gründungs-Coaching
  *   - ESCA = Erango Ausbildungs-Coaching / Probezeitbegleitung
  * Wird vom ANW-Compliance-Check gelesen, um den „roten Faden" der
