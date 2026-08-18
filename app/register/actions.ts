@@ -29,6 +29,16 @@ export async function registerBildungstraeger(
     return { error: botCheck.userMessage };
   }
 
+  // Unternehmer-Bestätigung serverseitig erzwingen (Client-`required` ist nur
+  // UX). Schließt den Verbraucher-Widerruf aus — Signflow ist ein reines
+  // B2B-Angebot.
+  if (formData.get("unternehmer") !== "on") {
+    return {
+      error:
+        "Bitte bestätige, dass du als Unternehmer (nicht als Verbraucher) handelst.",
+    };
+  }
+
   const company = String(formData.get("company") ?? "");
   const result = await provisionBildungstraeger(
     {
@@ -50,6 +60,7 @@ export async function registerBildungstraeger(
       source: "self_service",
       tenantId: result.tenantId,
       company: company.trim(),
+      unternehmer_confirmed: true,
     },
   });
 

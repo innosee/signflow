@@ -28,6 +28,9 @@ export function RegisterForm() {
   const [company, setCompany] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  // Unternehmer-Bestätigung: schließt den Verbraucher-Widerruf (§ 312g BGB)
+  // aus. Controlled, damit die Angabe einen Fehler-Re-Render übersteht.
+  const [unternehmer, setUnternehmer] = useState(false);
 
   // Min-Time-Check braucht einen client-gesetzten Timestamp. MUSS controlled
   // sein: ein uncontrolled Feld (defaultValue + Ref) wird bei JEDEM Re-Render
@@ -136,6 +139,23 @@ export function RegisterForm() {
         </label>
 
         <TurnstileWidget />
+
+        <label className="flex items-start gap-2.5">
+          <input
+            name="unternehmer"
+            type="checkbox"
+            required
+            checked={unternehmer}
+            onChange={(e) => setUnternehmer(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-400"
+          />
+          <span className="text-xs leading-relaxed text-zinc-600">
+            Ich handle als Unternehmer im Sinne des § 14 BGB und registriere mich
+            im Rahmen meiner gewerblichen oder selbständigen beruflichen
+            Tätigkeit (kein Verbraucher).
+            <span className="ml-0.5 text-red-600">*</span>
+          </span>
+        </label>
 
         {state?.error && (
           <p role="alert" className="text-sm text-red-700">
