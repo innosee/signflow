@@ -54,9 +54,11 @@ Reine Text-/Doku-Fixes, kein Verhaltens-Code. **Auf Prod live (PR #191, 2026-08-
   Art. 37/§ 38 BDSG) + **DSFA** (Art. 35). — _du/DSB_
 - ☐ **Datenschutzerklärung aus „Entwurf" freigeben** + 2 Platzhalter füllen
   (DSB-Kontakt, Controller/Processor-Abgrenzung); Entwurf-Banner entfernen. — _DSGVO-Beratung → wir_
-- ☐ **ANW-Check-Transfer offenlegen.** Termintexte gehen im Klartext an Azure OpenAI
-  (US-Konzern); DSE §4 (Signatur-Modul) erwähnt das nicht. §4 ergänzen (+ ggf.
-  anonymisieren). Beleg: `src/lib/checker/anw-check.ts:14`. — _wir_
+- ☑ **ANW-Check-Transfer offengelegt (2026-08).** Neue DSE-Subsection §4.5:
+  benennt was an Azure OpenAI (EU, MS-DPA+SCC) geht (Maßnahmentyp, Träger-Name,
+  je Termin Datum/UE/Themen-Stichwort), stellt klar dass **keine** TN-Stammdaten
+  übermittelt und die Stichworte nicht anonymisiert werden, Rechtsgrundlage
+  Art. 6 Abs. 1 lit. f, keine Speicherung der Ergebnisse. Beleg: `src/lib/checker/anw-check.ts`.
 
 ## 🟡 P2 — Verifikation & kleinere Fixes
 
