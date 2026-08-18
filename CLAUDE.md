@@ -28,7 +28,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 |---|---|
 | **bildungstraeger** | Super Admin (die Firma / der Bildungsträger) – verwaltet (lädt ein/deaktiviert) Coaches, hat Gesamtübersicht, kann Coaches impersonaten (Support) |
 | **coach** | Wird von Bildungsträger per Einladung angelegt, setzt Passwort über Invite-Token. Legt **Termine/Einheiten** zu zugewiesenen Kunden an (Kurs-Anlage selbst macht der BT) und unterschreibt. **Kompetenzteam:** mehrere Coaches je Maßnahme möglich (`course_coaches` + `sessions.coach_id`); jeder zugewiesene Coach signiert seine eigenen Termine. Zugriffs-Check überall via `courseVisibleToCoach` (primär ODER Team), nicht nur `courses.coach_id` (Memory `project_multi_coach_per_course`). |
-| **participant** | Kein eigener Account – erhält Magic Link per E-Mail (24h gültig), unterschreibt nur |
+| **participant** | Kein eigener Account – erhält Magic Link per E-Mail (7 Tage gültig), unterschreibt nur |
 
 ---
 
@@ -36,7 +36,7 @@ Eine SaaS-Anwendung zur Digitalisierung von Unterschriften für Coaches und Kurs
 1. **Bildungsträger** legt den Kunden (= Maßnahme, **1:1**) an und weist ihn einem Coach zu — Coaches legen NICHT mehr selbst an. Der **Titel ist der Maßnahmentyp** (EKC/ESC/EGC/ESCA, `src/lib/massnahme-typ.ts`), kein Freitext mehr.
 2. Coach erstellt Termine laufend – Datum (**Mo–Sa**; Sonntag gesperrt, Feiertage = weiche Warnung), UE, Modus, Themen. Beim **Erstgespräch** zusätzlich die **Eignungsanalyse** (4 Kriterien je ++/O/–- + Gesamtergebnis „geeignet Ja/Nein").
 3. Coach unterschreibt jeden Termin inline (Canvas, aktive Bestätigung + Zeitstempel). Der Themen-Text lässt sich später per **„Inhalt korrigieren"** ändern, **ohne** Signaturen/Freigabe zu verlieren (Datum/UE/Erstgespräch nur über „Bearbeiten (Signaturen zurücksetzen)").
-4. Coach triggert **"Teilnehmer benachrichtigen"** → **Kurs-scoped Magic Link** (24 h gültig). Alte Links werden **nicht** invalidiert — mehrere gleichzeitig gültig, eine ältere Mail funktioniert weiter.
+4. Coach triggert **"Teilnehmer benachrichtigen"** → **Kurs-scoped Magic Link** (7 Tage gültig). Alte Links werden **nicht** invalidiert — mehrere gleichzeitig gültig, eine ältere Mail funktioniert weiter.
 5. Teilnehmer öffnet den Link, signiert alle offenen Termine inline.
 6. **ANW-Compliance-Check** (KI gegen AZAV) – empfohlen vor der Freigabe. Soft-Warnungen (`status="nacharbeit"`) sind **quittierbar** („Hinweise gesehen — trotzdem freigeben", audit-geloggt) → **kein Hard-Block** durch die KI.
 7. Coach **„Maßnahme als abgeschlossen markieren"** – bei weniger als voll geleisteten UE mit **Pflicht-Begründung** (vorzeitiges Ende).
@@ -66,8 +66,8 @@ Die Seite, die Coach/Teilnehmer zum Unterschreiben sehen, ist **exakt** die Seit
 
 ### Teilnehmer-Flow
 - Kein Account für Teilnehmer – nur E-Mail-Adresse im System
-- Magic Link **pro Kurs × Teilnehmer** (`participant_access_tokens`-Tabelle, siehe Schema), 24 h gültig ab Versand
-- Nicht one-shot: Innerhalb der 24 h kann der Teilnehmer so viele Sessions signieren wie gerade offen sind. Vom Coach bei neuen Sessions neu ausgelöst → ein zusätzlicher Token wird ausgestellt; alte Links werden **nicht** invalidiert, sie laufen einfach nach ihren eigenen 24 h ab (mehrere gleichzeitig gültig, alle zeigen auf dieselbe Sign-Seite).
+- Magic Link **pro Kurs × Teilnehmer** (`participant_access_tokens`-Tabelle, siehe Schema), 7 Tage gültig ab Versand
+- Nicht one-shot: Innerhalb der 7 Tage kann der Teilnehmer so viele Sessions signieren wie gerade offen sind. Vom Coach bei neuen Sessions neu ausgelöst → ein zusätzlicher Token wird ausgestellt; alte Links werden **nicht** invalidiert, sie laufen einfach nach ihren eigenen 7 Tagen ab (mehrere gleichzeitig gültig, alle zeigen auf dieselbe Sign-Seite).
 - Mobile-optimierte Webseite mit Canvas – keine React Native App (Phase 2)
 
 ### Auth & Berechtigungen
@@ -168,11 +168,11 @@ id: uuid PK
 course_id: uuid FK -> courses.id (cascade delete)
 participant_id: uuid FK -> participants.id (restrict delete)
 token_hash: string (unique, SHA-256 base64url des Klartexts)
-expires_at: timestamp     // +24h ab Ausstellung
+expires_at: timestamp     // +7 Tage ab Ausstellung
 used_at: timestamp | null // null = aktiv; reserviert für späteren expliziten Revoke (Re-Issue invalidiert NICHT)
 ```
 
-**Semantik:** Mehrere Links pro Kurs × Teilnehmer können gleichzeitig gültig sein — jeder läuft 24 h ab seiner Ausstellung. Re-Issue legt einfach einen neuen Datensatz an, **ohne** alte zu invalidieren (geändert 2026-06-19, damit eine ältere Mail nicht ins Leere läuft). Gültigkeit hängt nur an `expires_at`; alle aktiven Links zeigen auf dieselbe Sign-Seite. Innerhalb der 24 h kann der Teilnehmer beliebige offene Session-Zeilen signieren — der Token wird NICHT pro Session verbraucht.
+**Semantik:** Mehrere Links pro Kurs × Teilnehmer können gleichzeitig gültig sein — jeder läuft 7 Tage ab seiner Ausstellung. Re-Issue legt einfach einen neuen Datensatz an, **ohne** alte zu invalidieren (geändert 2026-06-19, damit eine ältere Mail nicht ins Leere läuft). Gültigkeit hängt nur an `expires_at`; alle aktiven Links zeigen auf dieselbe Sign-Seite. Innerhalb der 7 Tage kann der Teilnehmer beliebige offene Session-Zeilen signieren — der Token wird NICHT pro Session verbraucht.
 
 #### `course_review_notes`  (Bildungsträger-Prüfung, Abschluss-Gate 3)
 ```ts

@@ -28,7 +28,7 @@ export default function CookiesPage() {
           Signflow setzt ausschließlich technisch notwendige Cookies ein. Diese
           sind für den Betrieb der Anwendung unverzichtbar — ohne sie können sich
           angemeldete Nutzer:innen nicht sicher über mehrere Seitenaufrufe hinweg
-          ausweisen. Für solche Cookies ist gemäß § 25 Abs. 2 Nr. 2 TTDSG keine
+          ausweisen. Für solche Cookies ist gemäß § 25 Abs. 2 Nr. 2 TDDDG keine
           Einwilligung erforderlich, weshalb wir keinen Consent-Banner anzeigen.
         </p>
         <p>

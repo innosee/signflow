@@ -406,7 +406,8 @@ export function Stundennachweis(props: StundennachweisSheet) {
             <h2>Audit-Trail</h2>
             <p className="sheet-audit-intro">
               Chronologische Aufzeichnung der Signatur- und Freigabe-Ereignisse
-              gemäß §126a BGB / eIDAS Art. 26.
+              zur Beweissicherung der einfachen elektronischen Signatur
+              (Art. 3 Nr. 10 i.V.m. Art. 25 eIDAS-VO 910/2014).
             </p>
             <table>
               <thead>
@@ -439,7 +440,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
 
         <footer className="sheet-footer">
           Erzeugt via Signflow. Einfache elektronische Signatur — abgesichert
-          durch Zeitstempel, Identitätsnachweis und Audit-Protokoll.
+          durch Zeitstempel, IP-Adresse und Audit-Protokoll.
         </footer>
       </article>
     </>
