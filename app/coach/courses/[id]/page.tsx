@@ -138,6 +138,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       anzahlUe: schema.sessions.anzahlUe,
       modus: schema.sessions.modus,
       isErstgespraech: schema.sessions.isErstgespraech,
+      abgesagt: schema.sessions.abgesagt,
       topic: schema.sessions.topic,
       status: schema.sessions.status,
       // Kompetenzteams: zugewiesener Coach des Termins (+ Name für die Anzeige).
@@ -478,7 +479,11 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       <div className="text-xs text-zinc-500">
                         {s.modus === "online" ? "Online" : "Präsenz"}
                         {" · "}
-                        {s.isErstgespraech ? "Erstgespräch" : `${s.anzahlUe} UE`}
+                        {s.isErstgespraech
+                          ? "Erstgespräch"
+                          : s.abgesagt
+                            ? "abgesagt"
+                            : `${s.anzahlUe} UE`}
                       </div>
                       {feiertag && (
                         <span
@@ -490,7 +495,12 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       )}
                     </div>
                     <div className="flex-1 space-y-1.5">
-                      {s.topic.trim() ? (
+                      {s.abgesagt ? (
+                        <p className="text-zinc-500">
+                          Krankheitsbedingt abgesagt
+                          {s.topic.trim() ? ` · ${s.topic}` : ""}
+                        </p>
+                      ) : s.topic.trim() ? (
                         <p className="text-zinc-700">{s.topic}</p>
                       ) : (
                         <p className="italic text-amber-700">
@@ -498,25 +508,32 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                         </p>
                       )}
                       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                        <SessionStatusBadge
-                          status={s.status}
-                          hasActiveInvite={hasActiveInvite}
-                        />
-                        {isKompetenzteam && s.coachName && (
-                          <span
-                            className="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800"
-                            title="Diesem Termin zugewiesener Coach"
-                          >
-                            {s.coachName}
+                        {s.abgesagt ? (
+                          <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-zinc-700">
+                            Krankheitsbedingt abgesagt · 0 UE · keine Unterschrift
                           </span>
+                        ) : (
+                          <>
+                            <SessionStatusBadge
+                              status={s.status}
+                              hasActiveInvite={hasActiveInvite}
+                            />
+                            {isKompetenzteam && s.coachName && (
+                              <span
+                                className="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800"
+                                title="Diesem Termin zugewiesener Coach"
+                              >
+                                {s.coachName}
+                              </span>
+                            )}
+                            <span>Coach {coachSigned ? "✓" : "–"}</span>
+                            <span>
+                              TN {tnSigned}/{tnTotal}
+                            </span>
+                          </>
                         )}
-                        <span>
-                          Coach {coachSigned ? "✓" : "–"}
-                        </span>
-                        <span>
-                          TN {tnSigned}/{tnTotal}
-                        </span>
                         {canManage &&
+                          !s.abgesagt &&
                           !coachSigned &&
                           tnSigned === 0 && (
                             <Link
@@ -554,7 +571,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                   {/* Kompetenzteams: nur der dem Termin zugewiesene Coach
                       signiert (Lead-Fallback für Alt-Termine ohne Zuweisung).
                       Im Analog-Modus wird gar nicht digital signiert. */}
-                  {!analog && !coachSigned && canSignThis && coachHasSignature && (
+                  {!analog && !s.abgesagt && !coachSigned && canSignThis && coachHasSignature && (
                     <div className="pl-28">
                       {isFuture ? (
                         <p className="text-xs text-zinc-500">
@@ -566,7 +583,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                       )}
                     </div>
                   )}
-                  {!analog && !coachSigned && canSignThis && !coachHasSignature && (
+                  {!analog && !s.abgesagt && !coachSigned && canSignThis && !coachHasSignature && (
                     <p className="pl-28 text-xs text-amber-700">
                       Zum Signieren bitte zuerst{" "}
                       <Link

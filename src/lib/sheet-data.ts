@@ -102,6 +102,7 @@ export async function loadStundennachweisSheet(params: {
       anzahlUe: schema.sessions.anzahlUe,
       modus: schema.sessions.modus,
       isErstgespraech: schema.sessions.isErstgespraech,
+      abgesagt: schema.sessions.abgesagt,
       geeignet: schema.sessions.geeignet,
       eignungsanalyse: schema.sessions.eignungsanalyse,
       coachName: schema.users.name,
@@ -272,6 +273,7 @@ export async function loadStundennachweisSheet(params: {
         anzahlUe: s.anzahlUe,
         modus: s.modus,
         isErstgespraech: s.isErstgespraech,
+        abgesagt: s.abgesagt,
         geeignet: s.geeignet,
         eignungsanalyse: s.eignungsanalyse,
         // Kompetenzteams: zugewiesener Coach des Termins (Fallback = Lead).
