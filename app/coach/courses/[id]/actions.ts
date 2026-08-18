@@ -38,6 +38,7 @@ export type SessionFormValues = {
   modus: string;
   anzahlUe: string;
   isErstgespraech: boolean;
+  abgesagt: boolean;
   topic: string;
   geeignet: boolean | null;
   eignungsanalyse: Eignungsanalyse | null;
@@ -62,6 +63,7 @@ function readSessionFormValues(formData: FormData): SessionFormValues {
     modus: String(formData.get("modus") ?? ""),
     anzahlUe: String(formData.get("anzahlUe") ?? ""),
     isErstgespraech: formData.get("isErstgespraech") === "on",
+    abgesagt: formData.get("abgesagt") === "on",
     topic: String(formData.get("topic") ?? ""),
     geeignet:
       geeignetRaw === "ja" ? true : geeignetRaw === "nein" ? false : null,
@@ -84,6 +86,7 @@ function validateSessionFormFields(formData: FormData):
         modus: "praesenz" | "online";
         anzahlUe: string;
         isErstgespraech: boolean;
+        abgesagt: boolean;
         geeignet: boolean | null;
         eignungsanalyse: Eignungsanalyse | null;
       };
@@ -93,6 +96,7 @@ function validateSessionFormFields(formData: FormData):
   const topic = String(formData.get("topic") ?? "").trim();
   const modus = String(formData.get("modus") ?? "").trim();
   const isErstgespraech = formData.get("isErstgespraech") === "on";
+  const abgesagt = formData.get("abgesagt") === "on";
   const anzahlUeRaw = String(formData.get("anzahlUe") ?? "").trim();
   const geeignetRaw = String(formData.get("geeignet") ?? "").trim();
 
@@ -124,6 +128,13 @@ function validateSessionFormFields(formData: FormData):
     };
   }
 
+  if (abgesagt && isErstgespraech) {
+    return {
+      ok: false,
+      error: "Ein Termin kann nicht gleichzeitig Erstgespräch und abgesagt sein.",
+    };
+  }
+
   let anzahlUe: string;
   let geeignet: boolean | null;
   let eignungsanalyse: Eignungsanalyse | null;
@@ -145,6 +156,13 @@ function validateSessionFormFields(formData: FormData):
       };
     }
     eignungsanalyse = eignung.value;
+  } else if (abgesagt) {
+    // Krankheitsbedingt abgesagter Termin: 0 UE, keine Eignungsanalyse, keine
+    // Unterschrift. Zählt trotzdem als Termin (2/Woche) und belegt der AA die
+    // geplante Kadenz.
+    anzahlUe = "0";
+    geeignet = null;
+    eignungsanalyse = null;
   } else {
     const ue = Number.parseFloat(anzahlUeRaw.replace(",", "."));
     if (!Number.isFinite(ue) || ue <= 0) {
@@ -169,6 +187,7 @@ function validateSessionFormFields(formData: FormData):
       modus,
       anzahlUe,
       isErstgespraech,
+      abgesagt,
       geeignet,
       eignungsanalyse,
     },
@@ -576,8 +595,12 @@ export async function createSession(
           modus: v.modus,
           anzahlUe: v.anzahlUe,
           isErstgespraech: v.isErstgespraech,
+          abgesagt: v.abgesagt,
           geeignet: v.geeignet,
           eignungsanalyse: v.eignungsanalyse,
+          // Abgesagt braucht keine Unterschrift → direkt terminal („completed"),
+          // damit alle Signatur-Vollständigkeits-Gates ihn als erledigt sehen.
+          status: v.abgesagt ? "completed" : "pending",
         })
         .returning({ id: schema.sessions.id });
       if (!created) throw new Error("INSERT_FAILED");
@@ -685,8 +708,12 @@ export async function updateSession(
           modus: v.modus,
           anzahlUe: v.anzahlUe,
           isErstgespraech: v.isErstgespraech,
+          abgesagt: v.abgesagt,
           geeignet: v.geeignet,
           eignungsanalyse: v.eignungsanalyse,
+          // Session ist hier garantiert unsigniert (Guard oben) → Status folgt
+          // dem Typ: abgesagt ist terminal, sonst wieder offen.
+          status: v.abgesagt ? "completed" : "pending",
         })
         .where(eq(schema.sessions.id, sessionId));
       // FES-Gates resetten — Inhalts-Edit ändert den Stand.
@@ -1471,6 +1498,7 @@ async function topicsGateError(courseId: string): Promise<string | null> {
     .select({
       sessionDate: schema.sessions.sessionDate,
       topic: schema.sessions.topic,
+      abgesagt: schema.sessions.abgesagt,
     })
     .from(schema.sessions)
     .where(
@@ -1481,7 +1509,8 @@ async function topicsGateError(courseId: string): Promise<string | null> {
     )
     .orderBy(asc(schema.sessions.sessionDate));
   const missing = rows
-    .filter((r) => !r.topic || !r.topic.trim())
+    // Abgesagte Termine haben bewusst kein Thema → kein „Inhalt fehlt".
+    .filter((r) => !r.abgesagt && (!r.topic || !r.topic.trim()))
     .map((r) => deDate(r.sessionDate));
   if (missing.length === 0) return null;
   return (
@@ -1535,6 +1564,7 @@ export async function runAnwCheckAction(
       topic: schema.sessions.topic,
       anzahlUe: schema.sessions.anzahlUe,
       isErstgespraech: schema.sessions.isErstgespraech,
+      abgesagt: schema.sessions.abgesagt,
     })
     .from(schema.sessions)
     .where(
@@ -1550,7 +1580,11 @@ export async function runAnwCheckAction(
     const result = await runAnwCheck({
       massnahmeTyp: meta.massnahmeTyp,
       tenantName: meta.tenantName,
-      entries: entries.map((e) => ({
+      // Abgesagte Termine (0 UE, kein Inhalt) gehören nicht in die AZAV-
+      // Inhaltsprüfung — sie belegen nur die geplante Termin-Dichte.
+      entries: entries
+        .filter((e) => !e.abgesagt)
+        .map((e) => ({
         sessionDate: e.sessionDate,
         topic: e.topic,
         anzahlUe: Number.parseFloat(e.anzahlUe),
@@ -2379,6 +2413,7 @@ export async function signSessionAsCoach(
           id: schema.sessions.id,
           sessionDate: schema.sessions.sessionDate,
           coachId: schema.sessions.coachId,
+          abgesagt: schema.sessions.abgesagt,
         })
         .from(schema.sessions)
         .where(
@@ -2390,6 +2425,9 @@ export async function signSessionAsCoach(
         )
         .limit(1);
       if (!sess) throw new Error("SESSION_NOT_FOUND");
+      // Abgesagter Termin wird nicht signiert (UI blendet das Formular aus;
+      // dieser Guard fängt parallele/alte Requests ab).
+      if (sess.abgesagt) throw new Error("SESSION_ABGESAGT");
 
       // Kompetenzteams — HARTES Per-Termin-Gate: ein Coach darf NUR Termine
       // signieren, die ihm zugewiesen sind. Sonst wäre die Beweiskraft kaputt
@@ -2454,6 +2492,12 @@ export async function signSessionAsCoach(
       return {
         error:
           "Dieser Termin ist einem anderen Coach zugewiesen — nur der zugewiesene Coach kann ihn signieren.",
+      };
+    }
+    if (message === "SESSION_ABGESAGT") {
+      return {
+        error:
+          "Dieser Termin wurde krankheitsbedingt abgesagt und muss nicht signiert werden.",
       };
     }
     if (message === "FUTURE_SESSION") {

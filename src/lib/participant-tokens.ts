@@ -189,6 +189,8 @@ export type ResolvedToken = {
     anzahlUe: string;
     modus: "praesenz" | "online";
     isErstgespraech: boolean;
+    /** Krankheitsbedingt abgesagt: 0 UE, keine Unterschrift → NIE als „offen". */
+    abgesagt: boolean;
     hasParticipantSignature: boolean;
     /**
      * Vollständigkeit des Termins (`pending` = Coach offen, `coach_signed` =
@@ -272,6 +274,7 @@ export async function resolveParticipantToken(
       anzahlUe: schema.sessions.anzahlUe,
       modus: schema.sessions.modus,
       isErstgespraech: schema.sessions.isErstgespraech,
+      abgesagt: schema.sessions.abgesagt,
       status: schema.sessions.status,
     })
     .from(schema.sessions)
@@ -366,6 +369,7 @@ export async function resolveParticipantToken(
       anzahlUe: s.anzahlUe,
       modus: s.modus,
       isErstgespraech: s.isErstgespraech,
+      abgesagt: s.abgesagt,
       hasParticipantSignature: signedSessionIds.has(s.id),
       status: s.status,
     })),

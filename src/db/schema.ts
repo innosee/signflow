@@ -792,6 +792,14 @@ export const sessions = pgTable(
      * Vollständigkeit wird app-seitig für neue Erstgespräche erzwungen.
      */
     eignungsanalyse: jsonb("eignungsanalyse").$type<Eignungsanalyse>(),
+    /**
+     * Termin krankheitsbedingt (rechtzeitig) abgesagt: zählt UE-mäßig 0, braucht
+     * KEINE Unterschrift (Teilnehmer war ja abwesend), soll aber der AA gegenüber
+     * belegen, dass ein Termin geplant war (fließt in die „2 Termine/Woche"-
+     * Dichte mit ein). Wird beim Insert direkt auf `status='completed'` gesetzt,
+     * damit alle Signatur-Vollständigkeits-Gates ihn als erledigt behandeln.
+     */
+    abgesagt: boolean("abgesagt").notNull().default(false),
     status: sessionStatus("status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -807,11 +815,13 @@ export const sessions = pgTable(
     // Dashboard-Sichtbarkeit (Kompetenzteams): „welche Termine sind diesem
     // Coach zugewiesen" — gefiltert über coach_id.
     index("sessions_coach_id_idx").on(t.coachId),
-    // Erstgespräch: UE=0 und geeignet gesetzt. Reguläre Session: UE>0 und geeignet=null.
+    // Erstgespräch: UE=0 + geeignet gesetzt. Reguläre Session: UE>0 + geeignet=null.
+    // Abgesagt (krankheitsbedingt): UE=0 + geeignet=null (kein Erstgespräch).
     check(
       "sessions_erstgespraech_consistency",
-      sql`(${t.isErstgespraech} = true AND ${t.anzahlUe} = 0 AND ${t.geeignet} IS NOT NULL)
-         OR (${t.isErstgespraech} = false AND ${t.anzahlUe} > 0 AND ${t.geeignet} IS NULL)`,
+      sql`(${t.isErstgespraech} = true AND ${t.anzahlUe} = 0 AND ${t.geeignet} IS NOT NULL AND ${t.abgesagt} = false)
+         OR (${t.isErstgespraech} = false AND ${t.abgesagt} = false AND ${t.anzahlUe} > 0 AND ${t.geeignet} IS NULL)
+         OR (${t.isErstgespraech} = false AND ${t.abgesagt} = true AND ${t.anzahlUe} = 0 AND ${t.geeignet} IS NULL)`,
     ),
   ],
 );

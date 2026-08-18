@@ -61,7 +61,11 @@ export default async function ParticipantSignPage({ params }: Props) {
   }
 
   const hasSignature = !!resolved.participantSignatureUrl;
-  const open = resolved.sessions.filter((s) => !s.hasParticipantSignature);
+  // Krankheitsbedingt abgesagte Termine braucht der Teilnehmer NICHT zu
+  // signieren — nie als „offen" listen (sonst hinge er ewig darauf fest).
+  const open = resolved.sessions.filter(
+    (s) => !s.hasParticipantSignature && !s.abgesagt,
+  );
   const done = resolved.sessions.filter((s) => s.hasParticipantSignature);
 
   // Kunde-Dokumente (erango-Formulare): offen = vom Coach freigegeben (active),
