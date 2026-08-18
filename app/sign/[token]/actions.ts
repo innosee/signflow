@@ -66,6 +66,7 @@ export async function submitParticipantSignature(
         .select({
           id: schema.sessions.id,
           sessionDate: schema.sessions.sessionDate,
+          abgesagt: schema.sessions.abgesagt,
         })
         .from(schema.sessions)
         .where(
@@ -77,6 +78,8 @@ export async function submitParticipantSignature(
         )
         .limit(1);
       if (!sess) throw new Error("SESSION_INVALID");
+      // Krankheitsbedingt abgesagter Termin braucht keine Unterschrift.
+      if (sess.abgesagt) throw new Error("SESSION_ABGESAGT");
       // Zukunfts-Termine sind nicht signierbar (Termin noch nicht stattgefunden).
       if (isFutureSessionDate(sess.sessionDate)) {
         throw new Error("FUTURE_SESSION");
@@ -153,6 +156,12 @@ export async function submitParticipantSignature(
     }
     if (message === "SESSION_INVALID") {
       return { error: "Dieser Termin gehört nicht zu deinem Kurs." };
+    }
+    if (message === "SESSION_ABGESAGT") {
+      return {
+        error:
+          "Dieser Termin wurde krankheitsbedingt abgesagt und muss nicht unterschrieben werden.",
+      };
     }
     if (message === "FUTURE_SESSION") {
       return {
