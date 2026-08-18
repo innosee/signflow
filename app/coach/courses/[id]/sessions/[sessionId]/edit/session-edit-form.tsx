@@ -16,6 +16,7 @@ type SessionInitial = {
   anzahlUe: string;
   modus: "praesenz" | "online";
   isErstgespraech: boolean;
+  abgesagt: boolean;
   geeignet: boolean | null;
   eignungsanalyse: Eignungsanalyse | null;
 };
@@ -47,6 +48,9 @@ export function SessionEditForm({
   const [isErstgespraech, setIsErstgespraech] = useState(session.isErstgespraech);
   const [sessionDate, setSessionDate] = useState(session.sessionDate);
   const [anzahlUe, setAnzahlUe] = useState(session.anzahlUe);
+  // Krankheitsbedingt abgesagt: 0 UE, keine Unterschrift (mit Erstgespräch/UE
+  // gegenseitig ausschließend) — vorbefüllt aus dem bestehenden Termin.
+  const [abgesagt, setAbgesagt] = useState(session.abgesagt);
 
   // Weiche Feiertags-Warnung, identisch zur Neu-Anlage (nur Hinweis, kein Block).
   const feiertag = getFeiertag(sessionDate, bundesland);
@@ -62,7 +66,8 @@ export function SessionEditForm({
   // dieses Termins zählt NICHT zu bereitsVerplanteUe (excludeSessionId in der
   // Action), darum hier mit der aktuellen Eingabe rechnen.
   const ueNum = Number.parseFloat(anzahlUe.replace(",", "."));
-  const ueEingabe = !isErstgespraech && Number.isFinite(ueNum) ? ueNum : 0;
+  const ueEingabe =
+    !isErstgespraech && !abgesagt && Number.isFinite(ueNum) ? ueNum : 0;
   const verplantMitNeu = bereitsVerplanteUe + ueEingabe;
   const ueFrei = bewilligteUe - bereitsVerplanteUe;
   const ueUeberschritten = verplantMitNeu > bewilligteUe;
@@ -115,7 +120,7 @@ export function SessionEditForm({
             </select>
           </label>
 
-          {!isErstgespraech && (
+          {!isErstgespraech && !abgesagt && (
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-zinc-800">
                 UE <span className="text-red-600">*</span>
@@ -178,7 +183,10 @@ export function SessionEditForm({
             type="checkbox"
             name="isErstgespraech"
             checked={isErstgespraech}
-            onChange={(e) => setIsErstgespraech(e.target.checked)}
+            onChange={(e) => {
+              setIsErstgespraech(e.target.checked);
+              if (e.target.checked) setAbgesagt(false);
+            }}
             className="mt-0.5"
           />
           <span>
@@ -188,6 +196,24 @@ export function SessionEditForm({
             </span>
           </span>
         </label>
+
+        {!isErstgespraech && (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="abgesagt"
+              checked={abgesagt}
+              onChange={(e) => setAbgesagt(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Krankheitsbedingt abgesagt</span>
+              <span className="block text-xs text-zinc-500">
+                0 UE, keine Unterschrift. Zählt trotzdem als geplanter Termin.
+              </span>
+            </span>
+          </label>
+        )}
 
         {isErstgespraech && (
           <EignungAnalyseFieldset
