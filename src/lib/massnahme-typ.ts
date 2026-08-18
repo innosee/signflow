@@ -12,7 +12,7 @@ export type MassnahmeTypCode = (typeof MASSNAHME_TYPEN)[number];
 
 export const MASSNAHME_TYP_LABEL: Record<MassnahmeTypCode, string> = {
   EKC: "EKC — Karriere-Coaching",
-  ESC: "ESC — Standort-Coaching",
+  ESC: "ESC — systemisches Coaching",
   EGC: "EGC — Gründungs-Coaching",
   ESCA: "ESCA — Ausbildungs-Coaching / Probezeit",
 };
