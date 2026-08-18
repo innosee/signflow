@@ -43,6 +43,9 @@ export function SessionForm({
   const [isErstgespraech, setIsErstgespraech] = useState(!erstgespraechExists);
   const [sessionDate, setSessionDate] = useState("");
   const [anzahlUe, setAnzahlUe] = useState("");
+  // Krankheitsbedingt abgesagt: 0 UE, keine Unterschrift. Schließt sich mit
+  // Erstgespräch und UE-Eingabe gegenseitig aus.
+  const [abgesagt, setAbgesagt] = useState(false);
 
   // Harte Regel (auch serverseitig): ohne Erstgespräch kein Coaching-Termin.
   // Will der Coach hier eine reguläre UE anlegen, obwohl noch kein Erstgespräch
@@ -54,7 +57,8 @@ export function SessionForm({
   // Vorab-Anzeige — die harte Grenze zieht die Server-Action (validateCross-
   // SessionRules). Erstgespräch zählt 0 UE → kein Budget-Verbrauch.
   const ueNum = Number.parseFloat(anzahlUe.replace(",", "."));
-  const ueEingabe = !isErstgespraech && Number.isFinite(ueNum) ? ueNum : 0;
+  const ueEingabe =
+    !isErstgespraech && !abgesagt && Number.isFinite(ueNum) ? ueNum : 0;
   const verplantMitNeu = bereitsVerplanteUe + ueEingabe;
   const ueFrei = bewilligteUe - bereitsVerplanteUe;
   const ueUeberschritten = verplantMitNeu > bewilligteUe;
@@ -80,7 +84,7 @@ export function SessionForm({
   // nur 1 UE. Nur ein Hinweis (künftige Termine können die Woche noch füllen),
   // greift nicht beim Erstgespräch (0 UE).
   const wenigeTermineWarnung = (() => {
-    if (!sessionDate || isErstgespraech) return null;
+    if (!sessionDate || isErstgespraech || abgesagt) return null;
     const m = /^\d{4}-\d{2}-\d{2}$/.test(sessionDate);
     if (!m) return null;
     const key = isoWeekKey(sessionDate);
@@ -137,7 +141,7 @@ export function SessionForm({
             </select>
           </label>
 
-          {!isErstgespraech && (
+          {!isErstgespraech && !abgesagt && (
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-zinc-800">
                 UE <span className="text-red-600">*</span>
@@ -217,13 +221,36 @@ export function SessionForm({
               type="checkbox"
               name="isErstgespraech"
               checked={isErstgespraech}
-              onChange={(e) => setIsErstgespraech(e.target.checked)}
+              onChange={(e) => {
+                setIsErstgespraech(e.target.checked);
+                if (e.target.checked) setAbgesagt(false);
+              }}
               className="mt-0.5"
             />
             <span>
               <span className="font-medium">Erstgespräch</span>
               <span className="block text-xs text-zinc-500">
                 Zählt keine UE, braucht aber die Eignungsanalyse.
+              </span>
+            </span>
+          </label>
+        )}
+
+        {!isErstgespraech && (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="abgesagt"
+              checked={abgesagt}
+              onChange={(e) => setAbgesagt(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Krankheitsbedingt abgesagt</span>
+              <span className="block text-xs text-zinc-500">
+                Termin wurde (rechtzeitig) wegen Krankheit abgesagt: 0 UE, keine
+                Unterschrift nötig. Zählt trotzdem als geplanter Termin — so
+                sieht die Agentur für Arbeit die vorgesehene Termin-Dichte.
               </span>
             </span>
           </label>

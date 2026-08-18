@@ -68,6 +68,7 @@ export type StundennachweisSheet = {
     anzahlUe: string;
     modus: "praesenz" | "online";
     isErstgespraech: boolean;
+    abgesagt: boolean;
     geeignet: boolean | null;
     eignungsanalyse: Eignungsanalyse | null;
     /** Kompetenzteams: dem Termin zugewiesener Coach (Anzeige pro Zeile). */
@@ -255,7 +256,9 @@ export function Stundennachweis(props: StundennachweisSheet) {
                   <tr key={s.id}>
                     <td className="nowrap">{formatDate(s.sessionDate)}</td>
                     <td className="num">
-                      {s.isErstgespraech ? "—" : formatUe(s.anzahlUe)}
+                      {s.isErstgespraech || s.abgesagt
+                        ? "—"
+                        : formatUe(s.anzahlUe)}
                     </td>
                     <td className="nowrap">
                       {s.modus === "online" ? "Online" : "Präsenz"}
@@ -269,24 +272,38 @@ export function Stundennachweis(props: StundennachweisSheet) {
                           <br />
                         </>
                       )}
+                      {s.abgesagt && (
+                        <>
+                          <strong>Krankheitsbedingt abgesagt</strong>
+                          {s.topic ? " · " : null}
+                        </>
+                      )}
                       {s.topic}
                     </td>
                     <td>
-                      {multiCoach && (
+                      {multiCoach && !s.abgesagt && (
                         <div className="sig-coach-name">{s.coachName}</div>
                       )}
-                      <SignatureCell
-                        url={s.coachSignatureUrl}
-                        signedAt={s.coachSignedAt}
-                        analog={analog}
-                      />
+                      {s.abgesagt ? (
+                        <span style={{ color: "#666" }}>entfällt</span>
+                      ) : (
+                        <SignatureCell
+                          url={s.coachSignatureUrl}
+                          signedAt={s.coachSignedAt}
+                          analog={analog}
+                        />
+                      )}
                     </td>
                     <td>
-                      <SignatureCell
-                        url={s.participantSignatureUrl}
-                        signedAt={s.participantSignedAt}
-                        analog={analog}
-                      />
+                      {s.abgesagt ? (
+                        <span style={{ color: "#666" }}>entfällt</span>
+                      ) : (
+                        <SignatureCell
+                          url={s.participantSignatureUrl}
+                          signedAt={s.participantSignedAt}
+                          analog={analog}
+                        />
+                      )}
                     </td>
                   </tr>
                 ))}

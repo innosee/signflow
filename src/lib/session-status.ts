@@ -31,11 +31,19 @@ export async function recomputeSessionStatus(
   executor: DbOrTx = db,
 ): Promise<"pending" | "coach_signed" | "completed" | null> {
   const [sess] = await executor
-    .select({ id: schema.sessions.id, courseId: schema.sessions.courseId })
+    .select({
+      id: schema.sessions.id,
+      courseId: schema.sessions.courseId,
+      abgesagt: schema.sessions.abgesagt,
+    })
     .from(schema.sessions)
     .where(eq(schema.sessions.id, sessionId))
     .limit(1);
   if (!sess) return null;
+  // Abgesagte Termine sind terminal ("completed") und werden NIE signiert —
+  // eine Ableitung aus (nicht vorhandenen) Signaturen würde sie fälschlich auf
+  // `pending` zurücksetzen. Defensiv: unangetastet lassen.
+  if (sess.abgesagt) return "completed";
 
   const [coachSig] = await executor
     .select({ id: schema.signatures.id })
