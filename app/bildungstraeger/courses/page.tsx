@@ -152,6 +152,7 @@ export default async function BildungstraegerCoursesPage() {
           ? "Abgeschlossen"
           : "Aktiv",
       isArchived,
+      abgeschlossen: Boolean(c.abgeschlossenAt),
       bewilligt: Boolean(c.bewilligtAt),
       signatureMode: c.signatureMode,
       avgsStageLabel: isArchived ? null : AVGS_STAGE_LABEL[stage],
