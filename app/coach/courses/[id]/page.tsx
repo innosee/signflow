@@ -533,7 +533,6 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                           </>
                         )}
                         {canManage &&
-                          !s.abgesagt &&
                           !coachSigned &&
                           tnSigned === 0 && (
                             <Link
