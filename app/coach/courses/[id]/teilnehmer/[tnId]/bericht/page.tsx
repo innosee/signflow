@@ -4,6 +4,8 @@ import { and, eq, isNull, max } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { courseVisibleToCoach } from "@/lib/course-access";
+import { geleisteteUeForCourse } from "@/lib/course-ue";
+import { formatUeDE } from "@/lib/format-ue";
 import { getSigningEnabled, isImpersonating, requireCoach } from "@/lib/dal";
 import { formatDateDE } from "@/lib/format-date";
 import type { Abschlussbericht } from "@/db/schema";
@@ -86,6 +88,11 @@ export default async function BerEditorPage({ params }: Props) {
       ),
     );
 
+  // „Gesamtzahl UE" im Bericht = tatsächlich GELEISTETE UE, nicht die
+  // bewilligten. Bei vorzeitigem Ende (z.B. 17 von 80 UE) stünde sonst die
+  // Bewilligungsmenge im Dokument, obwohl sie nie erbracht wurde.
+  const geleisteteUe = await geleisteteUeForCourse(courseId);
+
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10 space-y-6">
       <div>
@@ -125,7 +132,7 @@ export default async function BerEditorPage({ params }: Props) {
         courseStartDate={row.course.startDate}
         courseEndDate={row.course.endDate}
         letzterTermin={letzterTermin ?? null}
-        gesamtzahlUe={String(row.course.anzahlBewilligteUe)}
+        gesamtzahlUe={formatUeDE(geleisteteUe)}
         initialBer={initialBer}
         impersonating={isImpersonating(session)}
         stopImpersonationAction={stopImpersonating}

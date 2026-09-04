@@ -177,7 +177,7 @@ export default async function CoachDocumentPage({ params }: Props) {
               courseInfo={{
                 von: sheet.course.startDate,
                 bis: sheet.course.letzterTermin ?? sheet.course.endDate,
-                ue: sheet.course.anzahlBewilligteUe,
+                ue: sheet.course.geleisteteUe,
                 ort: sheet.course.durchfuehrungsort,
               }}
               hasOrgSignature={!!sheet.orgSignatureUrl}

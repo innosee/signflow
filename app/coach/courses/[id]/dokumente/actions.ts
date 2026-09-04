@@ -8,6 +8,8 @@ import { and, eq, isNull, max } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { courseVisibleToCoach } from "@/lib/course-access";
+import { geleisteteUeForCourse } from "@/lib/course-ue";
+import { formatUeDE } from "@/lib/format-ue";
 import {
   assertNotImpersonating,
   isImpersonating,
@@ -433,7 +435,6 @@ export async function submitTnbCert(
       massnahmeTyp: schema.courses.massnahmeTyp,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
-      anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       durchfuehrungsort: schema.courses.durchfuehrungsort,
       participantName: schema.participants.name,
       orgSignatureUrl: schema.tenants.signatureUrl,
@@ -507,8 +508,10 @@ export async function submitTnbCert(
     ...baseForm,
     cert_von: ctx.startDate ?? "",
     cert_bis: letzterTermin ?? ctx.endDate ?? "",
-    cert_ue:
-      ctx.anzahlBewilligteUe != null ? String(ctx.anzahlBewilligteUe) : "",
+    // Eingefrorene Stundenzahl = tatsächlich GELEISTETE UE (Summe der
+    // signierten Termine), nicht die bewilligten: bei vorzeitigem Ende würde
+    // die Urkunde sonst nie erbrachte Stunden bescheinigen.
+    cert_ue: formatUeDE(await geleisteteUeForCourse(doc.courseId)),
     cert_ort: ctx.durchfuehrungsort ?? "",
     cert_datum: todayIsoBerlin(),
     tn_name: ctx.participantName ?? "",

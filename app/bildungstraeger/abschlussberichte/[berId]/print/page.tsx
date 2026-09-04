@@ -4,6 +4,8 @@ import { and, eq } from "drizzle-orm";
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
+import { geleisteteUeForCourse } from "@/lib/course-ue";
+import { formatUeDE } from "@/lib/format-ue";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { formatDateDE } from "@/lib/format-date";
 import { resolveAssetUrl } from "@/lib/storage";
@@ -54,7 +56,6 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
       courseAvgs: schema.courses.avgsNummer,
       courseStart: schema.courses.startDate,
       courseEnd: schema.courses.endDate,
-      courseUe: schema.courses.anzahlBewilligteUe,
       courseOrt: schema.courses.durchfuehrungsort,
       coachName: schema.users.name,
       coachSignatureUrl: schema.users.signatureUrl,
@@ -102,6 +103,17 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
       : "");
   const coachName = row.coachName || row.coachNameSnapshot || "";
 
+  // UE-Anzeige: für kurs-gebundene Berichte gewinnt der LIVE berechnete Wert
+  // (geleistete UE) über den `tn_ue`-Snapshot. Anders als Name/Zeitraum ist die
+  // Stundenzahl eine Tatsache des Kurses — sie muss zum ANW passen, und
+  // Alt-Berichte, die noch die bewilligten UE eingefroren haben, korrigieren
+  // sich so von selbst. Ad-hoc-Berichte (kein Kurs) haben nur den Snapshot.
+  const geleisteteUe = row.courseId
+    ? await geleisteteUeForCourse(row.courseId)
+    : null;
+  const ueDisplay =
+    geleisteteUe !== null ? formatUeDE(geleisteteUe) : row.tnUe;
+
   // Signatur + auto-gefülltes "Ort, Datum" nur für kurs-gebundene BERs:
   // Schnell-Check-Submissions sind Ad-hoc ohne Kurs-Kontext, da wäre der
   // Ort frei erfunden — der Coach trägt ihn handschriftlich nach.
@@ -125,11 +137,7 @@ export default async function BildungstraegerBerPrintPage({ params }: Props) {
         kundenNr,
         zeitraum,
         coachName,
-        gesamtzahlUe:
-          row.tnUe ||
-          (row.courseUe !== undefined && row.courseUe !== null
-            ? String(row.courseUe)
-            : ""),
+        gesamtzahlUe: ueDisplay,
         ortDatum,
         coachSignatureUrl: isAdhoc ? null : coachSignatureUrl,
         keineFehlzeiten: row.keineFehlzeiten,
