@@ -52,6 +52,13 @@ export type DocumentSheetData = {
     durchfuehrungsort: string;
     avgsNummer: string;
     anzahlBewilligteUe: number;
+    /**
+     * Tatsächlich geleistete UE (Summe der signierten Termine). Die
+     * Teilnahmebescheinigung weist DIESEN Wert aus, nicht die bewilligten —
+     * bei vorzeitigem Ende weichen sie auseinander. `null` = kein Kurs-Kontext
+     * (öffentlicher /tnb-Konfigurator).
+     */
+    geleisteteUe: number | null;
     startDate: string | null;
     endDate: string | null;
     /** Letzter tatsächlicher Termin (max session_date) oder null. */

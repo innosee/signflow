@@ -1,4 +1,5 @@
 import { formatDateDE } from "@/lib/format-date";
+import { formatUeDE } from "@/lib/format-ue";
 import { isMassnahmeTyp } from "@/lib/massnahme-typ";
 import { TNB_MASSNAHME_TITEL, tnbInhalteListe } from "@/lib/documents/tnb-katalog";
 import type { DocumentSheetData } from "@/components/documents/types";
@@ -38,11 +39,13 @@ export function TnbTeilnahmebescheinigung({
   // Zeitraum-Ende = letzter tatsächlicher Termin; Bewilligungsende nur Fallback.
   const bis =
     fd.cert_bis || data.course.letzterTermin || data.course.endDate || "";
+  // UE auf der Urkunde = tatsächlich GELEISTETE UE (Summe der signierten
+  // Termine), nicht die bewilligten: endet die Maßnahme vorzeitig, wären die
+  // bewilligten UE (z.B. 80 statt 17) schlicht falsch bescheinigt. Bei
+  // ausgestellten Bescheinigungen gewinnt der eingefrorene `cert_ue`-Snapshot.
   const ue =
     fd.cert_ue ||
-    (data.course.anzahlBewilligteUe != null
-      ? String(data.course.anzahlBewilligteUe)
-      : "");
+    (data.course.geleisteteUe != null ? formatUeDE(data.course.geleisteteUe) : "");
   const ort = fd.cert_ort || data.course.durchfuehrungsort || "";
   // Ausgestellt → eingefrorenes Datum; Entwurf-Vorschau → heute (statt „den —").
   const ausstellungsdatum: string | Date = fd.cert_datum || new Date();
