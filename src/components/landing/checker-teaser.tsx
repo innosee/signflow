@@ -14,7 +14,7 @@ export function LandingCheckerTeaser() {
           </h2>
           <p className="text-base leading-relaxed text-zinc-600">
             Schreib teilnehmerbezogene Abschlussberichte direkt in Signflow.
-            Der Checker anonymisiert deine Inhalte in Frankfurt, prüft sie
+            Der Checker pseudonymisiert deine Inhalte in Frankfurt, prüft sie
             gegen den AMDL-Regelkatalog und schlägt konkrete Umformulierungen
             vor — übernehmbar in einem Klick.
           </p>

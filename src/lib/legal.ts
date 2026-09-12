@@ -3,19 +3,25 @@
 // zwischen den Rechtsseiten (z.B. USt-ID, die vorher in einer Seite gefüllt und
 // in einer anderen Platzhalter war).
 //
-// 👉 Rechtlicher Hinweis: Die Rechtstexte, die diese Daten verwenden, sind
-// VORLAGEN und ersetzen keine Rechtsberatung. Offene Punkte (Datenschutz-
-// beauftragte:r, Joint-Controllership-Abgrenzung pro Bildungsträger, AVV-
-// Vertragstemplate, Art.-9-Spezifika des Checkers) sind in den Seiten gelb
-// markiert und müssen vor Echtbetrieb mit Teilnehmerdaten durch eine DSGVO-
-// Beratung abgenommen werden. Memory: project_datenschutzerklaerung,
-// project_legal_entity.
+// 👉 Öffentliche Rechtstexte: KEINE internen Notizen/Platzhalter auf die Seiten
+// (2026-09: öffentlich sichtbare „Entwurf"-Notizen haben eine
+// Teilnehmer-Beschwerde ausgelöst). Offenes gehört in
+// docs/rechts-audit-massnahmen.md. Memory: project_dsgvo_beschwerde_2026_09.
 
 export const legal = {
   productName: "Signflow",
   domain: "signflow.coach",
-  // Stand der zuletzt inhaltlich geprüften Rechtstexte (Entwurf).
-  lastUpdated: "16. Juli 2026",
+  // Stand der zuletzt inhaltlich geänderten Rechtstexte.
+  lastUpdated: "12. September 2026",
+
+  // Externe:r Datenschutzbeauftragte:r. null = noch nicht benannt → die
+  // Datenschutzerklärung zeigt dann den allgemeinen Datenschutz-Kontakt.
+  // Nach der Benennung hier eintragen (+ Meldung an den LfDI BW).
+  dataProtectionOfficer: null as {
+    name: string;
+    address: string;
+    email: string;
+  } | null,
 
   company: {
     name: "innosee GmbH",
@@ -49,26 +55,26 @@ export const legal = {
   subprocessors: [
     {
       name: "Vercel Inc.",
-      purpose:
-        "Hosting der Anwendung; außerdem Objekt-Storage für Bestands-Dateien aus der früheren Speicherlösung (Vercel Blob), die schrittweise in den privaten Objektspeicher überführt werden",
-      region: "EU (Frankfurt), Unternehmenssitz USA — SCCs",
+      // Vercel Blob wird nicht mehr genutzt (Prod seit 2026-07 vollständig R2).
+      purpose: "Hosting der Anwendung",
+      region: "EU (Frankfurt), Unternehmenssitz USA — DPF-zertifiziert, zusätzlich SCCs",
     },
     {
-      name: "Neon Inc.",
+      name: "Databricks, Inc. (Neon)",
       purpose: "Datenbank (Kurse, Sitzungen, Audit-Log)",
-      region: "EU (AWS Frankfurt), Unternehmenssitz USA — SCCs",
+      region: "EU (AWS Frankfurt), Unternehmenssitz USA — DPF-zertifiziert, zusätzlich SCCs",
     },
     {
       name: "Cloudflare, Inc.",
       purpose:
         "Objekt-Storage (R2) für Unterschriftsbilder, Logos und finale PDF-Nachweise; privater Bucket, Zugriff nur über kurzlebige signierte URLs. Zusätzlich Bot-Schutz (Turnstile) auf Registrierungs- und Wartelisten-Formularen",
       region:
-        "EU-Jurisdiction (Frankfurt/Amsterdam), Unternehmenssitz USA — SCCs",
+        "EU-Jurisdiction (Frankfurt/Amsterdam), Unternehmenssitz USA — DPF-zertifiziert, zusätzlich SCCs",
     },
     {
-      name: "Resend Inc.",
+      name: "Resend (Plus Five Five, Inc.)",
       purpose: "Versand transaktionaler E-Mails (Magic Links, Einladungen)",
-      region: "EU, Unternehmenssitz USA — SCCs",
+      region: "EU, Unternehmenssitz USA — DPF-zertifiziert, zusätzlich SCCs",
     },
     {
       name: "Sieben Communications GmbH (seven.io / sms77)",
@@ -79,14 +85,14 @@ export const legal = {
     {
       name: "IONOS SE",
       purpose:
-        "Compute-VM und AI Model Hub für die Anonymisierung (nur Checker)",
+        "Compute-VM und AI Model Hub für die Pseudonymisierung von Abschlussberichten vor der KI-Prüfung (nur Checker); außerdem Speicherort der verschlüsselten Datensicherungen",
       region: "Deutschland",
     },
     {
       name: "Microsoft Ireland Operations Ltd. (Azure OpenAI)",
       purpose:
-        "Regelprüfung auf anonymisiertem Text (Abschlussbericht-Checker), KI-gestützte Compliance-Prüfung der stichwortartigen Coach-Einträge in der Anwesenheitsliste (ANW-Check) sowie Beantwortung von Support-Anfragen im Coach-Bereich (Chat-Eingaben; bitte dort keine Klarnamen oder Kunden-Nummern eingeben)",
-      region: "EU (Sweden Central oder Germany West Central) — SCCs",
+        "Regelprüfung auf pseudonymisiertem Text (Abschlussbericht-Checker), KI-gestützte Compliance-Prüfung der stichwortartigen Coach-Einträge in der Anwesenheitsliste (ANW-Check) sowie Beantwortung von Support-Anfragen im Coach-Bereich (Chat-Eingaben; bitte dort keine Klarnamen oder Kunden-Nummern eingeben)",
+      region: "EU (Sweden Central oder Germany West Central), Konzernsitz USA — DPF-zertifiziert, zusätzlich SCCs",
     },
   ],
 } as const;

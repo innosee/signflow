@@ -136,7 +136,20 @@ export type DocumentConfig = {
    * Template-Komponente, nicht hier.
    */
   signers: { coach: boolean };
+  /**
+   * Fassung des Vertragstexts. Wird bei der Freigabe als `text_version` in den
+   * Snapshot (`form_data`) geschrieben, damit ein einmal freigegebenes/signiertes
+   * Dokument für immer mit genau dem Text rendert, den die Parteien gesehen
+   * haben — die Templates rendern live, eine Textänderung würde sonst rückwirkend
+   * alle Alt-Dokumente umschreiben. Freigegebene Dokumente OHNE `text_version`
+   * sind Fassung 1. Beim Ändern eines Vertragstexts: hochzählen + die alte
+   * Fassung im Template weiter rendern.
+   */
+  textVersion?: string;
 };
+
+/** Snapshot-Schlüssel für `DocumentConfig.textVersion`. */
+export const TEXT_VERSION_KEY = "text_version";
 
 // Maßnahme-/Vertragsfelder der Teilnehmervertrag & Teilnahmevereinbarung (F08).
 const TNV_FIELDS: DocField[] = [
@@ -179,6 +192,8 @@ const F08: DocumentConfig = {
   // Reduziert auf das, was erango realistisch immer hat.
   requiredMasterData: ["vorname", "nachname"],
   signers: { coach: true },
+  // 2 = Datenschutzhinweise §9.4/9.5 nennen Signflow + Drittland korrekt (2026-09).
+  textVersion: "2",
 };
 
 const F21: DocumentConfig = {
