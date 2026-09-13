@@ -12,6 +12,7 @@ import {
   MASTER_FIELD_ORDER,
   missingMasterData,
   missingRequiredFields,
+  TEXT_VERSION_KEY,
   type DocumentOwner,
   type DocumentTypeId,
 } from "@/lib/documents/config";
@@ -248,6 +249,8 @@ export async function submitDocument(params: {
     tn_phone: p.phone ?? "",
     tn_festnetz: p.festnetz ?? "",
     tn_email: p.email,
+    // Vertragstext-Fassung einfrieren (siehe DocumentConfig.textVersion).
+    ...(cfg.textVersion ? { [TEXT_VERSION_KEY]: cfg.textVersion } : {}),
   };
 
   try {

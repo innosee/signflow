@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { legal } from "@/lib/legal";
 
-const { company, supervisoryAuthority } = legal;
+const { company, supervisoryAuthority, dataProtectionOfficer } = legal;
 
 export const metadata: Metadata = {
   title: "Datenschutzerklärung — Signflow",
@@ -26,8 +26,6 @@ export default function DatenschutzPage() {
           personenbezogener Daten bei der Nutzung von Signflow.
         </p>
       </header>
-
-      <DraftNotice />
 
       <Section title="1. Verantwortlicher">
         <p>
@@ -61,27 +59,67 @@ export default function DatenschutzPage() {
           </Link>
           .
         </p>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+          <p className="font-semibold text-zinc-900">
+            Hinweis für Teilnehmer:innen und Coaches
+          </p>
+          <p className="mt-2">
+            Signflow wird von Bildungsträgern genutzt, um ihre Maßnahmen zu
+            dokumentieren. Für alle Daten, die ein Bildungsträger in Signflow
+            verarbeitet — insbesondere zu Teilnehmer:innen, Coaches, Maßnahmen,
+            Terminen, Unterschriften und Dokumenten — ist{" "}
+            <strong>der jeweilige Bildungsträger Verantwortlicher</strong>. Die{" "}
+            {company.name} verarbeitet diese Daten ausschließlich in dessen
+            Auftrag und nach dessen Weisung als Auftragsverarbeiterin (Art. 28
+            DSGVO). Sie nutzt die Daten nicht für eigene Zwecke.
+          </p>
+          <p className="mt-2">
+            Welche Daten Ihr Bildungsträger zu welchen Zwecken verarbeitet,
+            erfahren Sie aus dessen Datenschutzhinweisen; Anfragen zu Ihren
+            Rechten richten Sie bitte an ihn (siehe Ziffer 8). Die Abschnitte 4
+            und 5 beschreiben, wie Signflow diese Daten technisch verarbeitet.
+          </p>
+        </div>
         <p>
-          <Placeholder>
-            Multi-Tenant-Kontext: Signflow wird seit 2026-05-05 mehrmandantenfähig
-            betrieben. Für Kurs-, Sitzungs- und Teilnehmerdaten ist in der Regel
-            der jeweilige Bildungsträger Verantwortlicher; innosee GmbH handelt
-            insoweit als Auftragsverarbeiterin nach Art. 28 DSGVO. Die genaue
-            Abgrenzung (Joint Controllership vs. AV) muss durch die
-            DSGVO-Beratung formuliert und je Bildungsträger per AVV bestätigt
-            werden.
-          </Placeholder>
+          Eigenverantwortlich verarbeitet die {company.name} nur Daten zum
+          Betrieb dieser Website sowie zur Vertragsbeziehung mit den
+          Bildungsträgern (z.&nbsp;B. Registrierung, Warteliste, Support).
         </p>
       </Section>
 
-      <Section title="2. Datenschutzbeauftragte:r">
-        <p>
-          <Placeholder>
-            Benennung eines:r Datenschutzbeauftragten ist bei regelmäßiger
-            Verarbeitung von Art.-9-Daten (Abschlussbericht-Checker) wahrscheinlich
-            Pflicht. Namens- und Kontaktangabe hier vor Go-Live ergänzen.
-          </Placeholder>
-        </p>
+      <Section
+        title={
+          dataProtectionOfficer
+            ? "2. Datenschutzbeauftragte:r"
+            : "2. Kontakt in Datenschutzfragen"
+        }
+      >
+        {dataProtectionOfficer ? (
+          <p>
+            {dataProtectionOfficer.name}
+            <br />
+            {dataProtectionOfficer.address}
+            <br />
+            E-Mail:{" "}
+            <a
+              href={`mailto:${dataProtectionOfficer.email}`}
+              className="text-zinc-900 underline underline-offset-4 hover:text-zinc-700"
+            >
+              {dataProtectionOfficer.email}
+            </a>
+          </p>
+        ) : (
+          <p>
+            Fragen zum Datenschutz bei Signflow richten Sie bitte an{" "}
+            <a
+              href={`mailto:${company.email}`}
+              className="text-zinc-900 underline underline-offset-4 hover:text-zinc-700"
+            >
+              {company.email}
+            </a>
+            .
+          </p>
+        )}
       </Section>
 
       <Section title="3. Gegenstand und Module">
@@ -97,7 +135,7 @@ export default function DatenschutzPage() {
           </li>
           <li>
             <strong>Abschlussbericht-Checker</strong> — KI-gestützte Regelprüfung
-            von AVGS-Abschlussberichten mit vorgeschalteter Anonymisierung.
+            von AVGS-Abschlussberichten mit vorgeschalteter Pseudonymisierung.
           </li>
         </ul>
       </Section>
@@ -117,17 +155,44 @@ export default function DatenschutzPage() {
             <li>
               Elektronische Signatur der Nachweise (einfache elektronische
               Signatur: Canvas-Unterschrift mit Zeitstempel, IP-Adresse und
-              Audit-Protokoll) und Übermittlung an die Agentur für Arbeit.
+              Audit-Protokoll) und Bereitstellung der finalen Nachweise zur
+              Vorlage bei der Agentur für Arbeit durch den Bildungsträger.
+            </li>
+            <li>
+              Erstellung und elektronische Signatur von Kundendokumenten des
+              Bildungsträgers (z.&nbsp;B. Teilnehmervertrag,
+              Strategievereinbarung, Teilnahmebescheinigung)
             </li>
           </ul>
         </Subsection>
         <Subsection title="4.2 Datenkategorien">
           <ul className="list-disc space-y-1 pl-5">
             <li>
-              Stammdaten (Name, E-Mail-Adresse, Kunden-Nr. der Teilnehmer:innen,
-              optional Mobilnummer für SMS-Versand)
+              Stammdaten der Teilnehmer:innen (Name, E-Mail-Adresse,
+              Kundennummer der Agentur für Arbeit, optional Mobil- und
+              Festnetznummer); für Kundendokumente zusätzlich Anschrift sowie
+              optional Geburtsdatum und Geburtsort
             </li>
-            <li>Kurs- und Sitzungsdaten (Termine, Themen, Unterrichtseinheiten)</li>
+            <li>
+              Maßnahmedaten (Maßnahmentyp, AVGS-Nummer, Bedarfsträger,
+              Zeitraum, bewilligte und geleistete Unterrichtseinheiten,
+              Durchführungsort)
+            </li>
+            <li>
+              Termindaten (Datum, Unterrichtseinheiten, Präsenz/Online,
+              Themen-Stichworte), beim Erstgespräch die Eignungsanalyse sowie
+              gegebenenfalls der Vermerk einer krankheitsbedingten Absage
+              (siehe Ziffer 4.6)
+            </li>
+            <li>
+              Inhalte der Kundendokumente und Abschlussberichte, einschließlich
+              des Integrationsergebnisses (z.&nbsp;B. Vermittlung mit Datum und
+              Arbeitgeber)
+            </li>
+            <li>
+              Daten der Coaches und Mitarbeitenden des Bildungsträgers (Name,
+              E-Mail-Adresse, Rolle, Unterschriftsbild, Anmeldedaten)
+            </li>
             <li>Unterschriftsbilder (Canvas-Eingabe, als Bilddatei gespeichert)</li>
             <li>
               Signatur-Metadaten (IP-Adresse, Zeitstempel, Rolle) als Audit-Log;
@@ -148,6 +213,10 @@ export default function DatenschutzPage() {
           </ul>
         </Subsection>
         <Subsection title="4.3 Rechtsgrundlagen">
+          <p>
+            Die Verarbeitung erfolgt im Auftrag des Bildungsträgers auf dessen
+            Rechtsgrundlagen, insbesondere:
+          </p>
           <ul className="list-disc space-y-1 pl-5">
             <li>
               Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung bzw. vorvertragliche
@@ -199,7 +268,7 @@ export default function DatenschutzPage() {
             <strong>Nicht</strong> übermittelt werden Stammdaten der
             Teilnehmer:innen (Name, E-Mail, Kunden-Nr.), Unterschriftsbilder oder
             Signatur-Metadaten. Anders als beim Abschlussbericht-Checker (Ziffer 5)
-            werden die Termin-Stichworte <strong>nicht anonymisiert</strong>, da es
+            werden die Termin-Stichworte <strong>nicht pseudonymisiert</strong>, da es
             sich um kurze, sachbezogene Themenangaben ohne Personenbezug handelt;
             Coaches sind angehalten, in diese Felder keine Klarnamen oder sensiblen
             Angaben einzutragen. Die Übermittlung erfolgt an ein Rechenzentrum in
@@ -213,6 +282,25 @@ export default function DatenschutzPage() {
             an der Qualitätssicherung und AZAV-Konformität der Nachweise). Der
             Check hat rein unterstützenden Charakter; die Entscheidung über den
             Nachweis trifft stets der Coach.
+          </p>
+        </Subsection>
+        <Subsection title="4.6 Vermerk krankheitsbedingter Absagen (Gesundheitsdaten)">
+          <p>
+            Sagt ein:e Teilnehmer:in einen Termin krankheitsbedingt ab, kann der
+            Coach den Termin als &bdquo;krankheitsbedingt abgesagt&ldquo; vermerken. Der
+            Termin wird dann mit 0 Unterrichtseinheiten ausgewiesen und muss
+            nicht unterschrieben werden; der Vermerk erscheint auch auf dem
+            finalen Nachweis. Weil er Rückschlüsse auf eine Erkrankung zulässt,
+            handelt es sich um ein Gesundheitsdatum im Sinne von Art. 9 DSGVO.
+            Erfasst wird ausschließlich die Tatsache der krankheitsbedingten
+            Absage — keine Diagnose, keine Krankschreibung und keine weiteren
+            Angaben zum Gesundheitszustand.
+          </p>
+          <p>
+            Rechtsgrundlage ist Art. 9 Abs. 2 lit. b DSGVO i.V.m. § 22 Abs. 1
+            Nr. 1 lit. a BDSG (Rechte und Pflichten aus dem Recht der sozialen
+            Sicherheit, hier die Dokumentation der Maßnahme gegenüber der
+            Agentur für Arbeit).
           </p>
         </Subsection>
       </Section>
@@ -253,7 +341,7 @@ export default function DatenschutzPage() {
         <Subsection title="5.3 Rechtsgrundlagen">
           <ul className="list-disc space-y-1 pl-5">
             <li>
-              Art. 9 Abs. 2 lit. b DSGVO i.V.m. § 22 Abs. 1 Nr. 1 lit. b BDSG
+              Art. 9 Abs. 2 lit. b DSGVO i.V.m. § 22 Abs. 1 Nr. 1 lit. a BDSG
               (Pflichten aus dem Recht der sozialen Sicherheit) für den
               Prüfvorgang selbst
             </li>
@@ -267,10 +355,23 @@ export default function DatenschutzPage() {
           <p>
             Rohtexte von Berichten werden ausschließlich im Browser der
             bearbeitenden Person sowie auf einer dedizierten Compute-VM bei der
-            IONOS SE in Deutschland verarbeitet. Dort erfolgt eine dreistufige
-            Anonymisierung (Regex, lokales GLiNER-Modell, IONOS AI Model Hub).
-            Erst die anonymisierte Fassung wird an weitere Verarbeiter
-            weitergeleitet. Rohtexte werden nicht persistent gespeichert.
+            IONOS SE in Deutschland verarbeitet. Dort erfolgt eine dreistufige{" "}
+            <strong>Pseudonymisierung</strong> (Mustererkennung, lokales
+            Erkennungsmodell GLiNER, IONOS AI Model Hub): Namen, Anschriften,
+            Datumsangaben und andere identifizierende Angaben werden durch
+            Platzhalter ersetzt. Die Zuordnung der Platzhalter zu den
+            Originalangaben verbleibt im Browser der bearbeitenden Person; sie
+            wird weder an Microsoft übermittelt noch von uns gespeichert.
+          </p>
+          <p>
+            Erst die pseudonymisierte Fassung wird an Microsoft (Azure OpenAI
+            Service, EU-Region) zur Regelprüfung übermittelt. Weil die Zuordnung
+            technisch wiederhergestellt werden kann, gelten auch
+            pseudonymisierte Texte weiterhin als personenbezogene Daten; die
+            Übermittlung ist deshalb durch den Auftragsverarbeitungsvertrag mit
+            Microsoft abgesichert (vgl. Ziffer 6). Microsoft verwendet die
+            Eingaben nicht zum Training von KI-Modellen. Rohtexte werden nicht
+            dauerhaft gespeichert.
           </p>
         </Subsection>
       </Section>
@@ -278,10 +379,16 @@ export default function DatenschutzPage() {
       <Section title="6. Empfänger und Auftragsverarbeiter">
         <p>
           Wir setzen sorgfältig ausgewählte Dienstleister ein. Mit unseren
-          Auftragsverarbeitern schließen wir Verträge nach Art. 28 DSGVO ab; bei
-          Übermittlungen in Drittländer stützen wir uns auf die
-          EU-Standardvertragsklauseln (SCCs) und – soweit vorhanden –
-          Angemessenheitsbeschlüsse der EU-Kommission.
+          Auftragsverarbeitern schließen wir Verträge nach Art. 28 DSGVO ab.
+        </p>
+        <p>
+          Die Daten werden in Rechenzentren in der EU gespeichert und
+          verarbeitet. Einige Dienstleister haben ihren Unternehmenssitz in den
+          USA; ein Zugriff von dort lässt sich deshalb nicht vollständig
+          ausschließen. Für diesen Fall stützen wir uns auf den
+          Angemessenheitsbeschluss der EU-Kommission zum EU-US Data Privacy
+          Framework, soweit der Dienstleister danach zertifiziert ist, und
+          ergänzend auf die EU-Standardvertragsklauseln (SCCs).
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -319,7 +426,7 @@ export default function DatenschutzPage() {
           </li>
           <li>
             Rohberichte im Checker-Modul: transient im Browser bzw. RAM der
-            Anonymisierungs-VM, keine persistente Speicherung
+            Pseudonymisierungs-VM, keine persistente Speicherung
           </li>
           <li>
             Freigegebene Berichtsinhalte (nach Regelprüfung): bis zum Ende der
@@ -374,6 +481,14 @@ export default function DatenschutzPage() {
         <p>
           Zur Ausübung Ihrer Rechte genügt eine formlose Nachricht an die oben
           genannte E-Mail-Adresse.
+        </p>
+        <p>
+          <strong>Teilnehmer:innen und Coaches</strong> wenden sich mit Anliegen
+          zu Daten, die ein Bildungsträger in Signflow verarbeitet, bitte an
+          diesen Bildungsträger als Verantwortlichen (siehe Ziffer 1). Erreicht
+          uns eine solche Anfrage, leiten wir sie unverzüglich an den
+          Bildungsträger weiter und unterstützen ihn bei der Beantwortung, zum
+          Beispiel bei Auskunft oder Löschung.
         </p>
       </Section>
 
@@ -462,7 +577,7 @@ export default function DatenschutzPage() {
           unter dieser Adresse abrufbare Fassung.
         </p>
         <p className="text-xs text-zinc-500">
-          Stand: {legal.lastUpdated} (Entwurf)
+          Stand: {legal.lastUpdated}
         </p>
       </Section>
     </article>
@@ -518,26 +633,5 @@ function ProcessorRow({
       <td className="py-2 pr-4 align-top">{purpose}</td>
       <td className="py-2 align-top text-zinc-600">{region}</td>
     </tr>
-  );
-}
-
-function Placeholder({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-xs text-amber-900">
-      {children}
-    </span>
-  );
-}
-
-function DraftNotice() {
-  return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-      <strong className="font-semibold">Entwurf — noch nicht freigegeben.</strong>{" "}
-      Dieser Text spiegelt den technischen Aufbau korrekt wider, ersetzt aber keine
-      rechtliche Prüfung. Vor dem Go-Live müssen die gelb markierten Felder
-      ausgefüllt und die Formulierungen durch eine:n DSB bzw. DSGVO-Berater:in
-      abgenommen werden. Art.-9-Spezifika des Abschlussbericht-Checkers werden in
-      Generator-Templates erfahrungsgemäß nicht sauber abgebildet.
-    </div>
   );
 }
