@@ -71,8 +71,7 @@ export default function DatenschutzPage() {
             <strong>der jeweilige Bildungsträger Verantwortlicher</strong>. Die{" "}
             {company.name} verarbeitet diese Daten ausschließlich in dessen
             Auftrag und nach dessen Weisung als Auftragsverarbeiterin (Art. 28
-            DSGVO) auf Grundlage eines Auftragsverarbeitungsvertrags. Sie nutzt
-            die Daten nicht für eigene Zwecke.
+            DSGVO). Sie nutzt die Daten nicht für eigene Zwecke.
           </p>
           <p className="mt-2">
             Welche Daten Ihr Bildungsträger zu welchen Zwecken verarbeitet,
