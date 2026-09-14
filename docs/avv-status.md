@@ -29,6 +29,15 @@ hier, weil sie sich gut neben Code + Datenschutzerklärung pflegen lässt.
 - ⚪ **Nicht erforderlich** — kein AV-Verhältnis (z.B. Zertifikats-
   Aussteller, der keine Nutzungsdaten sieht)
 
+## Kunden-AVVs (innosee als Auftragsverarbeiter)
+
+| Bildungsträger | Status | Anmerkung |
+|---|---|---|
+| **erango GmbH** | ✅ Signiert (2026-09-14, GF Victoria Dressel) | Bis dahin gab es KEINEN AVV — erst eine Teilnehmer-Beschwerde (2026-09-11) hat das aufgedeckt. Vorlage + unterschriebenes PDF in `~/Documents/innosee-compliance/kunden-avv/`. |
+
+Neue Bildungsträger brauchen den AVV **vor** dem ersten Echtdatensatz
+(Onboarding-Schritt noch offen, siehe `docs/rechts-audit-massnahmen.md`).
+
 ## Provider-Liste
 
 ### Signatur-Modul
