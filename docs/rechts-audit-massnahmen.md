@@ -51,8 +51,9 @@ Reine Text-/Doku-Fixes, kein Verhaltens-Code. **Auf Prod live (PR #191, 2026-08-
 - 🔄 **AVV-Template innosee ↔ Bildungsträger** + verbindlicher Onboarding-Schritt
   (heute nur `mailto:` „AVV anfragen"). **2026-09-12: Es gab KEINEN AVV mit erango**
   (einziger Tenant mit Echtdaten) — ausgelöst durch eine Teilnehmer-Beschwerde.
-  Entwurf erango↔innosee liegt in `~/Documents/innosee-compliance/kunden-avv/`,
-  Unterschrift durch GF Victoria Dressel offen. Onboarding-Schritt für neue BT offen. — _du + wir_
+  **2026-09-14: AVV erango↔innosee von GF Victoria Dressel unterschrieben**
+  (Ablage `~/Documents/innosee-compliance/kunden-avv/`). DSE §1 nennt den AVV wieder.
+  Offen: Onboarding-Schritt (AVV-Akzeptanz) für neue Bildungsträger. — _du + wir_
 - ☐ **DSB benennen** (§ 38 Abs. 1 S. 2 BDSG: DSFA-pflichtig → Pflicht unabhängig
   von der Mitarbeiterzahl) + **DSFA** (Art. 35). Shortlist 2026-09: machCon (Engen),
   DDSK (Tettnang), DATA-ORG (Konstanz, Preisvergleich), RA Schwytz (Konstanz, AVV).
