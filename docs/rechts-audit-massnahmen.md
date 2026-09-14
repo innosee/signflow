@@ -58,14 +58,14 @@ Reine Text-/Doku-Fixes, kein Verhaltens-Code. **Auf Prod live (PR #191, 2026-08-
   von der Mitarbeiterzahl) + **DSFA** (Art. 35). Shortlist 2026-09: machCon (Engen),
   DDSK (Tettnang), DATA-ORG (Konstanz, Preisvergleich), RA Schwytz (Konstanz, AVV).
   Nach Benennung `legal.dataProtectionOfficer` füllen + LfDI-Meldung. — _du/DSB_
-- 🔄 **Datenschutzerklärung aus „Entwurf" freigeben** — PR `fix/datenschutz-hotfix`
-  (2026-09-12): Banner + interne Notizen raus, Rollen BT=Verantwortlicher /
+- ☑ **Datenschutzerklärung aus „Entwurf" freigeben** — **PR #194 live seit 2026-09-13**
+  (vor der AVV-Unterschrift gemergt, AVV-Halbsatz nach Unterschrift via PR #195 wieder
+  rein): Banner + interne Notizen raus, Rollen BT=Verantwortlicher /
   innosee=AV, Pseudonymisierung statt „Anonymisierung", DPF (alle 5 US-Anbieter
   aktiv zertifiziert, geprüft 2026-09-12; Cloudflare-Rezertifizierung 23.09. nachprüfen),
   fehlende Datenarten + Gesundheitsdatum „krankheitsbedingt abgesagt" (§4.6),
   § 22 Abs. 1 Nr. 1 **lit. a** BDSG (vorher falsch lit. b). F08 §9.4/9.5 als
-  Fassung 2 (`text_version`, Alt-Verträge bleiben Fassung 1). **Erst nach
-  AVV-Unterschrift nach main mergen** (DSE behauptet den AVV). — _wir_
+  Fassung 2 (`text_version`, Alt-Verträge bleiben Fassung 1). — _wir_
 - ☑ **ANW-Check-Transfer offengelegt (2026-08).** Neue DSE-Subsection §4.5:
   benennt was an Azure OpenAI (EU, MS-DPA+SCC) geht (Maßnahmentyp, Träger-Name,
   je Termin Datum/UE/Themen-Stichwort), stellt klar dass **keine** TN-Stammdaten
