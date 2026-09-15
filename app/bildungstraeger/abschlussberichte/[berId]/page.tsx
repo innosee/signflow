@@ -5,6 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { BerDocument } from "@/components/checker/ber-document";
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
+import { geleisteteUeForCourse } from "@/lib/course-ue";
+import { formatUeDE } from "@/lib/format-ue";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
 import { formatDateDE } from "@/lib/format-date";
 import { resolveAssetUrl } from "@/lib/storage";
@@ -150,12 +152,13 @@ export default async function BildungstraegerBerDetailPage({ params }: Props) {
     (course?.startDate && course?.endDate
       ? `${formatDateDE(course.startDate)} – ${formatDateDE(course.endDate)}`
       : "");
-  const ueDisplay =
-    ber.tnUe ||
-    (course?.anzahlBewilligteUe !== undefined &&
-    course?.anzahlBewilligteUe !== null
-      ? String(course.anzahlBewilligteUe)
-      : "");
+  // UE-Anzeige: für kurs-gebundene Berichte gewinnt der LIVE berechnete Wert
+  // (geleistete UE) über den `tn_ue`-Snapshot. Anders als Name/Zeitraum ist die
+  // Stundenzahl eine Tatsache des Kurses — sie muss zum ANW passen, und
+  // Alt-Berichte, die noch die bewilligten UE eingefroren haben, korrigieren
+  // sich so von selbst. Ad-hoc-Berichte (kein Kurs) haben nur den Snapshot.
+  const geleisteteUe = course ? await geleisteteUeForCourse(course.id) : null;
+  const ueDisplay = geleisteteUe !== null ? formatUeDE(geleisteteUe) : ber.tnUe;
   const avgsDisplay = ber.tnAvgsNummer || course?.avgsNummer || "";
 
   return (

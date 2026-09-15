@@ -7,6 +7,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
 import { courseVisibleToCoach } from "@/lib/course-access";
+import { geleisteteUeForCourse } from "@/lib/course-ue";
+import { formatUeDE } from "@/lib/format-ue";
 import { buildAblaufDraft } from "@/lib/checker/ablauf-draft";
 import {
   inputsEqual,
@@ -336,7 +338,6 @@ export async function submitBerAction(
       courseAvgs: schema.courses.avgsNummer,
       courseStart: schema.courses.startDate,
       courseEnd: schema.courses.endDate,
-      courseUe: schema.courses.anzahlBewilligteUe,
       coachName: schema.users.name,
     })
     .from(schema.participants)
@@ -347,6 +348,8 @@ export async function submitBerAction(
     .innerJoin(schema.users, eq(schema.users.id, coachId))
     .where(eq(schema.participants.id, participantId))
     .limit(1);
+
+  const geleisteteUe = await geleisteteUeForCourse(courseId);
 
   const tnName = snapshotData?.participantName ?? "";
   const spaceIdx = tnName.indexOf(" ");
@@ -379,11 +382,10 @@ export async function submitBerAction(
     tnKundenNr: snapshotData?.participantKundenNr ?? "",
     tnAvgsNummer: snapshotData?.courseAvgs ?? "",
     tnZeitraum: tnZeitraumSnapshot,
-    tnUe:
-      snapshotData?.courseUe !== undefined &&
-      snapshotData?.courseUe !== null
-        ? String(snapshotData.courseUe)
-        : "",
+    // Stundenzahl im Bericht = tatsächlich GELEISTETE UE (nicht die
+    // bewilligten): bei vorzeitigem Ende weichen sie auseinander und die AfA
+    // bekäme sonst eine nie erbrachte Stundenzahl bescheinigt.
+    tnUe: formatUeDE(geleisteteUe),
     coachNameSnapshot: snapshotData?.coachName ?? "",
     abschlussDatum,
     integrationsergebnis,

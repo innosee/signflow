@@ -179,6 +179,7 @@ export function buildTnbSheetData(
       durchfuehrungsort: input.ort,
       avgsNummer: "",
       anzahlBewilligteUe: 0,
+      geleisteteUe: null,
       startDate: input.von || null,
       endDate: input.bis || null,
       letzterTermin: input.bis || null,

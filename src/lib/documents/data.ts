@@ -4,6 +4,7 @@ import { and, eq, isNull, max } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
+import { geleisteteUeForCourse } from "@/lib/course-ue";
 import {
   isMassnahmeTyp,
   MASSNAHME_TYP_LABEL,
@@ -107,6 +108,11 @@ export async function loadDocumentSheet(
       ),
     );
 
+  // Geleistete UE (= Summe der vollständig signierten Termine) für die
+  // Teilnahmebescheinigung — dort steht die erbrachte, nicht die bewilligte
+  // Stundenzahl.
+  const geleisteteUe = await geleisteteUeForCourse(doc.courseId);
+
   const branding = await getBranding(doc.tenantId);
   const [brandingLogo, coachSigUrl, participantSigUrl, orgSigUrl] =
     await Promise.all([
@@ -166,6 +172,7 @@ export async function loadDocumentSheet(
       durchfuehrungsort: doc.durchfuehrungsort,
       avgsNummer: doc.avgsNummer,
       anzahlBewilligteUe: doc.anzahlBewilligteUe,
+      geleisteteUe,
       startDate: doc.startDate,
       endDate: doc.endDate,
       letzterTermin: letzterTermin ?? null,

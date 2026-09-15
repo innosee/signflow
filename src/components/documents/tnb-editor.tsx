@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 
 import { formatDateDE } from "@/lib/format-date";
+import { formatUeDE } from "@/lib/format-ue";
 import { isMassnahmeTyp } from "@/lib/massnahme-typ";
 import {
   TNB_CUSTOM_LINES,
@@ -24,7 +25,8 @@ type Props = {
   courseInfo: {
     von: string | null;
     bis: string | null;
-    ue: number;
+    /** Geleistete UE (Summe der signierten Termine) — so steht es auf der Urkunde. */
+    ue: number | null;
     ort: string;
   };
   hasOrgSignature: boolean;
@@ -192,7 +194,7 @@ export function TnbEditor({
         </p>
         <p className="mt-1">
           Zeitraum {formatDateDE(courseInfo.von) || "—"} bis{" "}
-          {formatDateDE(courseInfo.bis) || "—"} · {courseInfo.ue} UE ·{" "}
+          {formatDateDE(courseInfo.bis) || "—"} · {courseInfo.ue != null ? formatUeDE(courseInfo.ue) : "—"} UE ·{" "}
           {courseInfo.ort || "—"}
         </p>
       </div>
