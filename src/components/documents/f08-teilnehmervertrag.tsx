@@ -5,6 +5,7 @@ import {
   SignatureLine,
 } from "@/components/documents/document-frame";
 import type { DocumentSheetData } from "@/components/documents/types";
+import { TEXT_VERSION_KEY } from "@/lib/documents/config";
 import type { ReactNode } from "react";
 
 /**
@@ -17,6 +18,9 @@ import type { ReactNode } from "react";
 export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
   const p = data.participant;
   const f = data.formData;
+  // Entwürfe zeigen immer den aktuellen Text; freigegebene Dokumente den bei der
+  // Freigabe eingefrorenen (fehlt die Version → Fassung 1).
+  const textV2 = data.status === "draft" || f[TEXT_VERSION_KEY] === "2";
   return (
     <DocumentFrame
       formNumber="F 08"
@@ -242,21 +246,56 @@ export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
           Teilnahmeberichte), IT-Protokolldaten sowie ggf. Erstattungsdaten für
           Fahrtkosten.
         </Clause>
-        <Clause label="9.4 Datenempfänger:">
-          Interne Fachbereiche (Coaching, Verwaltung, Abrechnung),
-          Bundesagentur für Arbeit / Jobcenter, zugelassene
-          AZAV-Zertifizierungsstellen (Audits) sowie streng gemäß Art. 28 DSGVO
-          gebundene Auftragsverarbeiter (Hosting, IT-Support,
-          Videokonferenzdienste). Eine Übermittlung an potenzielle Arbeitgeber
-          erfolgt ausschließlich nach gesonderter, ausdrücklicher Einwilligung
-          des TN.
-        </Clause>
-        <Clause label="9.5 Speicherdauer & Drittlandübermittlung:">
-          Eine Drittlandübermittlung findet nicht statt. Daten werden nach
-          Zweckfortfall bzw. nach Ablauf der gesetzlichen Aufbewahrungs- und
-          Prüffristen der BA/Jobcenter sowie handels- und steuerrechtlichen
-          Fristen (6 bis 10 Jahre) gelöscht.
-        </Clause>
+        {textV2 ? (
+          <>
+            <Clause label="9.4 Datenempfänger:">
+              Interne Fachbereiche (Coaching, Verwaltung, Abrechnung),
+              Bundesagentur für Arbeit / Jobcenter, zugelassene
+              AZAV-Zertifizierungsstellen (Audits) sowie streng gemäß Art. 28
+              DSGVO gebundene Auftragsverarbeiter (Hosting, IT-Support,
+              Videokonferenzdienste). Für die digitale Dokumentation der
+              Maßnahme und die elektronische Unterschrift von Verträgen und
+              Anwesenheitsnachweisen setzen wir die Software &bdquo;Signflow&ldquo; der
+              innosee GmbH, Bahnhofstraße 1, 78351 Bodman-Ludwigshafen, als
+              Auftragsverarbeiterin ein; sie verarbeitet die Daten
+              ausschließlich nach unserer Weisung und nicht für eigene Zwecke.
+              Eine Übermittlung an potenzielle Arbeitgeber erfolgt
+              ausschließlich nach gesonderter, ausdrücklicher Einwilligung des
+              TN.
+            </Clause>
+            <Clause label="9.5 Speicherdauer & Drittlandübermittlung:">
+              Die Daten werden in Rechenzentren in der EU verarbeitet. Soweit
+              eingesetzte Dienstleister ihren Konzernsitz außerhalb der EU
+              haben und ein Zugriff von dort nicht ausgeschlossen werden kann,
+              ist dieser durch einen Angemessenheitsbeschluss der
+              EU-Kommission (EU-US Data Privacy Framework) bzw.
+              EU-Standardvertragsklauseln abgesichert. Daten werden nach
+              Zweckfortfall bzw. nach Ablauf der gesetzlichen Aufbewahrungs-
+              und Prüffristen der BA/Jobcenter sowie handels- und
+              steuerrechtlichen Fristen (6 bis 10 Jahre) gelöscht.
+            </Clause>
+          </>
+        ) : (
+          <>
+            {/* Fassung 1 — NICHT ändern: rendert alle vor 2026-09 freigegebenen
+                (teils signierten) Verträge. Siehe DocumentConfig.textVersion. */}
+            <Clause label="9.4 Datenempfänger:">
+              Interne Fachbereiche (Coaching, Verwaltung, Abrechnung),
+              Bundesagentur für Arbeit / Jobcenter, zugelassene
+              AZAV-Zertifizierungsstellen (Audits) sowie streng gemäß Art. 28
+              DSGVO gebundene Auftragsverarbeiter (Hosting, IT-Support,
+              Videokonferenzdienste). Eine Übermittlung an potenzielle
+              Arbeitgeber erfolgt ausschließlich nach gesonderter,
+              ausdrücklicher Einwilligung des TN.
+            </Clause>
+            <Clause label="9.5 Speicherdauer & Drittlandübermittlung:">
+              Eine Drittlandübermittlung findet nicht statt. Daten werden nach
+              Zweckfortfall bzw. nach Ablauf der gesetzlichen Aufbewahrungs-
+              und Prüffristen der BA/Jobcenter sowie handels- und
+              steuerrechtlichen Fristen (6 bis 10 Jahre) gelöscht.
+            </Clause>
+          </>
+        )}
         <Clause label="9.6 Betroffenenrechte:">
           Sie haben das Recht auf Auskunft, Berichtigung, Löschung,
           Einschränkung der Verarbeitung, Datenübertragbarkeit sowie
