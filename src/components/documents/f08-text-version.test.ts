@@ -42,6 +42,7 @@ function sheet(
       durchfuehrungsort: "Singen",
       avgsNummer: "1",
       anzahlBewilligteUe: 80,
+      geleisteteUe: null,
       startDate: null,
       endDate: null,
       letzterTermin: null,
