@@ -146,6 +146,9 @@ export function buildTnbSheetData(
     documentId: "tnb-public",
     type: "tnb_cert",
     status: "completed",
+    // Die Teilnahmebescheinigung trägt ihren Ausstellungsort im eigenen
+    // Signaturblock ("erango GmbH Singen") — `orgOrt` bleibt hier ungenutzt.
+    orgOrt: null,
     formData: {
       cert_von: input.von,
       cert_bis: input.bis,
