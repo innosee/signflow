@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { logAudit } from "@/lib/audit";
+import { getBranding } from "@/lib/branding";
+import { signaturOrt } from "@/lib/signatur-ort";
 import { sendParticipantInvite } from "@/lib/participant-tokens";
 import { uploadSignedScan } from "@/lib/storage";
 import {
@@ -188,6 +190,7 @@ export async function submitDocument(params: {
       phone: schema.participants.phone,
       festnetz: schema.participants.festnetz,
       email: schema.participants.email,
+      tenantId: schema.participants.tenantId,
     })
     .from(schema.participants)
     .where(eq(schema.participants.id, doc.participantId))
@@ -249,6 +252,10 @@ export async function submitDocument(params: {
     tn_phone: p.phone ?? "",
     tn_festnetz: p.festnetz ?? "",
     tn_email: p.email,
+    // Sitz des Bildungsträgers für seine eigene Unterschriftszeile einfrieren.
+    // Das Freitextfeld `ort` bleibt der Coaching-Ort und gehört zur Zeile des
+    // Kunden — der Träger unterschreibt an seinem Sitz (User-Feedback 09/2026).
+    org_ort: signaturOrt((await getBranding(p.tenantId)).address),
     // Vertragstext-Fassung einfrieren (siehe DocumentConfig.textVersion).
     ...(cfg.textVersion ? { [TEXT_VERSION_KEY]: cfg.textVersion } : {}),
   };

@@ -233,10 +233,12 @@ const F21: DocumentConfig = {
       type: "textarea",
     },
     {
+      // Gilt NUR für die Unterschriftszeile des Kunden. Der Bildungsträger
+      // unterschreibt an seinem Sitz (siehe `orgOrt` in documents/data.ts).
       key: "ort",
-      label: "Ort (für die Unterschriftszeile)",
+      label: "Ort (für die Unterschrift des Kunden)",
       type: "text",
-      placeholder: "z.B. Singen",
+      placeholder: "Ort, an dem der Kunde unterschreibt",
     },
   ],
   requiredMasterData: [],

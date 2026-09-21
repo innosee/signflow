@@ -28,6 +28,18 @@ export type DocumentSheetData = {
    * Analog-Modus immer null.
    */
   orgSignatureUrl: string | null;
+  /**
+   * Ort für die „Ort, Datum"-Zeile über der Unterschrift des **Bildungsträgers**
+   * — sein Sitz aus der hinterlegten Postanschrift, NICHT der Coaching-Ort.
+   * Früher stand dort derselbe Freitext wie beim Kunden, wodurch erango mit
+   * „Konstanz" (oder gar „online") unterschrieb, obwohl der Träger in Singen
+   * sitzt (User-Feedback 09/2026).
+   *
+   * Bereits signierte Dokumente behalten den Wert, mit dem sie unterschrieben
+   * wurden (`org_ort`-Snapshot bzw. Alt-Fallback) — ein fertiges Dokument darf
+   * sich nachträglich nicht verändern.
+   */
+  orgOrt: string | null;
   participant: {
     name: string;
     vorname: string | null;

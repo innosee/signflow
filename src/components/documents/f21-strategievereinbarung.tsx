@@ -133,7 +133,11 @@ export function F21Strategievereinbarung({
         ort={f.ort}
         signature={data.signatures.participant}
       />
-      <SignatureLine role="Coach" ort={f.ort} signature={data.signatures.coach} />
+      <SignatureLine
+        role="Coach"
+        ort={data.orgOrt}
+        signature={data.signatures.coach}
+      />
     </DocumentFrame>
   );
 }
