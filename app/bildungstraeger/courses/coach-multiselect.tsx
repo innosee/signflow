@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export type CoachOption = { id: string; name: string; email: string };
+export type CoachOption = {
+  id: string;
+  name: string;
+  email: string;
+  /**
+   * Deaktivierter (soft-deleted) Coach, der noch im Kompetenzteam des Kunden
+   * hängt. Wird als Chip angezeigt, damit der BT ihn entfernen kann — aber
+   * nicht mehr im Dropdown zur Neu-Auswahl angeboten.
+   */
+  inactive?: boolean;
+};
 
 /**
  * Maximal gerenderte Treffer im Dropdown. Hält das DOM klein, egal wie viele
@@ -52,13 +62,17 @@ export function CoachMultiSelect({
     () => coaches.filter((c) => value.includes(c.id)),
     [coaches, value],
   );
+  // Nur aktive Coaches sind neu auswählbar. Deaktivierte erscheinen
+  // ausschließlich als Chip (siehe `selected`), damit man sie sehen und
+  // entfernen, aber nicht neu zuweisen kann.
+  const selectable = useMemo(() => coaches.filter((c) => !c.inactive), [coaches]);
   const filtered = useMemo(() => {
-    if (!q) return coaches;
-    return coaches.filter(
+    if (!q) return selectable;
+    return selectable.filter(
       (c) =>
         c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q),
     );
-  }, [coaches, q]);
+  }, [selectable, q]);
   const visible = filtered.slice(0, MAX_RESULTS);
   const overflow = filtered.length - visible.length;
 
@@ -79,20 +93,41 @@ export function CoachMultiSelect({
           {selected.map((c) => (
             <span
               key={c.id}
-              className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-1 text-xs text-white"
+              title={
+                c.inactive
+                  ? "Dieser Coach ist deaktiviert und hängt noch am Kunden — zum Entfernen auf × klicken."
+                  : undefined
+              }
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${
+                c.inactive
+                  ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300"
+                  : "bg-zinc-900 text-white"
+              }`}
             >
               {c.name}
+              {c.inactive && " (deaktiviert)"}
               <button
                 type="button"
                 onClick={() => toggle(c.id)}
                 aria-label={`${c.name} entfernen`}
-                className="text-zinc-300 transition hover:text-white"
+                className={
+                  c.inactive
+                    ? "text-amber-700 transition hover:text-amber-900"
+                    : "text-zinc-300 transition hover:text-white"
+                }
               >
                 ×
               </button>
             </span>
           ))}
         </div>
+      )}
+
+      {selected.some((c) => c.inactive) && (
+        <p className="text-xs text-amber-800">
+          Ein deaktivierter Coach hängt noch an diesem Kunden. Du kannst ihn
+          über das × entfernen oder stehen lassen — speichern lässt sich beides.
+        </p>
       )}
 
       <input
@@ -115,7 +150,7 @@ export function CoachMultiSelect({
           id="coach-multiselect-list"
           className="absolute z-10 mt-1 w-full max-h-56 divide-y divide-zinc-200 overflow-auto rounded-lg border border-zinc-300 bg-white shadow-lg"
         >
-          {coaches.length === 0 ? (
+          {selectable.length === 0 ? (
             <p className="px-3 py-3 text-sm text-zinc-500">
               Noch keine Coaches vorhanden — zuerst im Team-Bereich Coaches
               einladen.

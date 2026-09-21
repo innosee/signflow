@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 
@@ -113,6 +113,58 @@ export async function getTenantCoaches(
       ),
     )
     .orderBy(asc(schema.users.name));
+}
+
+/**
+ * Coaches eines Tenants zu expliziten IDs — **inklusive deaktivierter** (soft-
+ * deleted) User. Gegenstück zu `getTenantCoaches`, das Deaktivierte bewusst
+ * ausblendet.
+ *
+ * Gebraucht, weil ein deaktivierter Coach in `course_coaches` hängen bleibt:
+ * ohne Namen wäre er im Kompetenzteam-Multiselect unsichtbar (kein Chip, kein
+ * ×) und würde trotzdem mitgesendet — der Kunde ließe sich dann gar nicht mehr
+ * speichern. Liefert `inactive`, damit die UI ihn als „(deaktiviert)"
+ * kennzeichnen kann.
+ *
+ * Tenant-Scope: Mitgliedschaft im Tenant **oder** `users.tenant_id` (Heimat-
+ * Tenant für Konten ohne materialisierte Mitgliedschaft — dieselbe
+ * Rückwärtskompatibilität wie in `resolveActiveMembership`). Damit kann ein
+ * manipulierter Client keine Namen aus fremden Mandanten abziehen.
+ */
+export async function getTenantCoachesByIds(
+  tenantId: string,
+  coachIds: string[],
+): Promise<(TenantCoach & { inactive: boolean })[]> {
+  if (coachIds.length === 0) return [];
+  const tenantMemberUserIds = db
+    .select({ userId: schema.tenantMemberships.userId })
+    .from(schema.tenantMemberships)
+    .where(
+      and(
+        eq(schema.tenantMemberships.tenantId, tenantId),
+        isNull(schema.tenantMemberships.deletedAt),
+      ),
+    );
+  const rows = await db
+    .select({
+      id: schema.users.id,
+      name: schema.users.name,
+      email: schema.users.email,
+      deletedAt: schema.users.deletedAt,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        inArray(schema.users.id, coachIds),
+        eq(schema.users.role, "coach"),
+        or(
+          eq(schema.users.tenantId, tenantId),
+          inArray(schema.users.id, tenantMemberUserIds),
+        ),
+      ),
+    )
+    .orderBy(asc(schema.users.name));
+  return rows.map(({ deletedAt, ...c }) => ({ ...c, inactive: deletedAt !== null }));
 }
 
 /**
