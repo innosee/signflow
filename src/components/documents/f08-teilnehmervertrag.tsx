@@ -349,7 +349,7 @@ export function F08Teilnehmervertrag({ data }: { data: DocumentSheetData }) {
       />
       <SignatureLine
         role="erango GmbH (Mitarbeiter/in)"
-        ort={data.formData.ort}
+        ort={data.orgOrt}
         signature={data.signatures.coach}
       />
     </DocumentFrame>

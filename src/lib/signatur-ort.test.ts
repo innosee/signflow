@@ -30,6 +30,20 @@ describe("signaturOrt (Ort aus Durchführungsort für die Unterschriftszeile)", 
     expect(signaturOrt("Volkshochschule, Konstanz")).toBe("Konstanz");
   });
 
+  it("zieht den Sitz aus der mehrzeiligen Postanschrift des Trägers", () => {
+    // users.pdf_address — Telefon/Mail/Web dürfen NICHT in die Signaturzeile
+    // rutschen (sonst unterschreibt der Träger mit „Singen\nTel. …").
+    expect(
+      signaturOrt(
+        "Ekkehardstraße 12b\nD-78224 Singen\nTel. +49 (0) 7731 / 90 97 18 - 10\navgs@erango.de\nwww.erango.de",
+      ),
+    ).toBe("Singen");
+  });
+
+  it("nimmt bei mehrzeiligem Input ohne PLZ die erste nicht-leere Zeile", () => {
+    expect(signaturOrt("\n  Singen  \nTel. 07731\n")).toBe("Singen");
+  });
+
   it("gibt bei leer/None einen leeren String zurück", () => {
     expect(signaturOrt("")).toBe("");
     expect(signaturOrt("   ")).toBe("");

@@ -4,6 +4,7 @@ import { and, eq, isNull, max } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getBranding } from "@/lib/branding";
+import { signaturOrt } from "@/lib/signatur-ort";
 import { geleisteteUeForCourse } from "@/lib/course-ue";
 import {
   isMassnahmeTyp,
@@ -143,6 +144,18 @@ export async function loadDocumentSheet(
   const pick = (key: string, live: string | null): string | null =>
     frozen && snap[key] != null ? snap[key] : live;
 
+  // Ort über der Unterschrift des Bildungsträgers = sein Sitz aus der
+  // hinterlegten Postanschrift. Das Freitextfeld `ort` ist der Coaching-Ort und
+  // gehört nur zur Kunden-Zeile — sonst unterschreibt erango mit „Konstanz"
+  // oder „online", statt mit Singen (User-Feedback 09/2026).
+  //
+  // Signierte Dokumente behalten, womit sie unterschrieben wurden: erst der
+  // `org_ort`-Snapshot, für Alt-Dokumente von vor dieser Änderung der damals
+  // gerenderte Freitext. Nur Entwürfe ziehen den Live-Wert.
+  const orgOrt = frozen
+    ? (snap.org_ort ?? snap.ort ?? null)
+    : signaturOrt(branding.address) || null;
+
   return {
     documentId: doc.id,
     type: doc.type as DocumentTypeId,
@@ -151,6 +164,7 @@ export async function loadDocumentSheet(
     branding: { logoUrl: brandingLogo },
     analog,
     orgSignatureUrl: analog ? null : orgSigUrl,
+    orgOrt,
     participant: {
       name: pick("tn_name", doc.pName) ?? doc.pName,
       vorname: pick("tn_vorname", doc.pVorname),
