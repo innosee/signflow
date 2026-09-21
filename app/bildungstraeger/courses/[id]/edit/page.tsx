@@ -3,7 +3,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
-import { getTenantCoaches } from "@/lib/memberships";
+import { getTenantCoaches, getTenantCoachesByIds } from "@/lib/memberships";
 
 import { CourseForm } from "../../new/course-form";
 import { updateCourse } from "../../actions";
@@ -75,10 +75,32 @@ export default async function EditCustomerPage({ params }: Props) {
   const team = await db
     .select({ coachId: schema.courseCoaches.coachId })
     .from(schema.courseCoaches)
-    .where(eq(schema.courseCoaches.courseId, course.id));
-  // Fallback auf den primären Coach, falls (Altdaten) noch kein Team-Eintrag.
-  const teamCoachIds =
-    team.length > 0 ? team.map((t) => t.coachId) : [course.coachId];
+    .where(eq(schema.courseCoaches.courseId, course.id))
+    .orderBy(asc(schema.courseCoaches.coachId));
+  // Der primäre Coach steht IMMER an Position 0: die Server-Action leitet
+  // `courses.coach_id` aus `coachIds[0]` ab. Ohne feste Reihenfolge würde jedes
+  // Speichern den Hauptcoach auf ein beliebiges Teammitglied umhängen.
+  // (Fallback auf den primären Coach, falls Altdaten ohne Team-Eintrag.)
+  const teamCoachIds = [
+    course.coachId,
+    ...team.map((t) => t.coachId).filter((id) => id !== course.coachId),
+  ];
+
+  // Deaktivierte Coaches bleiben in `course_coaches` stehen, fehlen aber in
+  // `getTenantCoaches`. Ohne Nachladen wären sie im Multiselect unsichtbar —
+  // kein Chip zum Entfernen, aber im Hidden-Input mitgesendet: der Kunde ließe
+  // sich dann überhaupt nicht mehr speichern (Fall „Hermina Laktos", 09/2026).
+  const knownIds = new Set(coaches.map((c) => c.id));
+  const missingIds = teamCoachIds.filter((id) => !knownIds.has(id));
+  // Hart `inactive`: was nicht in der aktiven Auswahlliste steht, darf hier
+  // nicht neu zuweisbar werden — nur sichtbar und entfernbar.
+  const coachOptions = [
+    ...coaches,
+    ...(await getTenantCoachesByIds(tenantId, missingIds)).map((c) => ({
+      ...c,
+      inactive: true,
+    })),
+  ];
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -94,7 +116,7 @@ export default async function EditCustomerPage({ params }: Props) {
 
       <CourseForm
         bedarfstraeger={bedarfstraeger}
-        coaches={coaches}
+        coaches={coachOptions}
         action={updateCourse}
         courseId={course.id}
         submitLabel="Änderungen speichern"

@@ -15,7 +15,7 @@ import {
   getTenantId,
   requireBildungstraeger,
 } from "@/lib/dal";
-import { getTenantCoaches } from "@/lib/memberships";
+import { getTenantCoaches, getTenantCoachesByIds } from "@/lib/memberships";
 import { parseCourseForm, type ParsedCourseForm } from "@/lib/course-form";
 
 export type CourseFormState =
@@ -38,15 +38,34 @@ export type CourseFormState =
 async function validateCourseRefs(
   values: ParsedCourseForm,
   tenantId: string,
+  /**
+   * Coaches, die bereits an diesem Kunden hängen. Sie dürfen bleiben, auch wenn
+   * sie inzwischen deaktiviert wurden — sonst wäre der Kunde überhaupt nicht
+   * mehr speicherbar (weder Name korrigieren noch Team ergänzen). Der BT sieht
+   * sie im Multiselect als „(deaktiviert)"-Chip und entfernt sie gezielt.
+   * Beim Anlegen leer: dort gibt es kein Bestandsteam.
+   */
+  existingCoachIds: string[] = [],
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const tenantCoachIds = new Set(
+  const allowedCoachIds = new Set(
     (await getTenantCoaches(tenantId)).map((c) => c.id),
   );
-  if (values.coachIds.some((id) => !tenantCoachIds.has(id))) {
+  for (const id of existingCoachIds) allowedCoachIds.add(id);
+  const offending = values.coachIds.filter((id) => !allowedCoachIds.has(id));
+  if (offending.length > 0) {
+    // Namen nennen — die alte pauschale Meldung ließ den BT raten, welcher
+    // Coach gemeint ist (und deaktivierte sieht er ohne Nachladen gar nicht).
+    const names = (await getTenantCoachesByIds(tenantId, offending)).map(
+      (c) => c.name,
+    );
     return {
       ok: false,
       error:
-        "Mindestens ein gewählter Coach gehört nicht (mehr) zu diesem Bildungsträger.",
+        names.length === 0
+          ? "Mindestens ein gewählter Coach gehört nicht (mehr) zu diesem Bildungsträger."
+          : names.length === 1
+            ? `${names[0]} gehört nicht (mehr) zu diesem Bildungsträger und kann nicht zugewiesen werden.`
+            : `Diese Coaches gehören nicht (mehr) zu diesem Bildungsträger und können nicht zugewiesen werden: ${names.join(", ")}.`,
     };
   }
 
@@ -358,6 +377,7 @@ export async function updateCourse(
   const [course] = await db
     .select({
       id: schema.courses.id,
+      coachId: schema.courses.coachId,
       participantId: schema.courses.participantId,
       participantEmail: schema.participants.email,
       bewilligtAt: schema.courses.bewilligtAt,
@@ -407,7 +427,22 @@ export async function updateCourse(
     course.participantEmail.trim().toLowerCase() !==
     customerEmail.trim().toLowerCase();
 
-  const refs = await validateCourseRefs(parsed.values, tenantId);
+  // Bestandsteam (inkl. primärem Coach): diese IDs dürfen auch dann gespeichert
+  // werden, wenn der Coach inzwischen deaktiviert ist.
+  const existingTeam = await db
+    .select({ coachId: schema.courseCoaches.coachId })
+    .from(schema.courseCoaches)
+    .where(eq(schema.courseCoaches.courseId, courseId));
+  const existingCoachIds = [
+    course.coachId,
+    ...existingTeam.map((r) => r.coachId),
+  ];
+
+  const refs = await validateCourseRefs(
+    parsed.values,
+    tenantId,
+    existingCoachIds,
+  );
   if (!refs.ok) return { error: refs.error };
 
   // Startdatum darf nicht ≤ einem bereits erfassten Erstgespräch liegen — das
