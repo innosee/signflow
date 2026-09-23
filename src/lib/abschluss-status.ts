@@ -28,6 +28,8 @@ export type AbschlussStatus = {
   zeitlichVorzeitig: boolean;
   /** Tage zwischen letztem Termin und Bewilligungsende, falls berechenbar. */
   tageFrueher: number | null;
+  /** Wochen mit <2 Terminen im bewilligten Zeitraum (nur Zeitraum-Basis). */
+  luecken: number;
   /**
    * Begründung ist Pflicht. Bei UE-Basis wegen UE-Unterschreitung, bei
    * Zeitraum-Basis wegen nicht ausgeschöpftem Bewilligungszeitraum.
@@ -63,6 +65,14 @@ export function abschlussStatus(p: {
    * und alle Aufrufer ohne Angabe exakt gleich bleiben.
    */
   begruendungPflichtBei?: "ue_unterschritten" | "zeitraum_nicht_ausgeschoepft";
+  /**
+   * Wochen im bewilligten Zeitraum mit weniger als 2 Terminen (inkl. ganz
+   * leerer), aus `wochenUnter2ImZeitraum`. Nur in der Zeitraum-Basis
+   * relevant: dort ist eine Lücke mitten drin genauso ein „Zeitraum nicht
+   * ausgeschöpft" wie ein zu frühes Ende — und der Fall, den die AA
+   * Regensburg am genauesten anschaut. Default 0 = kein Einfluss.
+   */
+  luecken?: number;
 }): AbschlussStatus {
   const ueUnterschritten = p.geleisteteUe < p.bewilligteUe;
   const fehlendeUe = Math.max(0, p.bewilligteUe - p.geleisteteUe);
@@ -78,9 +88,10 @@ export function abschlussStatus(p: {
       : null;
 
   const pflichtBei = p.begruendungPflichtBei ?? "ue_unterschritten";
+  const luecken = p.luecken ?? 0;
   const begruendungPflicht =
     pflichtBei === "zeitraum_nicht_ausgeschoepft"
-      ? zeitlichVorzeitig
+      ? zeitlichVorzeitig || luecken > 0
       : ueUnterschritten;
 
   return {
@@ -88,6 +99,7 @@ export function abschlussStatus(p: {
     fehlendeUe,
     zeitlichVorzeitig,
     tageFrueher,
+    luecken,
     begruendungPflicht,
     begruendungGrund: begruendungPflicht ? pflichtBei : null,
   };

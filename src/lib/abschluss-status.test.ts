@@ -140,3 +140,46 @@ describe("abschlussStatus mit Basis „Zeitraum\u201c", () => {
     expect(st.begruendungPflicht).toBe(false);
   });
 });
+
+describe("abschlussStatus: Lücken im bewilligten Zeitraum", () => {
+  const zeitraum = "zeitraum_nicht_ausgeschoepft" as const;
+
+  it("macht eine Lücke mitten im Zeitraum begründungspflichtig", () => {
+    // Zeitraum bis zum letzten Tag genutzt, aber eine Woche ohne Termine.
+    const st = abschlussStatus({
+      geleisteteUe: 40,
+      bewilligteUe: 0,
+      letzterTermin: "2026-10-21",
+      bewilligungsende: "2026-10-21",
+      begruendungPflichtBei: zeitraum,
+      luecken: 2,
+    });
+    expect(st.zeitlichVorzeitig).toBe(false);
+    expect(st.luecken).toBe(2);
+    expect(st.begruendungPflicht).toBe(true);
+  });
+
+  it("lückenlos + Zeitraum ausgeschöpft → keine Begründung nötig", () => {
+    const st = abschlussStatus({
+      geleisteteUe: 40,
+      bewilligteUe: 0,
+      letzterTermin: "2026-10-21",
+      bewilligungsende: "2026-10-21",
+      begruendungPflichtBei: zeitraum,
+      luecken: 0,
+    });
+    expect(st.begruendungPflicht).toBe(false);
+  });
+
+  it("Lücken lassen die UE-Basis unberührt", () => {
+    // Wichtig fürs Bestandsverhalten: dort entscheidet allein die UE-Zahl.
+    const st = abschlussStatus({
+      geleisteteUe: 80,
+      bewilligteUe: 80,
+      letzterTermin: "2026-10-21",
+      bewilligungsende: "2026-10-21",
+      luecken: 5,
+    });
+    expect(st.begruendungPflicht).toBe(false);
+  });
+});

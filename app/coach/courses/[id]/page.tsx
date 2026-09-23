@@ -5,10 +5,14 @@ import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { isImpersonating, requireSigningEnabled } from "@/lib/dal";
 import { courseVisibleToCoach } from "@/lib/course-access";
-import { isFutureSessionDate } from "@/lib/dates";
+import { berlinToday, isFutureSessionDate } from "@/lib/dates";
 import { getFeiertag } from "@/lib/feiertage";
 import { isSmsEnabled } from "@/lib/sms";
-import { innereWochenUnter2, randWochenUnter2 } from "@/lib/termine-pro-woche";
+import {
+  innereWochenUnter2,
+  randWochenUnter2,
+  wochenUnter2ImZeitraum,
+} from "@/lib/termine-pro-woche";
 import { bewilligungsRegeln } from "@/lib/bewilligung";
 
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -245,6 +249,31 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .map((s) => s.sessionDate);
   const unter2Wochen = innereWochenUnter2(regulaereTerminDaten).length;
   const randWochen = randWochenUnter2(regulaereTerminDaten).length;
+  // Bewilligung nach Zeitraum: Maßstab ist der bewilligte Zeitraum, nicht der
+  // erste/letzte Termin — leere Wochen mitten drin sind dort der Kernfall
+  // (die AA Regensburg schaut genau darauf). Bei UE-Basis leer → kein Einfluss.
+  const zeitraumLuecken =
+    regeln.begruendungPflichtBei === "zeitraum_nicht_ausgeschoepft"
+      ? wochenUnter2ImZeitraum(
+          course.startDate,
+          course.endDate,
+          regulaereTerminDaten,
+        )
+      : [];
+  // Laufende Maßnahme: nur BEREITS VERGANGENE Wochen bewerten. Sonst wäre jede
+  // frisch angelegte Maßnahme sofort „lückenhaft", weil die kommenden Wochen
+  // naturgemäß noch leer sind — ein Fehlalarm, den niemand ernst nimmt.
+  const zeitraumLueckenBisher =
+    regeln.begruendungPflichtBei === "zeitraum_nicht_ausgeschoepft" &&
+    !course.abgeschlossenAt
+      ? wochenUnter2ImZeitraum(
+          course.startDate,
+          course.endDate && course.endDate < berlinToday()
+            ? course.endDate
+            : berlinToday(),
+          regulaereTerminDaten,
+        ).length
+      : 0;
 
   // Freigabe-Status pro Teilnehmer: Map<participantId, approvedAt>.
   // Wird unten für das "Abschluss"-Panel gebraucht, damit der Coach auf
@@ -465,6 +494,19 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             </Link>
           )}
         </div>
+        {zeitraumLueckenBisher > 0 && (
+          <p className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
+            <strong>
+              {zeitraumLueckenBisher} bereits vergangene Woche
+              {zeitraumLueckenBisher === 1 ? "" : "n"} im Bewilligungszeitraum
+            </strong>{" "}
+            {zeitraumLueckenBisher === 1 ? "hat" : "haben"} weniger als 2
+            Termine (leere Wochen eingerechnet). Diese Maßnahme ist nach
+            Zeitraum bewilligt — sie soll über den gesamten Zeitraum mit
+            mindestens 2 Terminen pro Woche laufen. Lücken müssen beim
+            Abschluss begründet werden.
+          </p>
+        )}
         {sessions.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-zinc-500">
             Noch keine Termine. Lege den ersten an.
@@ -753,6 +795,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 bewilligungsende={course.endDate}
                 unter2Wochen={unter2Wochen}
                 randWochen={randWochen}
+                zeitraumLuecken={zeitraumLuecken.length}
                 begruendungPflichtBei={regeln.begruendungPflichtBei}
               />
             )}
