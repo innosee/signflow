@@ -29,6 +29,7 @@ export function MarkAbgeschlossenButton({
   unter2Wochen = 0,
   randWochen = 0,
   begruendungPflichtBei = "ue_unterschritten",
+  zeitraumLuecken = 0,
 }: {
   courseId: string;
   geleisteteUe: number;
@@ -45,6 +46,8 @@ export function MarkAbgeschlossenButton({
    * Server-Action erzwingt. Default = bisheriges Verhalten (UE-Basis).
    */
   begruendungPflichtBei?: "ue_unterschritten" | "zeitraum_nicht_ausgeschoepft";
+  /** Wochen mit <2 Terminen im bewilligten Zeitraum (nur Zeitraum-Basis). */
+  zeitraumLuecken?: number;
 }) {
   const [state, action, pending] = useActionState<
     MarkAbgeschlossenState,
@@ -57,6 +60,7 @@ export function MarkAbgeschlossenButton({
     letzterTermin,
     bewilligungsende,
     begruendungPflichtBei,
+    luecken: zeitraumLuecken,
   });
   const nachZeitraum = begruendungPflichtBei === "zeitraum_nicht_ausgeschoepft";
   const [begruendung, setBegruendung] = useState("");
@@ -103,7 +107,7 @@ export function MarkAbgeschlossenButton({
           e.preventDefault();
           window.alert(
             nachZeitraum
-              ? "Der bewilligte Maßnahmenzeitraum wurde nicht ausgeschöpft. Bitte gib eine Begründung an."
+              ? "Der bewilligte Maßnahmenzeitraum wurde nicht durchgehend genutzt. Bitte gib eine Begründung an."
               : "Es sind weniger UE geleistet als bewilligt. Bitte gib eine Begründung für die UE-Unterschreitung an.",
           );
         }
@@ -144,6 +148,13 @@ export function MarkAbgeschlossenButton({
                 Nachweis vermerkt).
               </>
             )}
+          </p>
+        )}
+        {nachZeitraum && st.luecken > 0 && (
+          <p className="text-amber-700">
+            {st.luecken} Woche{st.luecken === 1 ? "" : "n"} im bewilligten
+            Zeitraum mit weniger als 2 Terminen (leere Wochen eingerechnet) —{" "}
+            <strong>Begründung nötig</strong>.
           </p>
         )}
         {unter2Wochen > 0 && (

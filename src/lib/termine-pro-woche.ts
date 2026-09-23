@@ -87,3 +87,50 @@ export function randWochenUnter2(dates: string[]): string[] {
     (k) => (k === first || k === last) && (counts.get(k) ?? 0) < 2,
   );
 }
+
+/**
+ * Wochen mit weniger als 2 Terminen INNERHALB des bewilligten Zeitraums —
+ * inklusive Wochen ganz ohne Termin.
+ *
+ * Gegenstück zu `innereWochenUnter2` für die Bewilligung nach Zeitraum
+ * (AA Regensburg): Dort ist der Zeitraum die Bewilligung, die Maßnahme muss
+ * also über ihn hinweg tatsächlich laufen. Eine leere Woche mitten drin ist
+ * damit der gravierendste Fall — und genau der, den `innereWochenUnter2`
+ * bewusst ignoriert (dort sind Urlaubswochen zurecht kein Verstoß, weil die
+ * bewilligten UE das Maß sind, nicht die Zeit).
+ *
+ * Maßstab sind Start- und Enddatum der Bewilligung, nicht erster/letzter
+ * Termin: Sonst wäre ein vorzeitiges Ende per Definition lückenlos.
+ * Angebrochene Rand-Kalenderwochen zählen nicht — liegt der Start auf einem
+ * Donnerstag, ist die 2-Termine-Erwartung für diese Woche unfair.
+ */
+export function wochenUnter2ImZeitraum(
+  startDate: string | null,
+  endDate: string | null,
+  dates: string[],
+): string[] {
+  if (!startDate || !endDate || endDate < startDate) return [];
+  const counts = new Map<string, number>();
+  for (const d of dates) {
+    // Termine außerhalb des Zeitraums (Altlast/Korrekturfall) nicht mitzählen.
+    if (d < startDate || d > endDate) continue;
+    const k = isoWeekKey(d);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  // Nur volle Kalenderwochen: die Woche des Starts bzw. des Endes zählt nur,
+  // wenn sie komplett im Zeitraum liegt (Montag bzw. Sonntag inklusive).
+  const randWochen = new Set([isoWeekKey(startDate), isoWeekKey(endDate)]);
+  const luecken: string[] = [];
+  const cursor = new Date(`${startDate}T00:00:00Z`);
+  const ende = new Date(`${endDate}T00:00:00Z`);
+  const gesehen = new Set<string>();
+  while (cursor <= ende) {
+    const k = isoWeekKey(cursor.toISOString().slice(0, 10));
+    if (!gesehen.has(k)) {
+      gesehen.add(k);
+      if (!randWochen.has(k) && (counts.get(k) ?? 0) < 2) luecken.push(k);
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return luecken;
+}

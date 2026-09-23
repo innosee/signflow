@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   innereWochenUnter2,
+  wochenUnter2ImZeitraum,
   isoWeek,
   isoWeekKey,
   randWochenUnter2,
@@ -126,5 +127,44 @@ describe("randWochenUnter2", () => {
 
   it("leere Eingabe → keine Randwoche", () => {
     expect(randWochenUnter2([])).toEqual([]);
+  });
+});
+
+/**
+ * Bewilligung nach Zeitraum: Maßstab ist der bewilligte Zeitraum, nicht der
+ * erste/letzte Termin — und eine leere Woche mitten drin IST ein Verstoß.
+ */
+describe("wochenUnter2ImZeitraum", () => {
+  it("erkennt leere Wochen im Zeitraum, die innereWochenUnter2 ignoriert", () => {
+    // 12 Termine, sauber 2/Woche, aber nur bis zur Hälfte des Zeitraums.
+    const termine = [
+      "2026-08-05", "2026-08-07", "2026-08-12", "2026-08-14",
+      "2026-08-19", "2026-08-21", "2026-08-26", "2026-08-28",
+      "2026-09-02", "2026-09-04", "2026-09-09", "2026-09-11",
+    ];
+    expect(innereWochenUnter2(termine)).toHaveLength(0);
+    expect(
+      wochenUnter2ImZeitraum("2026-07-29", "2026-10-21", termine).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("meldet nichts, wenn der Zeitraum durchgehend mit 2 Terminen belegt ist", () => {
+    // Volle Kalenderwochen Mo 03.08. – So 23.08., je 2 Termine.
+    const termine = [
+      "2026-08-03", "2026-08-05", "2026-08-10", "2026-08-12",
+      "2026-08-17", "2026-08-19",
+    ];
+    expect(wochenUnter2ImZeitraum("2026-08-03", "2026-08-23", termine)).toEqual([]);
+  });
+
+  it("zählt angebrochene Rand-Kalenderwochen nicht mit", () => {
+    // Start Donnerstag: in dieser Woche sind 2 Termine nicht zu erwarten.
+    const termine = ["2026-08-06", "2026-08-10", "2026-08-12"];
+    expect(wochenUnter2ImZeitraum("2026-08-06", "2026-08-16", termine)).toEqual([]);
+  });
+
+  it("liefert nichts bei unvollständigem oder verdrehtem Zeitraum", () => {
+    expect(wochenUnter2ImZeitraum(null, "2026-10-21", ["2026-08-05"])).toEqual([]);
+    expect(wochenUnter2ImZeitraum("2026-10-21", "2026-07-29", [])).toEqual([]);
   });
 });

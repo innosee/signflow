@@ -15,7 +15,10 @@ import {
   EIGNUNG_RATINGS,
   type Eignungsanalyse,
 } from "@/lib/eignung";
-import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
+import {
+  innereWochenUnter2,
+  wochenUnter2ImZeitraum,
+} from "@/lib/termine-pro-woche";
 import { bewilligungsRegeln } from "@/lib/bewilligung";
 
 export type StundennachweisSheet = {
@@ -171,10 +174,17 @@ export function Stundennachweis(props: StundennachweisSheet) {
   // den Terminen berechnet, NICHT aus dem gespeicherten `flagUnter2Termine`.
   // So verschwinden Alt-False-Positives (Rand-/Wrap-up-Woche mit 1 Termin)
   // ohne Daten-Migration, echte innere Lücken bleiben auf der ANW sichtbar.
+  const regulaereTermine = sessions
+    .filter((s) => !s.isErstgespraech)
+    .map((s) => s.sessionDate);
+  // Bei Bewilligung nach Zeitraum ist der Maßstab der bewilligte Zeitraum
+  // (leere Wochen mitten drin zählen mit), sonst wie bisher nur echte innere
+  // Lücken zwischen erstem und letztem Termin.
   const hatInnereLuecke =
-    innereWochenUnter2(
-      sessions.filter((s) => !s.isErstgespraech).map((s) => s.sessionDate),
-    ).length > 0;
+    course.bewilligungsbasis === "zeitraum"
+      ? wochenUnter2ImZeitraum(course.startDate, course.endDate, regulaereTermine)
+          .length > 0
+      : innereWochenUnter2(regulaereTermine).length > 0;
 
   // Einzige Stelle im Nachweis, die über die Bewilligungsbasis entscheidet —
   // dieselbe Regel wie in den Server-Actions (src/lib/bewilligung.ts).
@@ -402,7 +412,9 @@ export function Stundennachweis(props: StundennachweisSheet) {
             <ul>
               <li>
                 <Checkbox checked={hatInnereLuecke} />
-                Weniger als 2 Termine pro Woche
+                {course.bewilligungsbasis === "zeitraum"
+                  ? "Weniger als 2 Termine pro Woche im bewilligten Zeitraum"
+                  : "Weniger als 2 Termine pro Woche"}
               </li>
               <li>
                 <Checkbox checked={course.flagVorzeitigesEnde} />

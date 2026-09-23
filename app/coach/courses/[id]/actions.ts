@@ -8,7 +8,10 @@ import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { abschlussStatus } from "@/lib/abschluss-status";
 import { bewilligungsRegeln } from "@/lib/bewilligung";
-import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
+import {
+  innereWochenUnter2,
+  wochenUnter2ImZeitraum,
+} from "@/lib/termine-pro-woche";
 import { logAudit } from "@/lib/audit";
 import { getFeiertag } from "@/lib/feiertage";
 import { sendReviewRequestedToBildungstraeger } from "@/lib/email";
@@ -1743,6 +1746,7 @@ export async function markCourseAbgeschlossen(
   const [course] = await db
     .select({
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
       bewilligungsbasis: schema.courses.bewilligungsbasis,
       zertMaxUe: schema.tenants.zertMaxUe,
@@ -1807,18 +1811,32 @@ export async function markCourseAbgeschlossen(
     anzahlBewilligteUe: course.anzahlBewilligteUe,
     zertMaxUe: course.zertMaxUe,
   });
+  // Zeitraum-Basis: leere/dünne Wochen im bewilligten Zeitraum zählen mit —
+  // eine Lücke mitten drin ist genauso „Zeitraum nicht ausgeschöpft" wie ein
+  // zu frühes Ende. Bei UE-Basis leer, also ohne Einfluss.
+  const zeitraumLuecken =
+    regeln.begruendungPflichtBei === "zeitraum_nicht_ausgeschoepft"
+      ? wochenUnter2ImZeitraum(
+          course.startDate,
+          course.endDate,
+          regulaereUeDaten,
+        ).length
+      : 0;
   const st = abschlussStatus({
     geleisteteUe,
     bewilligteUe: course.anzahlBewilligteUe,
     letzterTermin,
     bewilligungsende: course.endDate,
     begruendungPflichtBei: regeln.begruendungPflichtBei,
+    luecken: zeitraumLuecken,
   });
   if (st.begruendungPflicht && begruendung.length === 0) {
     return {
       error:
         st.begruendungGrund === "zeitraum_nicht_ausgeschoepft"
-          ? `Der letzte Termin liegt ${st.tageFrueher} Tage vor dem Bewilligungsende. Der bewilligte Maßnahmenzeitraum wurde damit nicht ausgeschöpft — bitte eine Begründung angeben, sie wird dem Bildungsträger bei der Prüfung angezeigt.`
+          ? st.zeitlichVorzeitig
+            ? `Der letzte Termin liegt ${st.tageFrueher} Tage vor dem Bewilligungsende. Der bewilligte Maßnahmenzeitraum wurde damit nicht ausgeschöpft — bitte eine Begründung angeben, sie wird dem Bildungsträger bei der Prüfung angezeigt.`
+            : `${st.luecken} Woche${st.luecken === 1 ? "" : "n"} im bewilligten Zeitraum ${st.luecken === 1 ? "hat" : "haben"} weniger als 2 Termine (leere Wochen eingerechnet). Der Zeitraum wurde damit nicht durchgehend genutzt — bitte eine Begründung angeben, sie wird dem Bildungsträger bei der Prüfung angezeigt.`
           : `Es sind erst ${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Für die UE-Unterschreitung bitte eine Begründung angeben — sie wird dem Bildungsträger bei der Prüfung angezeigt.`,
     };
   }
