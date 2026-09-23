@@ -3,6 +3,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { getTenantBewilligung } from "@/lib/tenant-bewilligung";
 import { getTenantCoaches, getTenantCoachesByIds } from "@/lib/memberships";
 
 import { CourseForm } from "../../new/course-form";
@@ -27,6 +28,8 @@ export default async function EditCustomerPage({ params }: Props) {
       avgsNummer: schema.courses.avgsNummer,
       durchfuehrungsort: schema.courses.durchfuehrungsort,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      bewilligungsbasis: schema.courses.bewilligungsbasis,
+      mindestUe: schema.courses.mindestUe,
       bedarfstraegerId: schema.courses.bedarfstraegerId,
       massnahmeTyp: schema.courses.massnahmeTyp,
       bundesland: schema.courses.bundesland,
@@ -72,6 +75,7 @@ export default async function EditCustomerPage({ params }: Props) {
 
   // Auswahlquelle fürs Multiselect (alle Tenant-Coaches) + aktuelles Team.
   const coaches = await getTenantCoaches(tenantId);
+  const tenant = await getTenantBewilligung(tenantId);
   const team = await db
     .select({ coachId: schema.courseCoaches.coachId })
     .from(schema.courseCoaches)
@@ -117,6 +121,9 @@ export default async function EditCustomerPage({ params }: Props) {
       <CourseForm
         bedarfstraeger={bedarfstraeger}
         coaches={coachOptions}
+        zeitraumOptionVerfuegbar={tenant.bewilligungZeitraumEnabled}
+        zertMaxUe={tenant.zertMaxUe}
+        zertMaxWochen={tenant.zertMaxWochen}
         action={updateCourse}
         courseId={course.id}
         submitLabel="Änderungen speichern"
@@ -125,6 +132,8 @@ export default async function EditCustomerPage({ params }: Props) {
           avgsNummer: course.avgsNummer,
           durchfuehrungsort: course.durchfuehrungsort,
           anzahlBewilligteUe: String(course.anzahlBewilligteUe),
+      bewilligungsbasis: course.bewilligungsbasis,
+      mindestUe: course.mindestUe === null ? "" : String(course.mindestUe),
           bedarfstraegerId: course.bedarfstraegerId,
           massnahmeTyp: course.massnahmeTyp,
           bundesland: course.bundesland ?? "",

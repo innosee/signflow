@@ -8,6 +8,12 @@
  *  2. **UE-Unterschreitung** — es wurden weniger UE durchgeführt als bewilligt
  *     → Pflicht-Begründung (AfA-relevant).
  *
+ * Welcher der beiden Umstände die Pflicht-Begründung auslöst, hängt an der
+ * Bewilligungsbasis (`src/lib/bewilligung.ts`): Bei „bewilligt nach Zeitraum"
+ * (AA Regensburg) tauschen die beiden ihre Rollen — dann ist der nicht
+ * ausgeschöpfte Zeitraum das Begründungspflichtige und die UE-Zahl nur noch
+ * ein Hinweis. Ohne Angabe gilt die UE-Basis, also das bisherige Verhalten.
+ *
  * Bewusst DB-frei + ohne `src/db`-Import → unit-testbar (wie `avgs-stage.ts`).
  * Wird von der Server-Action UND dem Button geteilt, damit Anzeige und
  * serverseitige Wahrheit nicht auseinanderlaufen.
@@ -22,8 +28,17 @@ export type AbschlussStatus = {
   zeitlichVorzeitig: boolean;
   /** Tage zwischen letztem Termin und Bewilligungsende, falls berechenbar. */
   tageFrueher: number | null;
-  /** Begründung ist Pflicht — gilt ausschließlich bei UE-Unterschreitung. */
+  /**
+   * Begründung ist Pflicht. Bei UE-Basis wegen UE-Unterschreitung, bei
+   * Zeitraum-Basis wegen nicht ausgeschöpftem Bewilligungszeitraum.
+   */
   begruendungPflicht: boolean;
+  /**
+   * Worauf sich eine geforderte Begründung bezieht — für die Beschriftung in
+   * Button, Nachweis und BT-Prüfung, damit dort nicht erneut über die Basis
+   * verzweigt wird.
+   */
+  begruendungGrund: "ue_unterschritten" | "zeitraum_nicht_ausgeschoepft" | null;
 };
 
 /** Tagesdifferenz zweier ISO-Kalendertage (YYYY-MM-DD), ohne Zeitzone. */
@@ -42,6 +57,12 @@ export function abschlussStatus(p: {
   letzterTermin: string | null;
   /** courses.endDate (Bewilligungsende); null wenn noch nicht erfasst. */
   bewilligungsende: string | null;
+  /**
+   * Welcher Umstand begründungspflichtig ist — aus `bewilligungsRegeln()`.
+   * Default `"ue_unterschritten"` = bisheriges Verhalten, damit Bestandskurse
+   * und alle Aufrufer ohne Angabe exakt gleich bleiben.
+   */
+  begruendungPflichtBei?: "ue_unterschritten" | "zeitraum_nicht_ausgeschoepft";
 }): AbschlussStatus {
   const ueUnterschritten = p.geleisteteUe < p.bewilligteUe;
   const fehlendeUe = Math.max(0, p.bewilligteUe - p.geleisteteUe);
@@ -56,11 +77,18 @@ export function abschlussStatus(p: {
       ? tageDiff(p.letzterTermin, p.bewilligungsende)
       : null;
 
+  const pflichtBei = p.begruendungPflichtBei ?? "ue_unterschritten";
+  const begruendungPflicht =
+    pflichtBei === "zeitraum_nicht_ausgeschoepft"
+      ? zeitlichVorzeitig
+      : ueUnterschritten;
+
   return {
     ueUnterschritten,
     fehlendeUe,
     zeitlichVorzeitig,
     tageFrueher,
-    begruendungPflicht: ueUnterschritten,
+    begruendungPflicht,
+    begruendungGrund: begruendungPflicht ? pflichtBei : null,
   };
 }

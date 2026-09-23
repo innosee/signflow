@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { assertNotImpersonating, requireSigningEnabled } from "@/lib/dal";
 import { courseVisibleToCoach } from "@/lib/course-access";
+import { bewilligungsRegeln } from "@/lib/bewilligung";
 
 import { SessionForm } from "./session-form";
 
@@ -27,9 +28,16 @@ export default async function NewSessionPage({ params }: Props) {
       title: schema.courses.title,
       bundesland: schema.courses.bundesland,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      bewilligungsbasis: schema.courses.bewilligungsbasis,
+      zertMaxUe: schema.tenants.zertMaxUe,
       avgsGueltigVon: schema.courses.avgsGueltigVon,
     })
     .from(schema.courses)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courses.participantId),
+    )
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.participants.tenantId))
     .where(
       and(
         eq(schema.courses.id, id),
@@ -41,6 +49,15 @@ export default async function NewSessionPage({ params }: Props) {
     .limit(1);
 
   if (!course) notFound();
+
+  // Obergrenze für den UE-Hinweis im Formular: bei Bewilligung nach UE die
+  // bewilligten UE, bei Bewilligung nach Zeitraum die zertifizierte Grenze
+  // des Trägers. Gleiche Regel wie das harte Gate in der Server-Action.
+  const { ueObergrenze, weistBewilligteUeAus } = bewilligungsRegeln({
+    basis: course.bewilligungsbasis,
+    anzahlBewilligteUe: course.anzahlBewilligteUe,
+    zertMaxUe: course.zertMaxUe,
+  });
 
   // #4: Pro Maßnahme nur ein Erstgespräch — existiert schon eins, blendet das
   // Formular die Option aus (die Server-Action lehnt es zusätzlich hart ab).
@@ -93,7 +110,8 @@ export default async function NewSessionPage({ params }: Props) {
         bundesland={course.bundesland}
         erstgespraechExists={!!erstgespraech}
         existingUeDates={existingUeDates}
-        bewilligteUe={course.anzahlBewilligteUe}
+        bewilligteUe={ueObergrenze}
+        obergrenzeQuelle={weistBewilligteUeAus ? "bewilligung" : "zertifizierung"}
         bereitsVerplanteUe={bereitsVerplanteUe}
         avgsGueltigVon={course.avgsGueltigVon}
       />

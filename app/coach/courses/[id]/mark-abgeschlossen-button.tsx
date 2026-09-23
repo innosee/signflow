@@ -28,6 +28,7 @@ export function MarkAbgeschlossenButton({
   bewilligungsende,
   unter2Wochen = 0,
   randWochen = 0,
+  begruendungPflichtBei = "ue_unterschritten",
 }: {
   courseId: string;
   geleisteteUe: number;
@@ -38,6 +39,12 @@ export function MarkAbgeschlossenButton({
   unter2Wochen?: number;
   /** Anfangs-/Schlusswochen mit nur 1 Termin — rein informativ, kein Verstoß. */
   randWochen?: number;
+  /**
+   * Aus `bewilligungsRegeln()` der Kurs-Seite. Muss mit dem Server
+   * übereinstimmen, sonst zeigt der Button eine andere Pflicht an, als die
+   * Server-Action erzwingt. Default = bisheriges Verhalten (UE-Basis).
+   */
+  begruendungPflichtBei?: "ue_unterschritten" | "zeitraum_nicht_ausgeschoepft";
 }) {
   const [state, action, pending] = useActionState<
     MarkAbgeschlossenState,
@@ -49,17 +56,20 @@ export function MarkAbgeschlossenButton({
     bewilligteUe,
     letzterTermin,
     bewilligungsende,
+    begruendungPflichtBei,
   });
+  const nachZeitraum = begruendungPflichtBei === "zeitraum_nicht_ausgeschoepft";
   const [begruendung, setBegruendung] = useState("");
 
   const geleistetLabel = geleisteteUe.toString().replace(".", ",");
   const fehlendLabel = st.fehlendeUe.toString().replace(".", ",");
 
-  // Begründung ist Pflicht bei UE-Unterschreitung. Bei den weichen Umständen
-  // (zeitlich vorzeitig, <2 Termine/Woche) kann der Coach optional etwas dazu
-  // schreiben — z.B. die Ausnahme zur 2-Termine-Regel begründen.
+  // Begründung ist Pflicht bei dem Umstand, den die Bewilligungsbasis als
+  // kritisch führt. Bei den weichen Umständen kann der Coach optional etwas
+  // dazu schreiben — z.B. die Ausnahme zur 2-Termine-Regel begründen.
   const begruendungOptional =
-    !st.begruendungPflicht && (unter2Wochen > 0 || st.zeitlichVorzeitig);
+    !st.begruendungPflicht &&
+    (unter2Wochen > 0 || st.zeitlichVorzeitig || st.ueUnterschritten);
   const zeigeBegruendung = st.begruendungPflicht || begruendungOptional;
 
   // Bewilligungsende fehlt → Abschluss gesperrt (zeitliche Achse nicht rechenbar).
@@ -87,12 +97,14 @@ export function MarkAbgeschlossenButton({
           }
           return;
         }
-        // UE-Unterschreitung → Begründung Pflicht (client-seitige Vorprüfung;
-        // der Server erzwingt es nochmal).
+        // Begründung Pflicht (client-seitige Vorprüfung; der Server erzwingt
+        // es nochmal).
         if (begruendung.trim().length === 0) {
           e.preventDefault();
           window.alert(
-            "Es sind weniger UE geleistet als bewilligt. Bitte gib eine Begründung für die UE-Unterschreitung an.",
+            nachZeitraum
+              ? "Der bewilligte Maßnahmenzeitraum wurde nicht ausgeschöpft. Bitte gib eine Begründung an."
+              : "Es sind weniger UE geleistet als bewilligt. Bitte gib eine Begründung für die UE-Unterschreitung an.",
           );
         }
       }}
@@ -103,7 +115,11 @@ export function MarkAbgeschlossenButton({
       {/* Status-Zusammenfassung — benennt beide Achsen separat. */}
       <div className="space-y-1 text-xs text-zinc-600">
         <p>
-          {st.ueUnterschritten ? (
+          {nachZeitraum ? (
+            // Bewilligt ist der Zeitraum — es gibt keine Soll-UE-Zahl, gegen
+            // die sich „unterschritten" behaupten ließe.
+            <>{geleistetLabel} UE im bewilligten Zeitraum geleistet.</>
+          ) : st.ueUnterschritten ? (
             <span className="text-amber-700">
               {geleistetLabel} von {bewilligteUe} UE geleistet —{" "}
               <strong>{fehlendLabel} UE fehlen</strong> (Begründung nötig).
@@ -113,11 +129,21 @@ export function MarkAbgeschlossenButton({
           )}
         </p>
         {st.zeitlichVorzeitig && (
-          <p className="text-zinc-500">
+          <p className={nachZeitraum ? "text-amber-700" : "text-zinc-500"}>
             Letzter Termin liegt{" "}
             {st.tageFrueher !== null ? `${st.tageFrueher} Tage ` : ""}vor dem
-            Bewilligungsende — Maßnahme endet zeitlich vorzeitig (nur Hinweis,
-            wird auf dem Nachweis vermerkt).
+            Bewilligungsende —{" "}
+            {nachZeitraum ? (
+              <>
+                der <strong>bewilligte Zeitraum wurde nicht ausgeschöpft</strong>{" "}
+                (Begründung nötig).
+              </>
+            ) : (
+              <>
+                Maßnahme endet zeitlich vorzeitig (nur Hinweis, wird auf dem
+                Nachweis vermerkt).
+              </>
+            )}
           </p>
         )}
         {unter2Wochen > 0 && (
