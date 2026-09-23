@@ -1,5 +1,6 @@
 import { isBundesland, type Bundesland } from "@/lib/feiertage";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
+import type { Bewilligungsbasis } from "@/lib/bewilligung";
 
 /**
  * Reine Extraktion + Validierung der Kurs-Formularfelder (Anlegen UND Bearbeiten
@@ -19,6 +20,10 @@ export type ParsedCourseForm = {
   avgsNummer: string;
   durchfuehrungsort: string;
   anzahlBewilligteUe: number;
+  /** Worauf sich die Bewilligung bezieht (siehe src/lib/bewilligung.ts). */
+  bewilligungsbasis: Bewilligungsbasis;
+  /** Interne Mindest-UE-Vereinbarung; nur bei Basis `zeitraum`, sonst null. */
+  mindestUe: number | null;
   bedarfstraegerId: string;
   /** Kompetenzteam, dedupliziert, Reihenfolge erhalten. */
   coachIds: string[];
@@ -56,6 +61,15 @@ export function parseCourseForm(
   const anzahlBewilligteUeRaw = String(
     formData.get("anzahlBewilligteUe") ?? "",
   ).trim();
+  // Bewilligungsbasis: alles außer explizit „zeitraum" ist die UE-Basis —
+  // ein fehlendes oder unbekanntes Feld darf NIE versehentlich die neue
+  // Variante aktivieren (Bestandsverhalten gewinnt im Zweifel).
+  const bewilligungsbasis: Bewilligungsbasis =
+    String(formData.get("bewilligungsbasis") ?? "") === "zeitraum"
+      ? "zeitraum"
+      : "ue";
+  const nachZeitraum = bewilligungsbasis === "zeitraum";
+  const mindestUeRaw = String(formData.get("mindestUe") ?? "").trim();
   const bedarfstraegerId = String(formData.get("bedarfstraegerId") ?? "").trim();
   // Kompetenzteam (1–n Coaches). Reihenfolge erhalten, dedupliziert.
   const coachIds = Array.from(
@@ -103,7 +117,8 @@ export function parseCourseForm(
   if (
     !avgsNummer ||
     !durchfuehrungsort ||
-    !anzahlBewilligteUeRaw ||
+    // Bei Bewilligung nach Zeitraum gibt es keine bewilligte UE-Zahl.
+    (!nachZeitraum && !anzahlBewilligteUeRaw) ||
     !bedarfstraegerId ||
     coachIds.length === 0 ||
     !avgsGueltigVon ||
@@ -127,11 +142,40 @@ export function parseCourseForm(
   // Strikt ganzzahlig: `parseInt("3.5")` wäre 3 und würde „3.5" still
   // akzeptieren — die Eingabe muss aber reine Ziffern sein (die Meldung
   // verspricht „ganze Zahl"). Führende Nullen sind egal, "0" fängt `<= 0`.
-  const anzahlBewilligteUe = Number.parseInt(anzahlBewilligteUeRaw, 10);
-  if (!/^\d+$/.test(anzahlBewilligteUeRaw) || anzahlBewilligteUe <= 0) {
+  //
+  // Bei Basis `zeitraum` bleibt die Spalte bei 0: Sie ist NOT NULL, wird aber
+  // nirgends mehr gelesen (`bewilligungsRegeln()` schaltet sie aus). 0 ist
+  // dabei ehrlicher als eine erfundene Zahl, die irgendwo durchrutschen könnte.
+  const anzahlBewilligteUe = nachZeitraum
+    ? 0
+    : Number.parseInt(anzahlBewilligteUeRaw, 10);
+  if (
+    !nachZeitraum &&
+    (!/^\d+$/.test(anzahlBewilligteUeRaw) || anzahlBewilligteUe <= 0)
+  ) {
     return {
       ok: false,
       error: "Bewilligte UE muss eine positive ganze Zahl sein.",
+    };
+  }
+  // Mindest-UE: rein intern, optional — aber wenn angegeben, dann sauber.
+  let mindestUe: number | null = null;
+  if (nachZeitraum && mindestUeRaw) {
+    if (!/^\d+$/.test(mindestUeRaw) || Number.parseInt(mindestUeRaw, 10) <= 0) {
+      return {
+        ok: false,
+        error: "Mindest-UE muss eine positive ganze Zahl sein (oder leer bleiben).",
+      };
+    }
+    mindestUe = Number.parseInt(mindestUeRaw, 10);
+  }
+  // Bei Basis `zeitraum` ist der Zeitraum die Bewilligung — ohne Enddatum
+  // gäbe es nichts, wogegen sich „ausgeschöpft" prüfen ließe.
+  if (nachZeitraum && (!startDate || !endDate)) {
+    return {
+      ok: false,
+      error:
+        "Bei Bewilligung nach Zeitraum sind Startdatum und Bewilligungsende Pflicht — der Zeitraum IST die Bewilligung.",
     };
   }
   // AVGS-Datumslogik (gestufte Erfassung): ISO-Strings (YYYY-MM-DD) sind
@@ -162,6 +206,8 @@ export function parseCourseForm(
       avgsNummer,
       durchfuehrungsort,
       anzahlBewilligteUe,
+      bewilligungsbasis,
+      mindestUe,
       bedarfstraegerId,
       coachIds,
       primaryCoachId: coachIds[0]!,

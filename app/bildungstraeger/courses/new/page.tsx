@@ -2,6 +2,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { getTenantId, requireBildungstraeger } from "@/lib/dal";
+import { getTenantBewilligung } from "@/lib/tenant-bewilligung";
 import { getTenantCoaches } from "@/lib/memberships";
 
 import { CourseForm } from "./course-form";
@@ -30,6 +31,7 @@ export default async function NewCustomerPage() {
   // Auswahlquelle fürs Kompetenzteam-Multiselect: alle Coaches des Tenants
   // (membership-basiert).
   const coaches = await getTenantCoaches(tenantId);
+  const tenant = await getTenantBewilligung(tenantId);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 space-y-6">
@@ -53,7 +55,13 @@ export default async function NewCustomerPage() {
           Coach einladen — ein Kunde braucht mindestens einen zugewiesenen Coach.
         </div>
       ) : (
-        <CourseForm bedarfstraeger={bedarfstraeger} coaches={coaches} />
+        <CourseForm
+          bedarfstraeger={bedarfstraeger}
+          coaches={coaches}
+          zeitraumOptionVerfuegbar={tenant.bewilligungZeitraumEnabled}
+          zertMaxUe={tenant.zertMaxUe}
+          zertMaxWochen={tenant.zertMaxWochen}
+        />
       )}
     </div>
   );

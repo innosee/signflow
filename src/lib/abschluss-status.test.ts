@@ -81,3 +81,62 @@ describe("abschlussStatus", () => {
     expect(st.begruendungPflicht).toBe(true);
   });
 });
+
+/**
+ * Bewilligung nach Zeitraum (AA Regensburg): die beiden Umstände tauschen ihre
+ * Rollen. Nicht ausgeschöpfter Zeitraum = Pflicht-Begründung, weniger UE als
+ * irgendwo hinterlegt = nur Hinweis.
+ */
+describe("abschlussStatus mit Basis „Zeitraum\u201c", () => {
+  const zeitraum = "zeitraum_nicht_ausgeschoepft" as const;
+
+  it("verlangt die Begründung für den nicht ausgeschöpften Zeitraum", () => {
+    const st = abschlussStatus({
+      geleisteteUe: 40,
+      bewilligteUe: 40,
+      letzterTermin: "2026-10-01",
+      bewilligungsende: "2026-10-27",
+      begruendungPflichtBei: zeitraum,
+    });
+    expect(st.zeitlichVorzeitig).toBe(true);
+    expect(st.begruendungPflicht).toBe(true);
+    expect(st.begruendungGrund).toBe(zeitraum);
+  });
+
+  it("verlangt KEINE Begründung, nur weil weniger UE erbracht wurden", () => {
+    // Der Kern des Regensburg-Falls: 18 statt 60 UE ist kein Verstoß, solange
+    // der bewilligte Zeitraum vollständig gelaufen ist.
+    const st = abschlussStatus({
+      geleisteteUe: 18,
+      bewilligteUe: 60,
+      letzterTermin: "2026-10-27",
+      bewilligungsende: "2026-10-27",
+      begruendungPflichtBei: zeitraum,
+    });
+    expect(st.ueUnterschritten).toBe(true);
+    expect(st.begruendungPflicht).toBe(false);
+    expect(st.begruendungGrund).toBeNull();
+  });
+
+  it("derselbe Fall wäre in der UE-Basis begründungspflichtig", () => {
+    const st = abschlussStatus({
+      geleisteteUe: 18,
+      bewilligteUe: 60,
+      letzterTermin: "2026-10-27",
+      bewilligungsende: "2026-10-27",
+    });
+    expect(st.begruendungPflicht).toBe(true);
+    expect(st.begruendungGrund).toBe("ue_unterschritten");
+  });
+
+  it("ohne Bewilligungsende ist nichts begründungspflichtig (Zeitachse fehlt)", () => {
+    const st = abschlussStatus({
+      geleisteteUe: 10,
+      bewilligteUe: 60,
+      letzterTermin: "2026-10-01",
+      bewilligungsende: null,
+      begruendungPflichtBei: zeitraum,
+    });
+    expect(st.begruendungPflicht).toBe(false);
+  });
+});

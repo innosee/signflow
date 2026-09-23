@@ -27,6 +27,7 @@ export function SessionEditForm({
   bundesland,
   session,
   bewilligteUe,
+  obergrenzeQuelle = "bewilligung",
   bereitsVerplanteUe = 0,
   avgsGueltigVon,
 }: {
@@ -35,7 +36,10 @@ export function SessionEditForm({
   bundesland: Bundesland | null;
   session: SessionInitial;
   /** Bewilligte UE der Maßnahme — für den UE-Budget-Hinweis. */
+  /** Obergrenze der regulären UE (siehe `bewilligungsRegeln()`). */
   bewilligteUe: number;
+  /** Woher die Obergrenze stammt — nur für die Beschriftung des Hinweises. */
+  obergrenzeQuelle?: "bewilligung" | "zertifizierung";
   /** Bereits verplante reguläre UE OHNE diesen Termin (wird ja gerade geändert). */
   bereitsVerplanteUe?: number;
   /** AVGS-Gutschein-Beginn (YYYY-MM-DD) — für den weichen Erstgespräch-Hinweis. */
@@ -148,8 +152,12 @@ export function SessionEditForm({
                 }`}
               >
                 {ueUeberschritten
-                  ? `Überschreitet die bewilligten ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Speichern wird blockiert.`
-                  : `Noch ${fmtUe(ueFrei)} von ${bewilligteUe} UE frei (ohne diesen Termin).`}
+                  ? obergrenzeQuelle === "zertifizierung"
+                    ? `Überschreitet die zertifizierte Obergrenze von ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Speichern wird blockiert.`
+                    : `Überschreitet die bewilligten ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Speichern wird blockiert.`
+                  : obergrenzeQuelle === "zertifizierung"
+                    ? `Noch ${fmtUe(ueFrei)} von höchstens ${bewilligteUe} UE frei (Zulassung, ohne diesen Termin).`
+                    : `Noch ${fmtUe(ueFrei)} von ${bewilligteUe} UE frei (ohne diesen Termin).`}
               </span>
             </label>
           )}

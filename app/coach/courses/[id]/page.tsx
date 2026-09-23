@@ -9,6 +9,7 @@ import { isFutureSessionDate } from "@/lib/dates";
 import { getFeiertag } from "@/lib/feiertage";
 import { isSmsEnabled } from "@/lib/sms";
 import { innereWochenUnter2, randWochenUnter2 } from "@/lib/termine-pro-woche";
+import { bewilligungsRegeln } from "@/lib/bewilligung";
 
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ReviewThread } from "@/components/review-thread";
@@ -61,6 +62,9 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       avgsNummer: schema.courses.avgsNummer,
       durchfuehrungsort: schema.courses.durchfuehrungsort,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      bewilligungsbasis: schema.courses.bewilligungsbasis,
+      mindestUe: schema.courses.mindestUe,
+      zertMaxUe: schema.tenants.zertMaxUe,
       bundesland: schema.courses.bundesland,
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
@@ -83,6 +87,11 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
       schema.bedarfstraeger,
       eq(schema.bedarfstraeger.id, schema.courses.bedarfstraegerId),
     )
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courses.participantId),
+    )
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.participants.tenantId))
     .where(
       and(
         eq(schema.courses.id, id),
@@ -93,6 +102,14 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
     .limit(1);
 
   if (!course) notFound();
+
+  // Eine Quelle für „welche Obergrenze, welche Pflicht" — dieselbe Funktion,
+  // die die Server-Actions nutzen (src/lib/bewilligung.ts).
+  const regeln = bewilligungsRegeln({
+    basis: course.bewilligungsbasis,
+    anzahlBewilligteUe: course.anzahlBewilligteUe,
+    zertMaxUe: course.zertMaxUe,
+  });
 
   // Kompetenzteam: JEDER Team-Coach darf alle Schritte auslösen (kein Lead-
   // Sonderrecht). Die Seite lädt ohnehin nur, wenn der Coach im Team ist
@@ -721,7 +738,11 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
             subtitle={
               course.abgeschlossenAt
                 ? `Abgeschlossen am ${new Date(course.abgeschlossenAt).toLocaleString("de-DE")}.`
-                : `${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Coach-Bestätigung nötig: keine weiteren Termine kommen mehr.`
+                : regeln.weistBewilligteUeAus
+                  ? `${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Coach-Bestätigung nötig: keine weiteren Termine kommen mehr.`
+                  : `${geleisteteUe.toString().replace(".", ",")} UE im bewilligten Zeitraum geleistet${
+                      course.mindestUe ? ` (intern vereinbart: mind. ${course.mindestUe})` : ""
+                    }. Coach-Bestätigung nötig: keine weiteren Termine kommen mehr.`
             }
           >
             {!impersonating && !course.abgeschlossenAt && (
@@ -733,6 +754,7 @@ export default async function CourseDetailPage({ params, searchParams }: Props) 
                 bewilligungsende={course.endDate}
                 unter2Wochen={unter2Wochen}
                 randWochen={randWochen}
+                begruendungPflichtBei={regeln.begruendungPflichtBei}
               />
             )}
           </Step>

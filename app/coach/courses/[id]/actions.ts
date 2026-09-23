@@ -7,6 +7,7 @@ import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { abschlussStatus } from "@/lib/abschluss-status";
+import { bewilligungsRegeln } from "@/lib/bewilligung";
 import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
 import { logAudit } from "@/lib/audit";
 import { getFeiertag } from "@/lib/feiertage";
@@ -332,8 +333,15 @@ async function validateCrossSessionRules(params: {
       startDate: schema.courses.startDate,
       endDate: schema.courses.endDate,
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
+      bewilligungsbasis: schema.courses.bewilligungsbasis,
+      zertMaxUe: schema.tenants.zertMaxUe,
     })
     .from(schema.courses)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courses.participantId),
+    )
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.participants.tenantId))
     .where(eq(schema.courses.id, params.courseId))
     .limit(1);
   const sd = params.sessionDate;
@@ -460,9 +468,11 @@ async function validateCrossSessionRules(params: {
   }
 
   // UE-Budget: Summe aller regulären UE (ohne die ggf. bearbeitete Zeile) plus
-  // die neue UE darf die bewilligten UE nicht überschreiten — mehr ist für die
-  // AfA nicht abrechenbar. Harte Grenze, damit gar nicht erst ein Über-Budget-
-  // Nachweis entsteht, den der Teilnehmer signiert. Erstgespräch zählt 0 UE.
+  // die neue UE darf die Obergrenze nicht überschreiten. Bei Bewilligung nach
+  // UE sind das die bewilligten UE (mehr rechnet die AfA nicht ab), bei
+  // Bewilligung nach Zeitraum die zertifizierte Obergrenze des Trägers. Harte
+  // Grenze, damit gar nicht erst ein Über-Budget-Nachweis entsteht, den der
+  // Teilnehmer signiert. Erstgespräch zählt 0 UE.
   if (course && params.anzahlUe && params.anzahlUe > 0) {
     const ueRows = await db
       .select({ anzahlUe: schema.sessions.anzahlUe })
@@ -482,15 +492,26 @@ async function validateCrossSessionRules(params: {
       0,
     );
     const gesamt = verplant + params.anzahlUe;
-    if (gesamt > course.anzahlBewilligteUe) {
+    const regeln = bewilligungsRegeln({
+      basis: course.bewilligungsbasis,
+      anzahlBewilligteUe: course.anzahlBewilligteUe,
+      zertMaxUe: course.zertMaxUe,
+    });
+    if (gesamt > regeln.ueObergrenze) {
       const fmt = (n: number) =>
         Number.isInteger(n) ? `${n}` : n.toString().replace(".", ",");
-      const frei = course.anzahlBewilligteUe - verplant;
+      const frei = regeln.ueObergrenze - verplant;
+      const grenzeText = regeln.weistBewilligteUeAus
+        ? `die Maßnahme hat aber nur ${regeln.ueObergrenze} bewilligte UE`
+        : `die Zulassung des Bildungsträgers erlaubt aber höchstens ${regeln.ueObergrenze} UE je Maßnahme`;
+      const abrechenbar = regeln.weistBewilligteUeAus
+        ? "Mehr als bewilligt kann die AfA nicht abrechnen"
+        : "Mehr ist von der Zertifizierung nicht gedeckt";
       return {
         ok: false,
-        error: `Mit diesem Termin wären ${fmt(gesamt)} UE verplant — die Maßnahme hat aber nur ${course.anzahlBewilligteUe} bewilligte UE${
+        error: `Mit diesem Termin wären ${fmt(gesamt)} UE verplant — ${grenzeText}${
           verplant > 0 ? ` (bereits verplant: ${fmt(verplant)})` : ""
-        }. Mehr als bewilligt kann die AfA nicht abrechnen — bitte UE reduzieren${
+        }. ${abrechenbar} — bitte UE reduzieren${
           frei > 0 ? ` (noch ${fmt(frei)} UE frei)` : ""
         }.`,
       };
@@ -1723,8 +1744,15 @@ export async function markCourseAbgeschlossen(
     .select({
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       endDate: schema.courses.endDate,
+      bewilligungsbasis: schema.courses.bewilligungsbasis,
+      zertMaxUe: schema.tenants.zertMaxUe,
     })
     .from(schema.courses)
+    .innerJoin(
+      schema.participants,
+      eq(schema.participants.id, schema.courses.participantId),
+    )
+    .innerJoin(schema.tenants, eq(schema.tenants.id, schema.participants.tenantId))
     .where(eq(schema.courses.id, ownedCourseId))
     .limit(1);
   if (!course) return { error: "Kurs nicht auflösbar." };
@@ -1771,16 +1799,27 @@ export async function markCourseAbgeschlossen(
   // Verstoß. Konsistent zur ANW-Anzeige (stundennachweis.tsx).
   const unter2Termine = innereWochenUnter2(regulaereUeDaten).length > 0;
 
-  // Zwei unabhängige Achsen — Begründung Pflicht NUR bei UE-Unterschreitung.
+  // Zwei unabhängige Achsen. WELCHE davon begründungspflichtig ist, entscheidet
+  // die Bewilligungsbasis (src/lib/bewilligung.ts) — nach UE die
+  // UE-Unterschreitung, nach Zeitraum der nicht ausgeschöpfte Zeitraum.
+  const regeln = bewilligungsRegeln({
+    basis: course.bewilligungsbasis,
+    anzahlBewilligteUe: course.anzahlBewilligteUe,
+    zertMaxUe: course.zertMaxUe,
+  });
   const st = abschlussStatus({
     geleisteteUe,
     bewilligteUe: course.anzahlBewilligteUe,
     letzterTermin,
     bewilligungsende: course.endDate,
+    begruendungPflichtBei: regeln.begruendungPflichtBei,
   });
   if (st.begruendungPflicht && begruendung.length === 0) {
     return {
-      error: `Es sind erst ${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Für die UE-Unterschreitung bitte eine Begründung angeben — sie wird dem Bildungsträger bei der Prüfung angezeigt.`,
+      error:
+        st.begruendungGrund === "zeitraum_nicht_ausgeschoepft"
+          ? `Der letzte Termin liegt ${st.tageFrueher} Tage vor dem Bewilligungsende. Der bewilligte Maßnahmenzeitraum wurde damit nicht ausgeschöpft — bitte eine Begründung angeben, sie wird dem Bildungsträger bei der Prüfung angezeigt.`
+          : `Es sind erst ${geleisteteUe.toString().replace(".", ",")} von ${course.anzahlBewilligteUe} UE geleistet. Für die UE-Unterschreitung bitte eine Begründung angeben — sie wird dem Bildungsträger bei der Prüfung angezeigt.`,
     };
   }
 

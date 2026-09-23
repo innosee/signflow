@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 
 import { BUNDESLAENDER } from "@/lib/feiertage";
+import { zeitraumWochen } from "@/lib/bewilligung";
 import { MASSNAHME_TYPEN, MASSNAHME_TYP_LABEL } from "@/lib/massnahme-typ";
 
 import { createCourse, type CourseFormState } from "../actions";
@@ -18,6 +19,8 @@ type CourseFormValues = {
   avgsNummer: string;
   durchfuehrungsort: string;
   anzahlBewilligteUe: string;
+  bewilligungsbasis: "ue" | "zeitraum";
+  mindestUe: string;
   bedarfstraegerId: string;
   massnahmeTyp: string;
   bundesland: string;
@@ -36,6 +39,8 @@ const EMPTY: CourseFormValues = {
   avgsNummer: "",
   durchfuehrungsort: "",
   anzahlBewilligteUe: "",
+  bewilligungsbasis: "ue",
+  mindestUe: "",
   bedarfstraegerId: "",
   massnahmeTyp: "EKC",
   bundesland: "",
@@ -61,6 +66,9 @@ export function CourseForm({
   initial,
   courseId,
   submitLabel = "Kunde anlegen",
+  zeitraumOptionVerfuegbar = false,
+  zertMaxUe = 80,
+  zertMaxWochen = 16,
 }: {
   bedarfstraeger: BedarfstraegerOption[];
   coaches: CoachOption[];
@@ -71,6 +79,15 @@ export function CourseForm({
   initial?: CourseFormValues;
   courseId?: string;
   submitLabel?: string;
+  /**
+   * Schaltet die Auswahl „Bewilligung nach Zeitraum" frei
+   * (`tenants.bewilligung_zeitraum_enabled`). Aus = das Formular sieht exakt
+   * aus wie bisher; kein Träger bekommt die Option ungefragt zu sehen.
+   */
+  zeitraumOptionVerfuegbar?: boolean;
+  /** Zertifizierte Obergrenzen des Trägers — nur für Hinweistexte/Warnung. */
+  zertMaxUe?: number;
+  zertMaxWochen?: number;
 }) {
   const [state, formAction, pending] = useActionState<CourseFormState, FormData>(
     action,
@@ -85,6 +102,13 @@ export function CourseForm({
     (key: keyof typeof head) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setHead((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const nachZeitraum = head.bewilligungsbasis === "zeitraum";
+  // Weiche Warnung: Der Bewilligungszeitraum überschreitet die zertifizierte
+  // Höchstdauer. Bewusst KEIN Block — vier Bestandskurse liegen bereits knapp
+  // darüber, und ein Riegel würde sie nachträglich zu Verstößen erklären.
+  const wochen = zeitraumWochen(head.startDate || null, head.endDate || null);
+  const zeitraumZuLang = wochen !== null && wochen > zertMaxWochen;
 
   return (
     <form action={formAction} className="space-y-8">
@@ -119,18 +143,91 @@ export function CourseForm({
             value={head.durchfuehrungsort}
             onChange={setField("durchfuehrungsort")}
           />
-          <Field
-            name="anzahlBewilligteUe"
-            label="Bewilligte UE"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            required
-            value={head.anzahlBewilligteUe}
-            onChange={setField("anzahlBewilligteUe")}
-          />
+          {nachZeitraum ? (
+            <Field
+              name="mindestUe"
+              label="Mindest-UE (intern, optional)"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              value={head.mindestUe}
+              onChange={setField("mindestUe")}
+            />
+          ) : (
+            <Field
+              name="anzahlBewilligteUe"
+              label="Bewilligte UE"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              required
+              value={head.anzahlBewilligteUe}
+              onChange={setField("anzahlBewilligteUe")}
+            />
+          )}
         </div>
+
+        {zeitraumOptionVerfuegbar && (
+          <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3 space-y-2">
+            {/* Immer mitsenden: ohne Feld fiele das Parsing auf „ue" zurück,
+                was beim Bearbeiten eines Zeitraum-Kunden die Basis still
+                umstellen würde. */}
+            <input
+              type="hidden"
+              name="bewilligungsbasis"
+              value={head.bewilligungsbasis}
+            />
+            <span className="text-sm font-medium text-zinc-800">
+              Worauf bezieht sich die Bewilligung?
+            </span>
+            <div className="space-y-1.5">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  checked={!nachZeitraum}
+                  onChange={() =>
+                    setHead((prev) => ({ ...prev, bewilligungsbasis: "ue" }))
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Auf eine Anzahl Unterrichtseinheiten</strong> — der
+                  Regelfall.
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  checked={nachZeitraum}
+                  onChange={() =>
+                    setHead((prev) => ({
+                      ...prev,
+                      bewilligungsbasis: "zeitraum",
+                    }))
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Auf den Maßnahmenzeitraum</strong> — keine feste
+                  UE-Zahl; die Maßnahme muss über den bewilligten Zeitraum
+                  laufen (z.B. AA Regensburg).
+                </span>
+              </label>
+            </div>
+            {nachZeitraum && (
+              <p className="text-xs text-zinc-600">
+                Der Nachweis weist dann keine bewilligte UE-Zahl aus, sondern
+                den Zeitraum — die geleisteten UE stehen weiterhin drauf.
+                Start- und Enddatum sind Pflicht. Die Mindest-UE ist eine rein
+                interne Vereinbarung mit dem Coach: sie blockiert nichts und
+                erscheint nicht auf dem Nachweis. Technische Obergrenze bleibt
+                die Zulassung mit {zertMaxUe} UE in {zertMaxWochen} Wochen.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block space-y-1.5">
@@ -227,6 +324,18 @@ export function CourseForm({
             hint="Kommt mit der Bewilligung der AA/JC zurück. Der letzte Termin muss ≤ diesem Datum sein. Setzt NICHT automatisch den Status „Bewilligt“ — dafür das Häkchen unten."
           />
         </div>
+
+        {zeitraumZuLang && (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            Der Bewilligungszeitraum umfasst {wochen?.toFixed(1).replace(".", ",")}{" "}
+            Wochen und überschreitet damit die zertifizierten {zertMaxWochen}{" "}
+            Wochen. Speichern ist möglich — bitte nur prüfen, ob das Enddatum
+            stimmt.
+          </p>
+        )}
 
         <label className="flex items-start gap-2 text-sm text-zinc-800">
           <input

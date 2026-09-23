@@ -16,6 +16,7 @@ import {
   type Eignungsanalyse,
 } from "@/lib/eignung";
 import { innereWochenUnter2 } from "@/lib/termine-pro-woche";
+import { bewilligungsRegeln } from "@/lib/bewilligung";
 
 export type StundennachweisSheet = {
   /**
@@ -44,6 +45,14 @@ export type StundennachweisSheet = {
     startDate: string | null;
     endDate: string | null;
     anzahlBewilligteUe: number;
+    /**
+     * Worauf sich die Bewilligung bezieht. Bei `zeitraum` weist der Nachweis
+     * KEINE bewilligte UE-Zahl aus — die AfA hat keine bewilligt, und eine
+     * erfundene Zahl auf einem AfA-Dokument wäre schlicht falsch. Die
+     * GELEISTETEN UE stehen in beiden Fällen drauf (so von erango bestätigt).
+     * Default über `bewilligungsRegeln()`; Bestandskurse stehen auf `ue`.
+     */
+    bewilligungsbasis: "ue" | "zeitraum";
     flagUnter2Termine: boolean;
     flagVorzeitigesEnde: boolean;
     flagUeUnterschritten: boolean;
@@ -167,6 +176,15 @@ export function Stundennachweis(props: StundennachweisSheet) {
       sessions.filter((s) => !s.isErstgespraech).map((s) => s.sessionDate),
     ).length > 0;
 
+  // Einzige Stelle im Nachweis, die über die Bewilligungsbasis entscheidet —
+  // dieselbe Regel wie in den Server-Actions (src/lib/bewilligung.ts).
+  const { weistBewilligteUeAus } = bewilligungsRegeln({
+    basis: course.bewilligungsbasis,
+    anzahlBewilligteUe: course.anzahlBewilligteUe,
+    // Für diese Frage irrelevant — der Nachweis prüft keine Obergrenze.
+    zertMaxUe: course.anzahlBewilligteUe,
+  });
+
   return (
     <>
       <style>{printCss}</style>
@@ -216,10 +234,17 @@ export function Stundennachweis(props: StundennachweisSheet) {
                 label="Bewilligungszeitraum"
                 value={`${formatDate(course.startDate)} – ${formatDate(course.endDate)}`}
               />
-              <MetaRow
-                label="Bewilligte UE"
-                value={course.anzahlBewilligteUe.toString()}
-              />
+              {weistBewilligteUeAus ? (
+                <MetaRow
+                  label="Bewilligte UE"
+                  value={course.anzahlBewilligteUe.toString()}
+                />
+              ) : (
+                <MetaRow
+                  label="Bewilligung"
+                  value="nach Maßnahmenzeitraum (keine UE-Zahl bewilligt)"
+                />
+              )}
             </dl>
           </div>
           <div>
@@ -314,7 +339,9 @@ export function Stundennachweis(props: StundennachweisSheet) {
                     Gesamt: {formatUe(geleisteteUe.toString())} UE
                   </td>
                   <td colSpan={4} className="num">
-                    von {course.anzahlBewilligteUe} bewilligten UE
+                    {weistBewilligteUeAus
+                      ? `von ${course.anzahlBewilligteUe} bewilligten UE`
+                      : "im bewilligten Maßnahmenzeitraum"}
                   </td>
                 </tr>
               </tfoot>
@@ -367,7 +394,7 @@ export function Stundennachweis(props: StundennachweisSheet) {
 
         {(hatInnereLuecke ||
           course.flagVorzeitigesEnde ||
-          course.flagUeUnterschritten ||
+          (weistBewilligteUeAus && course.flagUeUnterschritten) ||
           course.begruendungText ||
           course.angabenText) && (
           <section className="sheet-notes">
@@ -381,10 +408,12 @@ export function Stundennachweis(props: StundennachweisSheet) {
                 <Checkbox checked={course.flagVorzeitigesEnde} />
                 Maßnahme vor dem Bewilligungsende beendet
               </li>
-              <li>
-                <Checkbox checked={course.flagUeUnterschritten} />
-                Nicht alle bewilligten UE durchgeführt
-              </li>
+              {weistBewilligteUeAus && (
+                <li>
+                  <Checkbox checked={course.flagUeUnterschritten} />
+                  Nicht alle bewilligten UE durchgeführt
+                </li>
+              )}
             </ul>
             {course.angabenText && (
               <div className="sheet-begruendung">

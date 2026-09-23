@@ -18,6 +18,7 @@ export function SessionForm({
   bewilligteUe,
   bereitsVerplanteUe = 0,
   avgsGueltigVon,
+  obergrenzeQuelle = "bewilligung",
 }: {
   courseId: string;
   courseTitle: string;
@@ -26,12 +27,18 @@ export function SessionForm({
   erstgespraechExists?: boolean;
   /** Reguläre UE-Termine des Kurses — für die „2 Termine/Woche"-Warnung. */
   existingUeDates?: string[];
-  /** Bewilligte UE der Maßnahme — für den UE-Budget-Hinweis. */
+  /**
+   * Obergrenze für die Summe der regulären UE — bei Bewilligung nach UE die
+   * bewilligten UE, bei Bewilligung nach Zeitraum die zertifizierte Grenze
+   * des Trägers (siehe `bewilligungsRegeln()`).
+   */
   bewilligteUe: number;
   /** Bereits verplante reguläre UE (ohne diesen Termin). */
   bereitsVerplanteUe?: number;
   /** AVGS-Gutschein-Beginn (YYYY-MM-DD) — für den weichen Erstgespräch-Hinweis. */
   avgsGueltigVon: string;
+  /** Woher die Obergrenze stammt — nur für die Beschriftung des Hinweises. */
+  obergrenzeQuelle?: "bewilligung" | "zertifizierung";
 }) {
   const [state, action, pending] = useActionState<SessionFormState, FormData>(
     createSession,
@@ -169,8 +176,12 @@ export function SessionForm({
                 }`}
               >
                 {ueUeberschritten
-                  ? `Überschreitet die bewilligten ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Anlegen wird blockiert.`
-                  : `Noch ${fmtUe(ueFrei)} von ${bewilligteUe} UE frei.`}
+                  ? obergrenzeQuelle === "zertifizierung"
+                    ? `Überschreitet die zertifizierte Obergrenze von ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Anlegen wird blockiert.`
+                    : `Überschreitet die bewilligten ${bewilligteUe} UE um ${fmtUe(verplantMitNeu - bewilligteUe)} — Anlegen wird blockiert.`
+                  : obergrenzeQuelle === "zertifizierung"
+                    ? `Noch ${fmtUe(ueFrei)} von höchstens ${bewilligteUe} UE frei (Zulassung).`
+                    : `Noch ${fmtUe(ueFrei)} von ${bewilligteUe} UE frei.`}
               </span>
             </label>
           )}

@@ -41,6 +41,7 @@ export default async function BildungstraegerReviewDetailPage({
       anzahlBewilligteUe: schema.courses.anzahlBewilligteUe,
       flagVorzeitigesEnde: schema.courses.flagVorzeitigesEnde,
       flagUeUnterschritten: schema.courses.flagUeUnterschritten,
+      bewilligungsbasis: schema.courses.bewilligungsbasis,
       flagUnter2Termine: schema.courses.flagUnter2Termine,
       begruendungText: schema.courses.begruendungText,
       reviewStatus: schema.courses.reviewStatus,
@@ -65,6 +66,10 @@ export default async function BildungstraegerReviewDetailPage({
     .limit(1);
 
   if (!course) notFound();
+
+  // Bei Bewilligung nach Zeitraum gibt es keine bewilligte UE-Zahl — und der
+  // begründungspflichtige Umstand ist der nicht ausgeschöpfte Zeitraum.
+  const nachZeitraum = course.bewilligungsbasis === "zeitraum";
 
   // Geleistete UE (nur completed Sessions, ohne Erstgespräch) — derselbe
   // Maßstab wie auf der Coach-Seite.
@@ -150,9 +155,11 @@ export default async function BildungstraegerReviewDetailPage({
       <section className="rounded-xl border border-zinc-300 bg-white px-6 py-5 space-y-4">
         <div className="flex flex-wrap gap-6 text-sm">
           <div>
-            <div className="text-xs text-zinc-500">Bewilligte UE</div>
+            <div className="text-xs text-zinc-500">
+              {nachZeitraum ? "Bewilligt" : "Bewilligte UE"}
+            </div>
             <div className="mt-0.5 text-lg font-semibold">
-              {course.anzahlBewilligteUe}
+              {nachZeitraum ? "nach Zeitraum" : course.anzahlBewilligteUe}
             </div>
           </div>
           <div>
@@ -166,15 +173,19 @@ export default async function BildungstraegerReviewDetailPage({
         {course.begruendungText && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             <div className="text-xs font-medium uppercase tracking-wide text-amber-700">
-              {course.flagUeUnterschritten
-                ? "UE-Unterschreitung — Begründung des Coaches"
-                : "Anmerkung des Coaches"}
+              {nachZeitraum
+                ? course.flagVorzeitigesEnde
+                  ? "Zeitraum nicht ausgeschöpft — Begründung des Coaches"
+                  : "Anmerkung des Coaches"
+                : course.flagUeUnterschritten
+                  ? "UE-Unterschreitung — Begründung des Coaches"
+                  : "Anmerkung des Coaches"}
             </div>
             <p className="mt-1 whitespace-pre-wrap">{course.begruendungText}</p>
           </div>
         )}
 
-        {course.flagVorzeitigesEnde && (
+        {course.flagVorzeitigesEnde && !nachZeitraum && (
           <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             Hinweis: Maßnahme wurde zeitlich vor dem Bewilligungsende beendet.
           </div>

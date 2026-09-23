@@ -69,6 +69,23 @@ export const sessionModus = pgEnum("session_modus", ["praesenz", "online"]);
  * Sessions gegen die Phasen der gebuchten Maßnahme abzugleichen.
  */
 export const massnahmeTyp = pgEnum("massnahme_typ", ["EKC", "ESC", "EGC", "ESCA"]);
+
+/**
+ * Worauf sich die Bewilligung der AfA bezieht.
+ *
+ *  - `ue`       — bewilligt ist eine Zahl Unterrichtseinheiten (Regelfall).
+ *  - `zeitraum` — bewilligt ist der Maßnahmenzeitraum; wie viele UE darin
+ *                 erbracht werden, ist nicht vorgegeben. So verfährt z.B. die
+ *                 AA Regensburg (Feedback 09/2026).
+ *
+ * Steuert die eine Stelle `src/lib/bewilligung.ts` — UE-Obergrenze, Ausweis auf
+ * dem Anwesenheitsnachweis und welches Abschluss-Flag eine Pflicht-Begründung
+ * auslöst. Default `ue`, damit Bestandskurse sich unverändert verhalten.
+ */
+export const bewilligungsbasis = pgEnum("bewilligungsbasis", [
+  "ue",
+  "zeitraum",
+]);
 /**
  * Deutsches Bundesland des Kunden — alleinige Grundlage für die Feiertags-
  * Berechnung (`src/lib/feiertage.ts`). Coachings finden an Feiertagen nicht
@@ -200,6 +217,26 @@ export const tenants = pgTable("tenants", {
    * gesetzt.
    */
   signatureUrl: text("signature_url"),
+  /**
+   * Schaltet die Auswahl „Bewilligung nach Zeitraum" im Kunden-Formular frei.
+   * Default `false` — ohne den Schalter sieht kein Bildungsträger die Option,
+   * und alles verhält sich exakt wie vorher.
+   */
+  bewilligungZeitraumEnabled: boolean("bewilligung_zeitraum_enabled")
+    .notNull()
+    .default(false),
+  /**
+   * Zertifizierte Obergrenzen des Trägers (AZAV-Zulassung): maximal so viele
+   * UE in maximal so vielen Wochen. Bewusst pro Tenant und nicht im Code —
+   * Zertifikate laufen aus und ändern sich, und ein zweiter Träger hat andere.
+   * Vorbelegt mit den erango-Werten (80 UE / 16 Wochen).
+   *
+   * `zertMaxUe` ist bei Basis `zeitraum` die harte UE-Obergrenze (an Stelle der
+   * bewilligten UE). `zertMaxWochen` erzeugt beim Anlegen nur eine WARNUNG —
+   * ein harter Block würde Bestandskurse nachträglich für ungültig erklären.
+   */
+  zertMaxUe: integer("zert_max_ue").notNull().default(80),
+  zertMaxWochen: integer("zert_max_wochen").notNull().default(16),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -502,8 +539,23 @@ export const courses = pgTable("courses", {
    * im BT-Anlageformular als Pflichtfeld.
    */
   bundesland: bundesland("bundesland"),
-  /** Bewilligte Unterrichtseinheiten gesamt (ganzzahlig, z.B. 80). */
+  /**
+   * Bewilligte Unterrichtseinheiten gesamt (ganzzahlig, z.B. 80). Maßgeblich
+   * nur bei `bewilligungsbasis = 'ue'` — bei `'zeitraum'` hat die AfA keine
+   * UE-Zahl bewilligt und der Wert wird weder geprüft noch ausgewiesen.
+   */
   anzahlBewilligteUe: integer("anzahl_bewilligte_ue").notNull(),
+  /** Siehe `bewilligungsbasis`-Enum. Default hält Bestandskurse unverändert. */
+  bewilligungsbasis: bewilligungsbasis("bewilligungsbasis")
+    .notNull()
+    .default("ue"),
+  /**
+   * INTERNE Mindest-UE-Vereinbarung mit dem Coach (nur bei Basis `zeitraum`
+   * sinnvoll). Bewusst weich: erscheint als Fortschritts-Hinweis, blockiert
+   * NIE und steht NIE auf dem Anwesenheitsnachweis — die AfA hat diese Zahl
+   * nicht bewilligt. `null` = keine Vereinbarung.
+   */
+  mindestUe: integer("mindest_ue"),
   bedarfstraegerId: uuid("bedarfstraeger_id")
     .notNull()
     .references(() => bedarfstraeger.id, { onDelete: "restrict" }),
